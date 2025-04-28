@@ -1,0 +1,806 @@
+local TestAddon = LibStub("AceAddon-3.0"):NewAddon("TestAddon", "AceConsole-3.0", "AceEvent-3.0")
+
+-- Default settings
+local defaults = {
+    profile = {
+        enabled = true,
+        debug = false,
+        minimap = {
+            hide = false
+        },
+        penalties = {
+            mistake = 200,
+            wipe = 500,
+            mainSpec = 500,
+            offSpec = 250
+        }
+    }
+}
+
+-- Combat tracking
+TestAddon.currentBossGUID = nil
+TestAddon.BOSS_FLAGS = 0x10a48
+TestAddon.EVADE_BUFF_ID = 8988
+
+function TestAddon:OnInitialize()
+    self:Print("RL Быдло: Начало инициализации аддона")
+
+    self.db = LibStub("AceDB-3.0"):New("TestAddonDB", defaults, true)
+
+    self:RegisterChatCommand("rlh", "HandleSlashCommand")
+
+    self:CreateMainFrame()
+
+    self.mainFrame:Show()
+
+    self:Print("RL Быдло: Аддон включен")
+end
+
+-- function TestAddon:OnEnable()
+    -- self:RegisterEvent("PLAYER_REGEN_ENABLED", "OnCombatEnd")
+    -- self:RegisterEvent("PLAYER_REGEN_ENABLED", "OnCombatEnd")
+    -- self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED", "BossStateHandler")
+-- end
+
+-- function TestAddon:BossStateHandler(timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags, ...)
+--     if not event then return end
+    
+--     -- Определяем начало боя с боссом по первому урону
+--     if self.currentBossGUID == nil and (event == "SPELL_DAMAGE" or event == "SWING_DAMAGE") then
+--         self:Print("COMBAT STARTED:", self.currentBossGUID, bit.band(destFlags or 0, self.BOSS_FLAGS) == self.BOSS_FLAGS, self.db.profile.debug)
+--         if (bit.band(destFlags or 0, self.BOSS_FLAGS) == self.BOSS_FLAGS or self.db.profile.debug) then
+--             self.currentBossGUID = destGUID
+--             self:Print("COMBAT STARTED: " .. (destName or "Unknown"))
+--         end
+--     end
+
+--     -- Отслеживаем эвейд босса
+--     if event == "SPELL_AURA_APPLIED" and self.currentBossGUID then
+--         local spellId = select(1, ...)
+--         if spellId == self.EVADE_BUFF_ID and sourceGUID == self.currentBossGUID then
+--             if self.db.profile.debug then
+--                 self:Print("Boss evaded")
+--             end
+--             self:EndCombat("evade")
+--         end
+--     end
+
+--     -- Отслеживаем смерть босса
+--     if event == "UNIT_DIED" and destGUID == self.currentBossGUID then
+--         if self.db.profile.debug then
+--             self:Print("Boss died")
+--         end
+--         self:EndCombat("boss_died")
+--     end
+-- end
+
+-- function TestAddon:EndCombat(reason)
+--     self.inCombat = false
+--     self.currentBossGUID = nil
+--     if self.db.profile.debug then
+--         self:Print("Combat ended: " .. (reason or "unknown"))
+--     end
+-- end
+
+
+-- CombatLog class definition
+local CombatLog = {}
+
+function CombatLog:New()
+    local instance = {
+        entries = {},
+        frames = {},
+        startTime = GetTime(),
+        entryCount = 0
+    }
+    setmetatable(instance, {
+        __index = CombatLog
+    })
+    return instance
+end
+
+function CombatLog:AddEntry(player, message)
+    TestAddon:Print("RL Быдло: CombatLog:AddEntry >>>>>>", player, message)
+    self.entryCount = self.entryCount + 1
+    local entryId = self.entryCount
+
+    local entry = {
+        id = entryId,
+        player = player,
+        data = {
+            [1] = message 
+        }
+    }
+
+    table.insert(self.entries, self.entryCount, entry)
+end
+
+function CombatLog:GetEntries()
+    return self.entries
+end
+
+function CombatLog:Clear()
+    for _, frame in ipairs(self.frames) do
+        frame:Hide()
+        frame:SetParent(nil)
+    end
+
+    table.wipe(self.entries)
+    table.wipe(self.frames)
+    self.startTime = GetTime()
+    self.entryCount = 0
+end
+
+-- Make CombatLog available to TestAddon
+TestAddon.CombatLog = CombatLog
+
+-- Система модулей
+TestAddon.currentCombatLog = nil
+TestAddon.inCombat = false
+
+function TestAddon:OnCombatLogEvent(player, message)
+    self:Print("IN COMBAT", self.inCombat)
+    if not self.inCombat then
+        self.inCombat = true
+        self.currentCombatLog = CombatLog:New()
+    end
+    
+    self.currentCombatLog:AddEntry(player, message)
+    self:UpdateModuleDisplays()
+end
+
+local handlers = {}
+local handlerI = 0
+function TestAddon:withHandler(handler)
+    handlerI = handlerI + 1
+    handlers[handlerI] = handler
+    self:Print("RL Быдло: добавлен обработчик #" .. handlerI)
+end
+
+function TestAddon:OnCombatEnd()
+    if self.db.profile.debug then
+        self:Print("Конец боя")
+    end
+    self:EndCombat("combat_end")
+end
+
+function TestAddon:UpdateButtonsVisibility()
+    if not self.mainFrame then
+        return
+    end
+
+    local buttons = {self.mainFrame.settingsBtn, self.mainFrame.mistakeBtn, self.mainFrame.wipeBtn,
+                     self.mainFrame.mainSpecBtn, self.mainFrame.offSpecBtn}
+
+    for _, button in pairs(buttons) do
+        if button then
+            if self.inCombat then
+                button:Hide()
+            else
+                button:Show()
+            end
+        end
+    end
+end
+
+function TestAddon:CreateMainFrame()
+    local frame = CreateFrame("Frame", "TestAddonMainFrame", UIParent)
+    frame:SetSize(350, 600)
+    frame:SetPoint("CENTER")
+    frame:SetMovable(true)
+    frame:SetResizable(true)
+    frame:SetMinResize(200, 100)
+    frame:SetMaxResize(800, 1000)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+
+    -- Resize button
+    local resizeButton = CreateFrame("Button", nil, frame)
+    resizeButton:SetSize(16, 16)
+    resizeButton:SetPoint("BOTTOMRIGHT", -5, 5)
+    resizeButton:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    resizeButton:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    resizeButton:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    resizeButton:SetScript("OnMouseDown", function()
+        frame:StartSizing("BOTTOMRIGHT")
+    end)
+    resizeButton:SetScript("OnMouseUp", function()
+        frame:StopMovingOrSizing()
+    end)
+
+    -- Background
+    frame:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true,
+        tileSize = 32,
+        edgeSize = 32,
+        insets = {
+            left = 11,
+            right = 12,
+            top = 12,
+            bottom = 11
+        }
+    })
+
+    -- Title
+    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOP", 0, -15)
+    title:SetText("RL Быдло")
+
+    -- Close button
+    local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    closeButton:SetPoint("TOPRIGHT", -5, -5)
+
+    -- Test log button
+    local testLogBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    testLogBtn:SetSize(150, 25)
+    testLogBtn:SetPoint("TOP", title, "BOTTOM", 0, -10)
+    testLogBtn:SetText("Тест")
+    testLogBtn:SetScript("OnClick", function()
+        self:ParseCombatLogText()
+    end)
+    frame.testLogBtn = testLogBtn
+
+    -- Scroll frame
+    local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOP", testLogBtn, "BOTTOM", 0, -10)
+    scrollFrame:SetPoint("BOTTOM", frame, "BOTTOM", 0, 10)
+    scrollFrame:SetPoint("LEFT", frame, "LEFT", 12, 0)
+    scrollFrame:SetPoint("RIGHT", frame, "RIGHT", -32, 0)
+    scrollFrame:EnableMouseWheel(true)
+    scrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        local current = self:GetVerticalScroll()
+        local step = 20
+        self:SetVerticalScroll(current - delta * step)
+    end)
+
+    -- Scroll child
+    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
+    scrollChild:SetHeight(1)
+    scrollFrame:SetScrollChild(scrollChild)
+
+    frame.logScrollFrame = scrollFrame
+    frame.logScrollChild = scrollChild
+
+    self.mainFrame = frame
+
+    -- Обновляем layout при изменении размера
+    frame:SetScript("OnSizeChanged", function()
+        -- local scrollChild = self.logScrollChild
+        if scrollChild then
+            scrollChild:SetWidth(scrollFrame:GetWidth())
+        end
+        if TestAddon and TestAddon.UpdateLogEntryLayout then
+            TestAddon:UpdateLogEntryLayout()
+        end
+    end)
+
+    frame:Hide()
+end
+
+function TestAddon:UpdateLogEntryLayout()
+    if not self.mainFrame or not self.currentCombatLog then
+        return
+    end
+
+    local scrollChild = self.mainFrame.logScrollChild
+    if not scrollChild then
+        return
+    end
+
+    local newWidth = scrollChild:GetWidth() - 10
+    local children = {scrollChild:GetChildren()}
+
+    for _, entryFrame in ipairs(children) do
+        entryFrame:SetWidth(newWidth)
+        local regions = {entryFrame:GetRegions()}
+        local maxTextHeight = 0
+        for _, region in ipairs(regions) do
+            if region:GetObjectType() == "FontString" then
+                region:SetWidth(newWidth - 10)
+                region:SetHeight(0)
+                region:SetJustifyH("LEFT")
+                region:SetJustifyV("TOP")
+                region:SetWordWrap(true)
+                region:SetNonSpaceWrap(true)
+                region:Show()
+
+                local h = region:GetStringHeight()
+                if h and h > maxTextHeight then
+                    maxTextHeight = h
+                end
+            end
+        end
+        entryFrame:SetHeight(maxTextHeight + 4)
+    end
+end
+
+function TestAddon:UpdateModuleDisplays()
+    if not self.mainFrame or not self.currentCombatLog then
+        return
+    end
+
+    local scrollChild = self.mainFrame.logScrollChild
+    if not scrollChild then
+        return
+    end
+
+    local children = {scrollChild:GetChildren()}
+    for _, child in pairs(children) do
+        child:Hide()
+        child:SetParent(nil)
+    end
+
+    scrollChild:SetWidth(self.mainFrame.logScrollFrame:GetWidth())
+
+    local entries = self.currentCombatLog:GetEntries()
+    local previousEntry
+
+    for _, entry in ipairs(entries) do
+        local wrapperButton = self:CreateLogEntryFrame(entry)
+        wrapperButton:SetParent(scrollChild)
+        wrapperButton:SetWidth(scrollChild:GetWidth() - 10)
+
+        if previousEntry then
+            wrapperButton:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, -2)
+        else
+            wrapperButton:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 5, -5)
+        end
+
+        wrapperButton:Show()
+        previousEntry = wrapperButton
+    end
+
+    if previousEntry then
+        local height = (#entries * (previousEntry:GetHeight() + 2))
+        scrollChild:SetHeight(height)
+    else
+        scrollChild:SetHeight(1)
+    end
+
+    self:UpdateLogEntryLayout()
+end
+
+function TestAddon:CreateLogEntryFrame(entry)
+    local entryFrame = CreateFrame("Button")
+    entryFrame:SetSize(400, 24)
+    entryFrame:EnableMouse(true)
+    entryFrame:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    entryFrame:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight", "ADD")
+
+    local lastElement
+
+    for i, element in ipairs(entry.data) do
+        self:Print("Создание элемента", i, element)
+        local text = entryFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        text:SetWidth(1)
+        text:SetHeight(0)
+        text:SetJustifyH("LEFT")
+        text:SetJustifyV("TOP")
+        text:SetWordWrap(true)
+        text:SetNonSpaceWrap(true)
+        text:SetText(element)
+
+        if lastElement then
+            text:SetPoint("LEFT", lastElement, "RIGHT", 10, 0)
+        else
+            text:SetPoint("LEFT", entryFrame, "LEFT", 5, 0)
+        end
+
+        lastElement = text
+
+        if i == 2 and entry.player then
+            entryFrame.playerText = text
+            entryFrame.playerName = entry.player
+        end
+    end
+
+    return entryFrame
+end
+
+function TestAddon:OpenSettings()
+    -- To be implemented
+    print("Настройки временно недоступны")
+end
+
+function TestAddon:ApplyPenalty(penaltyType, targetName)
+    local penalties = self.db.profile.penalties
+    local amount = penalties[penaltyType]
+
+    if amount then
+        -- Check if EPGP is loaded and available
+        if EPGP then
+            local target = targetName or UnitName("target")
+            if target then
+                -- Add GP penalty through EPGP
+                -- EPGP.IncGPBy(target, "Penalty", amount)
+                print(string.format("Применен штраф %d GP для %s", amount, target))
+            else
+                print("Выберите цель для применения штрафа")
+            end
+        else
+            print("EPGP аддон не загружен")
+        end
+    end
+end
+
+function TestAddon:HandleSlashCommand(input)
+    if input == "" then
+        -- Toggle main window
+        if self.mainFrame:IsShown() then
+            self.mainFrame:Hide()
+        else
+            self.mainFrame:Show()
+        end
+    elseif input == "help" then
+        print("RL Быдло команды:")
+        print("/rlh - показать/скрыть окно")
+        print("/rlh help - показать помощь")
+        print("/rlh debug - включить/выключить режим отладки")
+        print("/rlh clear - очистить лог")
+    elseif input == "debug" then
+        self.db.profile.debug = not self.db.profile.debug
+        print("Режим отладки: " .. (self.db.profile.debug and "включен" or "выключен"))
+    elseif input == "clear" then
+        if self.currentCombatLog then
+            self.currentCombatLog:Clear()
+            self:Print("Лог очищен")
+        else
+            self:Print("Нет активного лога")
+        end
+        self:UpdateModuleDisplays()
+    end
+end
+
+function TestAddon:WrapModuleFrame(moduleFrame)
+    -- Создаем кнопку-обертку
+    local wrapperButton = CreateFrame("Button")
+    wrapperButton:SetSize(400, 24)
+    wrapperButton:EnableMouse(true)
+    wrapperButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    wrapperButton:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight", "ADD")
+
+    -- Добавляем индикатор штрафа
+    local penaltyText = wrapperButton:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    penaltyText:SetPoint("RIGHT", wrapperButton, "RIGHT", -5, 0)
+    wrapperButton.penaltyText = penaltyText
+
+    -- Встраиваем фрейм модуля
+    moduleFrame:SetParent(wrapperButton)
+    moduleFrame:ClearAllPoints()
+    moduleFrame:SetPoint("LEFT", wrapperButton, "LEFT", 0, 0)
+    moduleFrame:SetPoint("RIGHT", penaltyText, "LEFT", -5, 0)
+    wrapperButton.moduleFrame = moduleFrame
+
+    -- Функция обновления штрафа
+    function wrapperButton:UpdatePenalty(penaltyType)
+        if penaltyType == "mistake" then
+            penaltyText:SetText("Косяк")
+            penaltyText:SetTextColor(1, 0.5, 0)
+        elseif penaltyType == "wipe" then
+            penaltyText:SetText("Руина")
+            penaltyText:SetTextColor(1, 0, 0)
+        else
+            penaltyText:SetText("")
+        end
+
+        if moduleFrame.OnPenaltyChanged then
+            moduleFrame:OnPenaltyChanged(penaltyType)
+        end
+    end
+
+    -- Обработка кликов для штрафов
+    wrapperButton:SetScript("OnClick", function(self, button)
+        local playerName = moduleFrame.playerName -- Модули должны предоставить имя игрока
+        if not playerName then
+            return
+        end
+
+        if button == "LeftButton" then
+            if self.currentPenalty == "mistake" then
+                -- Отменяем штраф
+                if EPGP then
+                    self.currentPenalty = nil
+                    print(string.format("Отменен штраф за косяк для %s", playerName))
+                end
+            else
+                -- Применяем штраф за косяк
+                TestAddon:ApplyPenalty("mistake", playerName)
+                self.currentPenalty = "mistake"
+            end
+        elseif button == "RightButton" then
+            -- Применяем штраф за руину
+            TestAddon:ApplyPenalty("wipe", playerName)
+            self.currentPenalty = "wipe"
+        end
+        self:UpdatePenalty(self.currentPenalty)
+    end)
+
+    return wrapperButton
+end
+
+function parseCSVLine(line)
+    local result = {}
+    local pos = 1
+    local len = #line
+
+    while pos <= len do
+        local c = line:sub(pos, pos)
+        local value
+
+        if c == '"' then
+            -- Кавычки: начинаем парсинг значения в кавычках
+            local start_pos = pos + 1
+            local quote_pos = start_pos
+
+            while true do
+                quote_pos = line:find('"', quote_pos, true)
+                if not quote_pos then
+                    break
+                end
+
+                if line:sub(quote_pos + 1, quote_pos + 1) == '"' then
+                    quote_pos = quote_pos + 2 -- экранированная кавычка
+                else
+                    break
+                end
+            end
+
+            value = line:sub(start_pos, quote_pos - 1):gsub('""', '"')
+            pos = (line:find(",", quote_pos + 1, true) or len + 1) + 1
+        else
+            -- Без кавычек: ищем следующую запятую
+            local next_comma = line:find(",", pos, true) or (len + 1)
+            value = line:sub(pos, next_comma - 1):match("^%s*(.-)%s*$") -- trim
+            pos = next_comma + 1
+        end
+
+        table.insert(result, value)
+    end
+
+    return result
+end
+
+function TestAddon:ParseCombatLogText()
+
+    local logText = [[
+10/8 21:10:08.708  SPELL_SUMMON,0xF130008FF7383494,"Леди Смертный Шепот",0x10a48,0xF13000954E394779,"Мстительный дух",0xa48,71426,"Призыв духа",0x1
+10/8 21:10:09.048  SPELL_SUMMON,0xF130008FF7383494,"Леди Смертный Шепот",0x10a48,0xF13000954E39479E,"Мстительный дух",0xa48,71426,"Призыв духа",0x1
+10/8 21:10:09.205  SPELL_SUMMON,0xF130008FF7383494,"Леди Смертный Шепот",0x10a48,0xF13000954E3947A1,"Мстительный дух",0xa48,71426,"Призыв духа",0x1
+10/8 21:10:10.774  SWING_DAMAGE,0xF13000954E394779,"Мстительный дух",0xa48,0x0000000000250FF2,"Мыша",0x514,234,0,1,0,0,0,nil,nil,nil
+10/8 21:10:10.778  SPELL_DAMAGE,0xF13000954E394779,"Мстительный дух",0xa48,0x0000000000250FF2,"Мыша",0x514,72010,"Вспышка мщения",0x30,15409,0,48,3852,0,0,nil,nil,nil
+10/8 21:10:25.763  SWING_MISSED,0xF13000954E3947A1,"Мстительный дух",0xa48,0x00000000003F6153,"Movagorn",0x514,DODGE
+9/30 14:53:15.260  SWING_DAMAGE,0xF130009093767EE5,"Проклятый",0xa48,0x00000000003B8668,"Биполярник",0x10511,352,0,1,0,0,0,nil,nil,nil
+9/30 14:53:18.300  SWING_DAMAGE,0xF130009093767EE5,"Проклятый",0xa48,0x00000000003B8668,"Биполярник",0x10511,3155,58,1,0,0,0,nil,nil,nil
+9/30 14:53:18.300  UNIT_DIED,0x0000000000000000,nil,0x80000000,0x00000000003B8668,"Биполярник",0x511
+    ]] 
+
+    if not logText or logText == "" then
+        self:Print("Введите текст лога для тестирования")
+        return
+    end
+    -- Создаем новый лог для тестирования
+    self.currentCombatLog = CombatLog:New()
+    self.inCombat = true
+    -- Разбиваем текст на строки
+    for line in logText:gmatch("[^\r\n]+") do
+        self:Print("Тестовая строка: ", line)
+        -- Извлекаем timestamp и данные, отбрасываем дату
+        local _, _, timestamp, remainder = line:find("^%d+/%d+%s(%d%d:%d%d:%d%d.%d%d%d)%s%s(.*)$")
+        if timestamp and remainder then
+
+            -- Разбиваем данные по запятой, сохраняя закавыченные строки как единое целое
+            local data = {}
+            data[1] = parseTimeToTimestamp(timestamp)
+            local logData = parseCSVLine(remainder)
+            for i, value in ipairs(logData) do
+                if value ~= "" then
+                    data[i + 1] = value
+                end
+            end
+
+            -- Вызываем каждый обработчик с timestamp и развернутыми данными
+            for i, handler in ipairs(handlers) do
+                handler(unpack(data))
+            end
+        end
+    end
+
+    -- Очищаем поле ввода
+    self.mainFrame.logEditBox:SetText("")
+    self.mainFrame.logEditBox:ClearFocus()
+end
+
+function parseTimeToTimestamp(timeStr)
+    local h, m, s, ms = timeStr:match("(%d+):(%d+):(%d+)%.(%d+)")
+    if not h then
+        return nil, "Invalid format"
+    end
+
+    local now = date("*t")
+    now.hour = tonumber(h)
+    now.min = tonumber(m)
+    now.sec = tonumber(s)
+
+    local baseTimestamp = time(now) -- вместо os.time
+    return baseTimestamp + tonumber(ms) / 1000
+end
+
+function blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags, ...)
+    local args = {}
+    args.timestamp = timestamp
+    args.event = event
+    args.sourceGUID = sourceGUID
+    args.sourceName = sourceName
+    args.sourceFlags = sourceFlags
+    args.destGUID = destGUID
+    args.destName = destName
+    args.destFlags = destFlags
+    -- taken from Blizzard_CombatLog.lua
+    if event == "SWING_DAMAGE" then
+        args.amount, args.overkill, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
+            select(1, ...)
+    elseif event == "SWING_MISSED" then
+        args.spellName = ACTION_SWING
+        args.missType = select(1, ...)
+    elseif event:sub(1, 5) == "RANGE" then
+        args.spellId, args.spellName, args.spellSchool = select(1, ...)
+        if event == "RANGE_DAMAGE" then
+            args.amount, args.overkill, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
+                select(4, ...)
+        elseif event == "RANGE_MISSED" then
+            args.missType = select(4, ...)
+        end
+    elseif event:sub(1, 5) == "SPELL" then
+        args.spellId, args.spellName, args.spellSchool = select(1, ...)
+        if event == "SPELL_DAMAGE" then
+            args.amount, args.overkill, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
+                select(4, ...)
+        elseif event == "SPELL_MISSED" then
+            args.missType, args.amountMissed = select(4, ...)
+        elseif event == "SPELL_HEAL" then
+            args.amount, args.overheal, args.absorbed, args.critical = select(4, ...)
+            args.school = args.spellSchool
+        elseif event == "SPELL_ENERGIZE" then
+            args.valueType = 2
+            args.amount, args.powerType = select(4, ...)
+        elseif event:sub(1, 14) == "SPELL_PERIODIC" then
+            if event == "SPELL_PERIODIC_MISSED" then
+                args.missType = select(4, ...)
+            elseif event == "SPELL_PERIODIC_DAMAGE" then
+                args.amount, args.overkill, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
+                    select(4, ...)
+            elseif event == "SPELL_PERIODIC_HEAL" then
+                args.amount, args.overheal, args.absorbed, args.critical = select(4, ...)
+                args.school = args.spellSchool
+            elseif event == "SPELL_PERIODIC_DRAIN" then
+                args.amount, args.powerType, args.extraAmount = select(4, ...)
+                args.valueType = 2
+            elseif event == "SPELL_PERIODIC_LEECH" then
+                args.amount, args.powerType, args.extraAmount = select(4, ...)
+                args.valueType = 2
+            elseif event == "SPELL_PERIODIC_ENERGIZE" then
+                args.amount, args.powerType = select(4, ...)
+                args.valueType = 2
+            end
+        elseif event == "SPELL_DRAIN" then
+            args.amount, args.powerType, args.extraAmount = select(4, ...)
+            args.valueType = 2
+        elseif event == "SPELL_LEECH" then
+            args.amount, args.powerType, args.extraAmount = select(4, ...)
+            args.valueType = 2
+        elseif event == "SPELL_INTERRUPT" then
+            args.extraSpellId, args.extraSpellName, args.extraSpellSchool = select(4, ...)
+        elseif event == "SPELL_EXTRA_ATTACKS" then
+            args.amount = select(4, ...)
+        elseif event == "SPELL_DISPEL_FAILED" then
+            args.extraSpellId, args.extraSpellName, args.extraSpellSchool = select(4, ...)
+        elseif event == "SPELL_AURA_DISPELLED" then
+            args.extraSpellId, args.extraSpellName, args.extraSpellSchool = select(4, ...)
+            args.auraType = select(7, ...)
+        elseif event == "SPELL_AURA_STOLEN" then
+            args.extraSpellId, args.extraSpellName, args.extraSpellSchool = select(4, ...)
+            args.auraType = select(7, ...)
+        elseif event == "SPELL_AURA_APPLIED" or event == "SPELL_AURA_REMOVED" then
+            args.auraType = select(4, ...)
+            args.sourceName = args.destName
+            args.sourceGUID = args.destGUID
+            args.sourceFlags = args.destFlags
+        elseif event == "SPELL_AURA_APPLIED_DOSE" or event == "SPELL_AURA_REMOVED_DOSE" then
+            args.auraType, args.amount = select(4, ...)
+            args.sourceName = args.destName
+            args.sourceGUID = args.destGUID
+            args.sourceFlags = args.destFlags
+        elseif event == "SPELL_CAST_FAILED" then
+            args.missType = select(4, ...)
+        end
+    elseif event == "DAMAGE_SHIELD" then
+        args.spellId, args.spellName, args.spellSchool = select(1, ...)
+        args.amount, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
+            select(4, ...)
+    elseif event == "DAMAGE_SHIELD_MISSED" then
+        args.spellId, args.spellName, args.spellSchool = select(1, ...)
+        args.missType = select(4, ...)
+    elseif event == "ENCHANT_APPLIED" then
+        args.spellName = select(1, ...)
+        args.itemId, args.itemName = select(2, ...)
+    elseif event == "ENCHANT_REMOVED" then
+        args.spellName = select(1, ...)
+        args.itemId, args.itemName = select(2, ...)
+    elseif event == "UNIT_DIED" or event == "UNIT_DESTROYED" then
+        args.sourceName = args.destName
+        args.sourceGUID = args.destGUID
+        args.sourceFlags = args.destFlags
+    elseif event == "ENVIRONMENTAL_DAMAGE" then
+        args.environmentalType = select(1, ...)
+        args.amount, args.overkill, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
+            select(2, ...)
+        args.spellName = _G["ACTION_" .. event .. "_" .. args.environmentalType]
+        args.spellSchool = args.school
+    elseif event == "DAMAGE_SPLIT" then
+        args.spellId, args.spellName, args.spellSchool = select(1, ...)
+        args.amount, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
+            select(4, ...)
+    end
+    return args
+end
+
+function createRingBuffer(size)
+    local buffer = {
+        data = {},
+        size = size or 5,
+        index = 1,
+        count = 0
+    }
+
+    function buffer:add(value)
+        self.data[self.index] = value
+        self.index = self.index % self.size + 1
+        self.count = math.min(self.count + 1, self.size)
+    end
+
+    function buffer:getAll()
+        local result = {}
+        local start = (self.index - self.count - 1 + self.size) % self.size + 1
+        for i = 1, self.count do
+            local idx = (start + i - 1 - 1) % self.size + 1
+            table.insert(result, self.data[idx])
+        end
+        return result
+    end
+
+    return buffer
+end
+
+function Time(value)
+    return {
+        type = "text",
+        value = date("%H:%M:%S", value)
+    }
+end
+
+function Text(value)
+    return {
+        type = "text",
+        value = value and tostring(value) or "nil"
+    }
+end
+
+function SpelIcon(spellName)
+    return {
+        type = "icon",
+        value = spellName and GetSpellTexture(spellName) or "Interface\\Icons\\INV_Misc_QuestionMark"
+    }
+end
+
+function Icon(iconPath)
+    return {
+        type = "icon",
+        value = iconPath
+    }
+end
+
+return TestAddon

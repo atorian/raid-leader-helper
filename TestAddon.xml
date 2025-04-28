@@ -1,0 +1,93 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+    <Frame name="MyAddonMainFrame" parent="UIParent" movable="true" enableMouse="true" hidden="false">
+        <Size>
+            <AbsDimension x="250" y="300"/>
+        </Size>
+        <Anchors>
+            <Anchor point="CENTER"/>
+        </Anchors>
+        <Scripts>
+            <OnMouseDown>
+                self:StartMoving()
+            </OnMouseDown>
+            <OnMouseUp>
+                self:StopMovingOrSizing()
+            </OnMouseUp>
+        </Scripts>
+        
+        <!-- Текстовый заголовок -->
+        <!-- <FontString name="MyAddonTitle" inherits="GameFontNormalLarge" justifyH="CENTER">
+            <Anchors>
+                <Anchor point="TOP" relativePoint="TOP" x="0" y="-10"/>
+            </Anchors>
+            <Text>MyAddon</Text>
+        </FontString> -->
+
+        <!-- Кнопка Косяк (200 GP) -->
+        <!-- <Button name="MyAddonButtonMistake200" inherits="UIPanelButtonTemplate">
+            <Size>
+                <AbsDimension x="150" y="25"/>
+            </Size>
+            <Anchors>
+                <Anchor point="TOP" relativePoint="TOP" x="0" y="-50"/>
+            </Anchors>
+            <Text>Косяк (200 GP)</Text>
+            <Scripts>
+                <OnClick>
+                    MyAddon_HandleGPClick(200)
+                </OnClick>
+            </Scripts>
+        </Button> -->
+
+        <!-- Добавьте остальные кнопки аналогично -->
+
+        <!-- Поле ввода для значения таймера -->
+        <!-- <EditBox name="MyAddonTimerInput" inherits="InputBoxTemplate">
+            <Size>
+                <AbsDimension x="100" y="25"/>
+            </Size>
+            <Anchors>
+                <Anchor point="BOTTOM" relativePoint="BOTTOM" x="0" y="50"/>
+            </Anchors>
+            <AutoFocus>false</AutoFocus>
+        </EditBox> -->
+
+        <!-- Кнопка Настройки (шестерёнка) -->
+        <!-- <Button name="MyAddonSettingsButton" inherits="UIPanelButtonTemplate">
+            <Size>
+                <AbsDimension x="25" y="25"/>
+            </Size>
+            <Anchors>
+                <Anchor point="BOTTOM" relativePoint="BOTTOM" x="0" y="10"/>
+            </Anchors>
+            <Text>⚙</Text>
+            <Scripts>
+                <OnClick>
+                    MyAddon_OpenSettings()
+                </OnClick>
+            </Scripts>
+        </Button> -->
+
+    </Frame>
+    <!-- Template for action buttons -->
+    <Button name="TestAddonActionButtonTemplate" virtual="true">
+        <Size>
+            <AbsDimension x="120" y="24"/>
+        </Size>
+        <NormalFont style="GameFontNormal"/>
+        <HighlightFont style="GameFontHighlight"/>
+        <ButtonText name="$parentText">
+            <Anchors>
+                <Anchor point="CENTER">
+                    <Offset>
+                        <AbsDimension x="0" y="0"/>
+                    </Offset>
+                </Anchor>
+            </Anchors>
+        </ButtonText>
+        <NormalTexture file="Interface\Buttons\UI-Panel-Button-Up"/>
+        <PushedTexture file="Interface\Buttons\UI-Panel-Button-Down"/>
+        <DisabledTexture file="Interface\Buttons\UI-Panel-Button-Disabled"/>
+        <HighlightTexture file="Interface\Buttons\UI-Panel-Button-Highlight" alphaMode="ADD"/>
+    </Button>
+</Ui>

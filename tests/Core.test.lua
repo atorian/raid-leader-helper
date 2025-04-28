@@ -1,0 +1,70 @@
+require('tests.mocks')
+require("Core")
+
+-- TODO: check values when needed
+describe("TestAddon.blizzardEvent", function()
+    it("should parse SWING_DAMAGE event correctly", function()
+        -- 4/22 19:42:31.683  SWING_DAMAGE,0x00000000003CDB62,"Котозавр",0x514,0xF1500087EC5C09CA,"Гормок Пронзающий Бивень",0x10a48,5010,0,1,0,0,0,1,nil,nil
+        local timestamp = 1696870808.708
+        local event = "SWING_DAMAGE"
+        local sourceGUID = 0xF13000954E394779
+        local sourceName = "Мстительный дух"
+        local sourceFlags = 0xa48
+        local destGUID = 0x0000000000250FF2
+        local destName = "Мыша"
+        local destFlags = 0x514
+        local damage = 234
+        local args = blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags, damage, 0, 1, 0, 0, 0, nil, nil, nil)
+
+        assert.are.equal(args.timestamp, timestamp)
+        assert.are.equal(args.event, event)
+        assert.are.equal(args.sourceGUID, sourceGUID)
+        assert.are.equal(args.sourceName, sourceName)
+        assert.are.equal(args.destGUID, destGUID)
+        assert.are.equal(args.destName, destName)
+    end)
+
+    it("should parse SWING_MISSED event correctly", function()
+        -- 4/22 19:42:31.619  SWING_MISSED,0x000000000037B677,"Zxcurse",0x514,0xF1500087EC5C09CA,"Гормок Пронзающий Бивень",0x10a48,MISS
+        local timestamp = 1696870825.763
+        local event = "SWING_MISSED"
+        local sourceGUID = 0xF13000954E3947A1
+        local sourceName = "Мстительный дух"
+        local sourceFlags = 0xa48
+        local destGUID = 0x00000000003F6153
+        local destName = "Movagorn"
+        local destFlags = 0x514
+        local missType = "DODGE"
+        local args = blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags, missType)
+
+        assert.are.equal(args.timestamp, timestamp)
+        assert.are.equal(args.event, event)
+        assert.are.equal(args.sourceGUID, sourceGUID)
+        assert.are.equal(args.sourceName, sourceName)
+        assert.are.equal(args.destGUID, destGUID)
+        assert.are.equal(args.destName, destName)
+        assert.are.equal(args.missType, missType)
+    end)
+
+    it("should parse UNIT_DIED event correctly", function()
+        -- 4/22 19:42:29.916  UNIT_DIED,0x0000000000000000,nil,0x80000000,0xF140A5754D0032AC,"Камнерез",0x1114
+        local timestamp = 1696870838.300
+        local event = "UNIT_DIED"
+        local sourceGUID = 0x0000000000000000
+        local sourceName = nil
+        local sourceFlags = 0x80000000
+        local destGUID = 0x00000000003B8668
+        local destName = "Биполярник"
+        local destFlags = 0x511
+        local args = blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags)
+
+        assert.are.equal(args.timestamp, timestamp)
+        assert.are.equal(args.event, event)
+        assert.are.equal(args.sourceGUID, destGUID)
+        assert.are.equal(args.sourceName, destName)
+        assert.are.equal(args.sourceFlags, destFlags)
+        assert.are.equal(args.destGUID, destGUID)
+        assert.are.equal(args.destName, destName)
+        assert.are.equal(args.destFlags, destFlags)
+    end)
+end)

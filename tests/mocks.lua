@@ -26,6 +26,37 @@ bit = {
     end
 }
 
+-- Таблица для хранения GUID'ов юнитов
+local unitGuids = {}
+
+-- Функция для установки GUID'а определенному юниту
+function M:SetUnitGUID(unitId, guid)
+    unitGuids[unitId] = guid
+end
+
+-- Функция для очистки всех установленных GUID'ов
+function M:ClearUnitGUIDs()
+    wipe(unitGuids)
+end
+
+-- Мокк функции UnitGUID
+UnitGUID = function(unitId)
+    return unitGuids[unitId] or "0x0000000000000000"
+end
+
+-- Мокки для проверки состава группы/рейда
+IsInRaid = function()
+    return M.isInRaid or false
+end
+
+GetNumRaidMembers = function()
+    return M.raidSize or 0
+end
+
+GetNumPartyMembers = function()
+    return M.partySize or 0
+end
+
 function M:GetAddon(name)
     local addon = {}
     function addon:NewModule(moduleName, mixins)
@@ -37,6 +68,7 @@ function M:GetAddon(name)
             UnregisterEvent = AceEvent.UnregisterEvent,
             SendMessage = AceEvent.SendMessage,
             RegisterMessage = AceEvent.RegisterMessage,
+            Print = function() end,
         }
     end
     return addon
@@ -51,6 +83,7 @@ function M:NewModule(name)
         UnregisterEvent = AceEvent.UnregisterEvent,
         SendMessage = AceEvent.SendMessage,
         RegisterMessage = AceEvent.RegisterMessage,
+        Print = function() end,
     }
     
     return module
@@ -65,6 +98,7 @@ function M:NewAddon(name)
         UnregisterEvent = AceEvent.UnregisterEvent,
         SendMessage = AceEvent.SendMessage,
         RegisterMessage = AceEvent.RegisterMessage,
+        Print = function() end,
     }
     
     return module
@@ -82,5 +116,38 @@ end
 
 GetTime = function() return 1234567890 end
 GetSpellTexture = function(spellName) return "texture_path" end
+
+-- Мокк для проверки боевого состояния юнитов
+UnitAffectingCombat = function(unitId)
+    -- Проверяем самого игрока
+    if unitId == "player" then
+        return M.UnitAffectingCombat1 ~= false
+    end
+    
+    -- Проверяем участников группы
+    local partyIndex = unitId:match("party(%d+)")
+    if partyIndex then
+        local index = tonumber(partyIndex) + 1  -- +1 because player is index 1
+        return M["UnitAffectingCombat" .. index] ~= false
+    end
+    
+    -- Проверяем участников рейда
+    local raidIndex = unitId:match("raid(%d+)")
+    if raidIndex then
+        return M["UnitAffectingCombat" .. raidIndex] ~= false
+    end
+    
+    return true -- По умолчанию считаем что в бою
+end
+
+-- Мок для wipe - очистка таблицы
+wipe = function(table)
+    if type(table) == "table" then
+        for k in pairs(table) do
+            table[k] = nil
+        end
+    end
+    return table
+end
 
 return M

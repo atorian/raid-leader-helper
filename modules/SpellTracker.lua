@@ -14,7 +14,7 @@ local TRACKED_SPELLS = {
     [355] = true,    -- Warrior: Taunt
     [694] = true,    -- Warrior: Mocking Blow
     [1161] = true,   -- Warrior: Challenging Shout
-    [49576] = true,  -- Death Knight: Death Grip
+    [49560] = true,  -- Death Knight: Death Grip
     [51399] = true,  -- Death Knight: Death Grip Taunt Effect
     [56222] = true,  -- Death Knight: Dark Command
     [62124] = true,  -- Paladin: Hand of Reckoning
@@ -30,18 +30,22 @@ end
 -- TODO: Register only SPELL_CAST_SUCCESS
 function SppellTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     self:handleEvent(blizzardEvent(...), function (...)
-        TestAddon:Print("RL Быдло: logging event >>>>>>", ...)
         TestAddon:OnCombatLogEvent(...)
     end)
 end
 
 function SppellTracker:handleEvent(eventData, log)
-    if eventData.event == "SPELL_CAST_SUCCESS" then
+    if (eventData.event == "SPELL_AURA_APPLIED") then
         if TRACKED_SPELLS[eventData.spellId] then
-            local message = Text(
-                string.format("%s |cFF00FF00[%s]|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", eventData.timestamp), eventData.sourceName, GetSpellTexture(eventData.spellName), eventData.destName)
-            )
-            log(eventData.sourceName, message)
+            log(eventData.sourceName, string.format(
+                "%s |cFFFFFFFF[%s]|r |T%s:24:24:0:0|t %s", 
+                date("%H:%M:%S", eventData.timestamp), 
+                eventData.sourceName, 
+                GetSpellTexture(eventData.spellName), 
+                eventData.destName
+            ))
         end
     end
 end
+
+return SppellTracker

@@ -21,7 +21,9 @@ function SpiritTracker:OnEnable()
 end
 
 function SpiritTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
-    self:handleEvent(blizzardEvent(...))
+    self:handleEvent(blizzardEvent(...), function (...)
+        TestAddon:OnCombatLogEvent(...)
+    end)
 end
 
 function SpiritTracker:reset()
@@ -41,11 +43,11 @@ function SpiritTracker:handleEvent(eventData, log)
         local spiritInfo = self.currentSpirits[eventData.sourceGUID]
         if not spiritInfo then return end
         
-        TestAddon:OnCombatLogEvent(eventData.destName, {
-            [1] = Text(
-                string.format("%s |cFFFFFFFF%s|r взорвал духа", date("%H:%M:%S", eventData.timestamp), eventData.destName)
-            )
-        })
+        log(eventData.destName, string.format(
+            "%s |cFFFFFFFF%s|r взорвал духа", 
+            date("%H:%M:%S", eventData.timestamp), 
+            eventData.destName
+        ))
 
         return
     end
@@ -54,7 +56,12 @@ function SpiritTracker:handleEvent(eventData, log)
         local spiritInfo = self.currentSpirits[eventData.sourceGUID]
         if not spiritInfo then return end
         
-        TestAddon:OnCombatLogEvent(eventData.destName, Text(string.format("%s Дух автоатачил |cFFFFFFFF%s|r", date("%H:%M:%S", eventData.timestamp), eventData.destName)))
+        log(eventData.destName, string.format(
+            "%s Дух автоатачил |cFFFFFFFF%s|r", 
+            date("%H:%M:%S", eventData.timestamp), 
+            eventData.destName
+        ))
+
         return
     end
 end

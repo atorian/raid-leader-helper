@@ -22,7 +22,7 @@ describe('SpellTracker', function()
             SpellTracker:handleEvent(spellEvent, log)
              
             assert.spy(log).was_called_with("TestWarrior", string.format(
-                "%s |cFFFFFFFF[%s]|r |T%s:24:24:0:0|t %s",
+                "%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
                 date("%H:%M:%S", spellEvent.timestamp),
                 spellEvent.sourceName,
                 GetSpellTexture(spellEvent.spellName),
@@ -43,7 +43,28 @@ describe('SpellTracker', function()
             SpellTracker:handleEvent(spellEvent, log)
              
             assert.spy(log).was_called_with("TestDK", string.format(
-                "%s |cFFFFFFFF[%s]|r |T%s:24:24:0:0|t %s",
+                "%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", spellEvent.timestamp),
+                spellEvent.sourceName,
+                GetSpellTexture(spellEvent.spellName),
+                spellEvent.destName
+            ))
+        end)
+
+        it('logs hand of protection cast', function()
+            local spellEvent = {
+                event = "SPELL_AURA_APPLIED",
+                spellId = 10278,  -- Hand of Protection
+                spellName = "Hand of Protection",
+                timestamp = time(),
+                sourceName = "TestPaladin",
+                destName = "TestTarget"
+            }
+            
+            SpellTracker:handleEvent(spellEvent, log)
+             
+            assert.spy(log).was_called_with("TestPaladin", string.format(
+                "%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
                 date("%H:%M:%S", spellEvent.timestamp),
                 spellEvent.sourceName,
                 GetSpellTexture(spellEvent.spellName),

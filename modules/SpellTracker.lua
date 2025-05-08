@@ -20,6 +20,7 @@ local TRACKED_SPELLS = {
     [62124] = true,  -- Paladin: Hand of Reckoning
     [6795] = true,   -- Druid: Growl
     [66009] = true,  -- Paladin: Корона
+    [10278] = true,  -- Paladin: Hand of Protection (BoP)
 }
 
 function SppellTracker:OnInitialize()
@@ -38,7 +39,7 @@ function SppellTracker:handleEvent(eventData, log)
     if (eventData.event == "SPELL_AURA_APPLIED") then
         if TRACKED_SPELLS[eventData.spellId] then
             log(eventData.sourceName, string.format(
-                "%s |cFFFFFFFF[%s]|r |T%s:24:24:0:0|t %s", 
+                "%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", 
                 date("%H:%M:%S", eventData.timestamp), 
                 eventData.sourceName, 
                 GetSpellTexture(eventData.spellName), 

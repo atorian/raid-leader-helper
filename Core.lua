@@ -1,8 +1,39 @@
 local TestAddon = LibStub("AceAddon-3.0"):NewAddon("TestAddon", "AceConsole-3.0", "AceEvent-3.0")
 
+-- Utility functions
+local function wipe(t)
+    for k in pairs(t) do
+        t[k] = nil
+    end
+    return t
+end
+
+local function count(tbl)
+    local n = 0
+    for _ in pairs(tbl or {}) do
+        n = n + 1
+    end
+    return n
+end
+
+local function toString(val)
+    if type(val) == "table" then
+        local str = "{"
+        for k, v in pairs(val) do
+            str = str .. tostring(k) .. "=" .. toString(v) .. ","
+        end
+        return str .. "}"
+    else
+        return tostring(val)
+    end
+end
+
 -- Constants
-TestAddon.BOSS_FLAGS = 0x10a48
-TestAddon.PLAYER_FLAGS = 0x514
+TestAddon.BOSS_FLAGS = 0x60a48
+TestAddon.PLAYER_FLAGS = 0x511
+TestAddon.ENEMY_FLAGS = 0xa48
+TestAddon.MAX_RAID_SIZE = 25 -- Максимальный размер боевого рейда
+TestAddon.DIVINE_INTERVENTION = 19752  -- ID баффа Божественного вмешательства
 
 -- Default settings
 local defaults = {
@@ -31,7 +62,9 @@ function blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFlags, de
     args.destGUID = destGUID
     args.destName = destName
     args.destFlags = destFlags
-    -- taken from Blizzard_CombatLog.lua
+    
+    print("RL Быдло: " .. event )
+
     if event == "SWING_DAMAGE" then
         args.amount, args.overkill, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
             select(1, ...)
@@ -139,11 +172,14 @@ end
 
 -- Combat tracking
 TestAddon.activeEnemies = {}
-TestAddon.activePlayers = {}
-TestAddon.inCombat = false
+TestAddon.activePlayers = {} -- Now stores only players with Divine Intervention as guid = true
 
 function TestAddon:OnInitialize()
     self:Print("RL Быдло: Начало инициализации аддона")
+
+    -- Инициализируем таблицы для отслеживания
+    self.activeEnemies = self.activeEnemies or {}
+    self.activePlayers = self.activePlayers or {}
 
     self.db = LibStub("AceDB-3.0"):New("TestAddonDB", defaults, true)
 
@@ -156,9 +192,12 @@ function TestAddon:OnInitialize()
     self:Print("RL Быдло: Аддон включен")
 end
 
+
 function TestAddon:OnEnable()
-    self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-    self:RegisterEvent("PLAYER_REGEN_ENABLED")
+    -- if self.db.profile.debug then
+    --     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    --     self:RegisterEvent("PLAYER_REGEN_DISABLED")
+    -- end
 end
 
 
@@ -166,138 +205,100 @@ local function isPlayerTargeted(event)
     return bit.band(event.destFlags or 0, TestAddon.PLAYER_FLAGS) == TestAddon.PLAYER_FLAGS
 end 
 
-local function trackCombatants(event)
-    if not TestAddon.activeEnemies[event.sourceGUID] then
-        TestAddon.activeEnemies[event.sourceGUID] = {
-            name = event.sourceName,
-            guid = event.sourceGUID,
-            flags = event.sourceFlags
-        }
-    end
-    if not TestAddon.activePlayers[event.destGUID] then
-        TestAddon.activePlayers[event.destGUID] = {
-            name = event.destName,
-            guid = event.destGUID,
-            flags = event.destFlags,
-            hasRegen = false
-        }
+function TestAddon:trackCombatants(event)
+    local isEnemy = bit.band(event.sourceFlags, self.ENEMY_FLAGS) == self.ENEMY_FLAGS
+    
+    print("RL Быдло: " .. event.sourceName .. " (" .. event.sourceGUID .. ") " .. (isEnemy and "враг" or "игрок") .. " нанес урон " .. event.destName .. " (" .. event.destGUID .. ")")
+    
+    if isEnemy then
+        self.activeEnemies[event.sourceGUID] = true
+        self.activePlayers[event.destGUID] = self.activePlayers[event.destGUID] or false
+    else
+        self.activeEnemies[event.destGUID] = true
+        self.activePlayers[event.sourceGUID] = self.activePlayers[event.sourceGUID] or false
     end
 end
 
-function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
-    local eventData = blizzardEvent(...)
-    
-    -- Track damage events to detect combat
-    if eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE" then
-        if isPlayerTargeted(eventData) then
-            trackCombatants(eventData)
-            if not self.inCombat then
-                self.inCombat = true
-                if self.db.profile.debug then
-                    self:Print("Combat started - " .. eventData.sourceName .. " attacked " .. eventData.destName)
-                end
-            end
-        end
-    end 
-
-    -- Track enemy deaths
-    if eventData.event == "UNIT_DIED" then
-        if self.activeEnemies[eventData.destGUID] then
-            self.activeEnemies[eventData.destGUID] = nil
-            if self.db.profile.debug then
-                self:Print("Enemy died: " .. eventData.destName)
-            end
-            
-            -- Check if all enemies are dead
-            if not next(self.activeEnemies) then
-                self:EndCombat("all_enemies_dead")
-            end
-        end
-    end
-
-    -- Определяем начало боя с боссом по первому урону
-    if self.currentBossGUID == nil and (eventData.event == "SPELL_DAMAGE" or eventData.event == "SWING_DAMAGE") then
-        -- self:Print("COMBAT STARTED:", self.currentBossGUID, bit.band(eventData.destFlags or 0, self.BOSS_FLAGS) == self.BOSS_FLAGS, self.db.profile.debug)
-        if (bit.band(eventData.destFlags or 0, self.BOSS_FLAGS) == self.BOSS_FLAGS or self.db.profile.debug) then
-            self.currentBossGUID = eventData.destGUID
-            self:Print("COMBAT STARTED: " .. (eventData.destName or "Unknown"))
-        end
-    end 
-
-    -- Отслеживаем эвейд босса
-    if eventData.event == "SPELL_AURA_APPLIED" and self.currentBossGUID then
-        local spellId = eventData.spellId
-        if spellId == self.EVADE_BUFF_ID and eventData.sourceGUID == self.currentBossGUID then
-            if self.db.profile.debug then
-                self:Print("Boss evaded")
-            end
-            self:EndCombat("evade")
-        end
-    end
-    -- self:Print("COMBAT ENDED", eventData.event, eventData.destGUID, self.currentBossGUID)
-    -- Отслеживаем смерть босса
-    if eventData.event == "UNIT_DIED" and eventData.destGUID == self.currentBossGUID then
-        self:Print("COMBAT ENDED")
-        if self.db.profile.debug then
-            self:Print("Boss died")
-        end
-        self:EndCombat("boss_died")
-    end
-end
-
-function TestAddon:PLAYER_REGEN_ENABLED(event)
-    -- Проверяем реген для всех активных игроков в бою
-    for guid, player in pairs(self.activePlayers) do
-        local unitId = nil
-        
-        -- Сначала проверяем самого игрока, затем группу/рейд
-        if UnitGUID("player") == guid then
-            unitId = "player"
-        elseif IsInRaid() then
-            for i = 1, GetNumRaidMembers() do
-                if UnitGUID("raid" .. i) == guid then
-                    unitId = "raid" .. i
-                    break
-                end
-            end
-        else
-            for i = 1, GetNumPartyMembers() do
-                if UnitGUID("party" .. i) == guid then
-                    unitId = "party" .. i
-                    break
-                end
-            end
-        end
-
-        if unitId then
-            -- Если нашли unit ID и у юнита не активен бой
-            if not UnitAffectingCombat(unitId) then
-                player.hasRegen = true
-            end
-        end
-    end
-    
-    -- Проверяем, есть ли реген у всех игроков
-    local allPlayersHaveRegen = true
-    for _, player in pairs(self.activePlayers) do
-        if not player.hasRegen then
-            allPlayersHaveRegen = false
-            break
-        end
-    end
-    
-    if allPlayersHaveRegen then
-        self:EndCombat("all_players_have_regen")
+function TestAddon:PLAYER_REGEN_DISABLED()
+    self.inCombat = true
+    if self.db.profile.debug then
+        self:Print("Combat started - player entered combat")
     end
 end
 
 function TestAddon:EndCombat(reason)
+    if self.db.profile.debug then
+        self:Print("Combat ended: " .. (reason or "unknown"))
+    end
+    print("Combat ended: " .. (reason or "unknown"))
     self.inCombat = false
     wipe(self.activeEnemies)
     wipe(self.activePlayers)
-    self.currentBossGUID = nil
-    if self.db.profile.debug then
-        self:Print("Combat ended: " .. (reason or "unknown"))
+end
+
+function TestAddon:checkCombatEndConditions()
+    if not next(self.activeEnemies) then
+        print("All enemies dead")
+        self:EndCombat("all_enemies_dead")
+        return true
+    end
+    
+    local hasAlivePlayers = false
+    local hasPlayersWithoutDI = false
+    
+    for guid, hasDI in pairs(self.activePlayers) do
+        hasAlivePlayers = true
+        if not hasDI then
+            hasPlayersWithoutDI = true
+            break
+        end
+    end
+    
+    if not hasAlivePlayers then
+        self:EndCombat("all_players_dead")
+        return true
+    end
+    
+    -- All remaining players have Divine Intervention
+    if not hasPlayersWithoutDI then
+        self:EndCombat("all_players_divine_intervention")
+        return true
+    end
+    
+    return false
+end
+
+function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
+
+    print("RL Быдло: COMBAT_LOG_EVENT_UNFILTERED: " .. event)
+
+    local eventData = blizzardEvent(...)
+    print("RL Быдло: COMBAT_LOG_EVENT_UNFILTERED 2: " .. event)
+    
+
+    if eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE" then
+        self:trackCombatants(eventData)
+    end
+    print('Enemy: ' .. eventData.sourceGUID )
+    -- Track deaths
+    if eventData.event == "UNIT_DIED" then
+        
+        if self.activeEnemies[eventData.sourceGUID] then
+            self.activeEnemies[eventData.sourceGUID] = nil
+        else
+            self.activePlayers[eventData.sourceGUID] = nil          
+        end
+    end
+
+    -- Track Divine Intervention
+    if eventData.event == "SPELL_AURA_APPLIED" and eventData.spellId == self.DIVINE_INTERVENTION then
+        self.activePlayers[eventData.destGUID] = true
+    elseif eventData.event == "SPELL_AURA_REMOVED" and eventData.spellId == self.DIVINE_INTERVENTION then
+        self.activePlayers[eventData.destGUID] = false
+    end
+
+    if self:checkCombatEndConditions() then
+        self:EndCombat("conditions_met")
     end
 end
 
@@ -341,8 +342,8 @@ function CombatLog:Clear()
         frame:SetParent(nil)
     end
 
-    table.wipe(self.entries)
-    table.wipe(self.frames)
+    wipe(self.entries)
+    wipe(self.frames)
     self.startTime = GetTime()
     self.entryCount = 0
 end
@@ -352,12 +353,12 @@ TestAddon.CombatLog = CombatLog
 
 
 function TestAddon:OnCombatLogEvent(player, message)
-    -- self:Print("IN COMBAT", self.inCombat)
     if not self.inCombat then
         self.inCombat = true
         self.currentCombatLog = CombatLog:New()
     end
     
+    self:Print("RL Быдло: " .. player .. ": " .. message)
     self.currentCombatLog:AddEntry(player, message)
     self:UpdateModuleDisplays()
 end
@@ -447,19 +448,49 @@ function TestAddon:CreateMainFrame()
     local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeButton:SetPoint("TOPRIGHT", -5, -5)
 
-    -- Test log button
-    local testLogBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    testLogBtn:SetSize(150, 25)
-    testLogBtn:SetPoint("TOP", title, "BOTTOM", 0, -10)
-    testLogBtn:SetText("Тест")
-    testLogBtn:SetScript("OnClick", function()
-        self:ParseCombatLogText()
+
+    if self.db.profile.debug then
+        -- Test log button
+        local pull15Btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        pull15Btn:SetSize(80, 25)
+        pull15Btn:SetPoint("TOP", title, "BOTTOM", -85, -10)
+        pull15Btn:SetText("Пул 15")
+        pull15Btn:SetScript("OnClick", function()
+            -- Пробуем отправить в разные каналы для тестирования
+            -- SendAddonMessage("DBMv4-Pizza", "15\tPull in", "GUILD")
+            SendAddonMessage("DBMv4-Pizza", "15\tPull in", "PARTY")
+            -- SendAddonMessage("DBMv4-Pizza", "15\tPull in", IsInRaid() and "RAID" or "PARTY")
+        end)
+        frame.pull15Btn = pull15Btn
+
+        local pull75Btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        pull75Btn:SetSize(80, 25)
+        pull75Btn:SetPoint("TOP", title, "BOTTOM", 85, -10)
+        pull75Btn:SetText("Пул 75")
+        pull75Btn:SetScript("OnClick", function()
+            -- Пробуем отправить в разные каналы для тестирования
+            -- SendAddonMessage("DBMv4-Pizza", "75\tPull in", "GUILD")
+            SendAddonMessage("DBMv4-Pizza", "75\tPull in", "PARTY")
+            -- SendAddonMessage("DBMv4-Pizza", "75\tPull in", IsInRaid() and "RAID" or "PARTY")
+        end)
+        frame.pull75Btn = pull75Btn
+    end
+    
+    local resetBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    resetBtn:SetSize(80, 25)
+    resetBtn:SetPoint("TOP", title, "BOTTOM", 0, -10)
+    resetBtn:SetText("Ресет")
+    resetBtn:SetScript("OnClick", function()
+        if self.currentCombatLog then
+            self.currentCombatLog:Clear()
+            self:UpdateModuleDisplays()
+        end
     end)
-    frame.testLogBtn = testLogBtn
+    frame.resetBtn = resetBtn
 
     -- Scroll frame
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOP", testLogBtn, "BOTTOM", 0, -10)
+    scrollFrame:SetPoint("TOP", resetBtn, "BOTTOM", 0, -10)
     scrollFrame:SetPoint("BOTTOM", frame, "BOTTOM", 0, 10)
     scrollFrame:SetPoint("LEFT", frame, "LEFT", 12, 0)
     scrollFrame:SetPoint("RIGHT", frame, "RIGHT", -32, 0)
@@ -524,30 +555,30 @@ function TestAddon:UpdateLogEntryLayout()
     end
     
     -- Затем делаем небольшую задержку перед обновлением высоты
-    C_Timer.After(0.05, function()
-        for _, entryFrame in ipairs(children) do
-            if entryFrame.messageText then
-                -- Пересчитываем высоту текста после изменения ширины
-                local textHeight = entryFrame.messageText:GetStringHeight()
-                local frameHeight = math.max(24, textHeight + 8)
-                entryFrame:SetHeight(frameHeight)
+    -- C_Timer.After(0.05, function()
+    --     for _, entryFrame in ipairs(children) do
+    --         if entryFrame.messageText then
+    --             -- Пересчитываем высоту текста после изменения ширины
+    --             local textHeight = entryFrame.messageText:GetStringHeight()
+    --             local frameHeight = math.max(24, textHeight + 8)
+    --             entryFrame:SetHeight(frameHeight)
                 
-                -- Переопределяем позицию фрейма
-                if previousEntry then
-                    entryFrame:ClearAllPoints()
-                    entryFrame:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, -2)
-                else
-                    entryFrame:ClearAllPoints()
-                    entryFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 5, -5)
-                end
+    --             -- Переопределяем позицию фрейма
+    --             if previousEntry then
+    --                 entryFrame:ClearAllPoints()
+    --                 entryFrame:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, -2)
+    --             else
+    --                 entryFrame:Clea rAllPoints()
+    --                 entryFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 5, -5)
+    --             end
                 
-                totalHeight = totalHeight + frameHeight + 2
-                previousEntry = entryFrame
-            end
-        end
+    --             totalHeight = totalHeight + frameHeight + 2
+    --             previousEntry = entryFrame
+    --         end
+    --     end
         
-        scrollChild:SetHeight(math.max(totalHeight + 10, scrollFrame:GetHeight()))
-    end)
+    --     scrollChild:SetHeight(math.max(totalHeight + 10, scrollFrame:GetHeight()))
+    -- end)
 end
 
 function TestAddon:UpdateModuleDisplays()
@@ -635,7 +666,7 @@ end
 
 function TestAddon:OpenSettings()
     -- To be implemented
-    print("Настройки временно недоступны")
+    -- print("Настройки временно недоступны")
 end
 
 function TestAddon:ApplyPenalty(penaltyType, targetName)

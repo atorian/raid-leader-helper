@@ -7,9 +7,7 @@ local function count(tbl)
     local count = 0
     for _, v  in pairs(tbl) do
         count = count + 1
-        print("tv: " .. tostring(v))
     end
-    print("Count function called" .. tostring(tbl) .. " " .. tostring(count))
     return count
 end
 
@@ -23,25 +21,26 @@ describe("Боевая система", function()
         TestAddon.db = { profile = { debug = false } }
     end)
 
-    -- it("начинает бой когда игрок входит в бой", function()
-    --     TestAddon:PLAYER_REGEN_DISABLED()
-    --     assert.is_true(TestAddon.inCombat)
-    -- end)
+    it("начинает бой когда игрок входит в бой", function()
+        TestAddon:PLAYER_REGEN_DISABLED()
+        assert.is_true(TestAddon.inCombat)
+    end)
 
-    -- it("отслеживает врагов, наносящих урон игрокам", function()
-    --     -- Начинаем бой
-    --     TestAddon:PLAYER_REGEN_DISABLED()
+    it("отслеживает врагов, наносящих урон игрокам", function()
+        -- Начинаем бой
+        TestAddon:PLAYER_REGEN_DISABLED()
 
-    --     -- Враг бьет игрока
-    --     TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
-    --         :FromEnemy("Враг1")
-    --         :ToPlayer("Игрок1")
-    --         :Damage(100)
-    --         :Build())
+        -- Враг бьет игрока
+        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
+            :FromEnemy("Враг1")
+            :ToPlayer("Игрок1")
+            :Damage(100)
+            :Build())
 
-    --     assert.are.equal(1, count(TestAddon.activeEnemies))
-    --     assert.is_true(TestAddon.inCombat)
-    -- end)
+        assert.are.equal(1, count(TestAddon.activeEnemies))
+        assert.are.equal(1, count(TestAddon.activePlayers))
+        assert.is_true(TestAddon.inCombat)
+    end)
 
     it("завершает бой при смерти всех врагов", function()
         -- Начинаем бой и добавляем врага
@@ -64,66 +63,82 @@ describe("Боевая система", function()
         assert.are.equal(0, count(TestAddon.activeEnemies))
     end)
 
-    -- it("отслеживает статус Divine Intervention на игроках", function()
-    --     -- Начинаем бой
-    --     TestAddon:PLAYER_REGEN_DISABLED()
+    it("завершает бой если все живые игроки под Divine Intervention", function()
+        -- Начинаем бой
+        TestAddon:PLAYER_REGEN_DISABLED()
 
-    --     -- Накладываем Divine Intervention
-    --     TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
-    --         :FromPlayer("Паладин")
-    --         :ToPlayer("Игрок1")
-    --         :ApplyAura(19752, "Божественное вмешательство")
-    --         :Build())
+        -- Добавляем врага
+        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
+            :FromEnemy("Враг1")
+            :ToPlayer("Паладин")
+            :Damage(100)
+            :Build())
 
-    --     local playerGuid = next(TestAddon.activePlayers)
-    --     assert.is_true(TestAddon.activePlayers[playerGuid])
-    -- end)
+        -- Накладываем Divine Intervention на всех игроков
+        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
+            :FromPlayer("Паладин")
+            :ToPlayer("Паладин")
+            :ApplyAura(19752, "Божественное вмешательство")
+            :Build())
 
-    -- it("завершает бой если все живые игроки под Divine Intervention", function()
-    --     -- Начинаем бой
-    --     TestAddon:PLAYER_REGEN_DISABLED()
+        assert.is_false(TestAddon.inCombat)
+    end)
 
-    --     -- Добавляем врага
-    --     TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
-    --         :FromEnemy("Враг1")
-    --         :ToPlayer("Игрок1")
-    --         :Damage(100)
-    --         :Build())
+    it("не завершает бой если есть игроки без Divine Intervention", function()
+        -- Начинаем бой
+        TestAddon:PLAYER_REGEN_DISABLED()
 
-    --     -- Накладываем Divine Intervention на всех игроков
-    --     TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
-    --         :FromPlayer("Паладин")
-    --         :ToPlayer("Игрок1")
-    --         :ApplyAura(19752, "Божественное вмешательство")
-    --         :Build())
+        -- Добавляем врага и двух игроков
+        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
+            :FromEnemy("Враг1")
+            :ToPlayer("Игрок1")
+            :Damage(100)
+            :Build())
 
-    --     assert.is_false(TestAddon.inCombat)
-    -- end)
+        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
+            :FromEnemy("Враг1") 
+            :ToPlayer("Игрок2")
+            :Damage(100)
+            :Build())
 
-    -- it("не завершает бой если есть игроки без Divine Intervention", function()
-    --     -- Начинаем бой
-    --     TestAddon:PLAYER_REGEN_DISABLED()
+        -- Накладываем Divine Intervention только на одного игрока
+        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
+            :FromPlayer("Паладин")
+            :ToPlayer("Игрок1")
+            :ApplyAura(19752, "Божественное вмешательство")
+            :Build())
 
-    --     -- Добавляем врага и двух игроков
-    --     TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
-    --         :FromEnemy("Враг1")
-    --         :ToPlayer("Игрок1")
-    --         :Damage(100)
-    --         :Build())
+        assert.is_true(TestAddon.inCombat)
+    end)
 
-    --     TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
-    --         :FromEnemy("Враг1") 
-    --         :ToPlayer("Игрок2")
-    --         :Damage(100)
-    --         :Build())
+    it("завершает бой когда все игроки умерли", function()
+        -- Начинаем бой
+        TestAddon:PLAYER_REGEN_DISABLED()
 
-    --     -- Накладываем Divine Intervention только на одного игрока
-    --     TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
-    --         :FromPlayer("Паладин")
-    --         :ToPlayer("Игрок1")
-    --         :ApplyAura(19752, "Божественное вмешательство")
-    --         :Build())
+        -- Добавляем врага и двух игроков
+        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
+            :FromEnemy("Враг1")
+            :ToPlayer("Игрок1")
+            :Damage(100)
+            :Build())
 
-    --     assert.is_true(TestAddon.inCombat)
-    -- end)
+        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
+            :FromEnemy("Враг1") 
+            :ToPlayer("Игрок2")
+            :Damage(100)
+            :Build())
+
+        -- Убиваем обоих игроков
+        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
+            :ToPlayer("Игрок1")
+            :Death()
+            :Build())
+
+        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New()
+            :ToPlayer("Игрок2")
+            :Death()
+            :Build())
+
+        assert.is_false(TestAddon.inCombat)
+    end)
 end)

@@ -1,7 +1,10 @@
 local GUIDGenerator = {
     playerCounter = 0,
     npcCounter = 0,
-    petCounter = 0
+    petCounter = 0,
+    playerGuidCache = {},
+    npcGuidCache = {},
+    petGuidCache = {}
 }
 
 local BOSS_FLAGS = 0x60a48
@@ -12,21 +15,45 @@ function GUIDGenerator:Reset()
     self.playerCounter = 0
     self.npcCounter = 0
     self.petCounter = 0
+    self.playerGuidCache = {}
+    self.npcGuidCache = {}
+    self.petGuidCache = {}
 end
 
-function GUIDGenerator:GeneratePlayerGUID()
+function GUIDGenerator:GeneratePlayerGUID(name)
+    if name and self.playerGuidCache[name] then
+        return self.playerGuidCache[name]
+    end
     self.playerCounter = self.playerCounter + 1
-    return string.format("0x%016d", self.playerCounter)
+    local guid = string.format("0x%016d", self.playerCounter)
+    if name then
+        self.playerGuidCache[name] = guid
+    end
+    return guid
 end
 
-function GUIDGenerator:GenerateNPCGUID()
+function GUIDGenerator:GenerateNPCGUID(name)
+    if name and self.npcGuidCache[name] then
+        return self.npcGuidCache[name]
+    end
     self.npcCounter = self.npcCounter + 1
-    return string.format("0xF13%013d", self.npcCounter)
+    local guid = string.format("0xF13%013d", self.npcCounter)
+    if name then
+        self.npcGuidCache[name] = guid
+    end
+    return guid
 end
 
-function GUIDGenerator:GeneratePetGUID()
+function GUIDGenerator:GeneratePetGUID(name)
+    if name and self.petGuidCache[name] then
+        return self.petGuidCache[name]
+    end
     self.petCounter = self.petCounter + 1
-    return string.format("0xF14%013d", self.petCounter)
+    local guid = string.format("0xF14%013d", self.petCounter)
+    if name then
+        self.petGuidCache[name] = guid
+    end
+    return guid
 end
 
 local CombatEventBuilder = {}
@@ -65,21 +92,21 @@ end
 
 -- Методы для установки источника
 function CombatEventBuilder:FromPlayer(name)
-    self.source.guid = GUIDGenerator:GeneratePlayerGUID()
+    self.source.guid = GUIDGenerator:GeneratePlayerGUID(name)
     self.source.name = name or UnitName("player")
     self.source.flags = PLAYER_FLAGS
     return self
 end
 
 function CombatEventBuilder:FromEnemy(name)
-    self.source.guid = GUIDGenerator:GenerateNPCGUID()
+    self.source.guid = GUIDGenerator:GenerateNPCGUID(name)
     self.source.name = name
     self.source.flags = ENEMY_FLAGS
     return self
 end
 
 function CombatEventBuilder:FromPet(name)
-    self.source.guid = GUIDGenerator:GeneratePetGUID()
+    self.source.guid = GUIDGenerator:GeneratePetGUID(name)
     self.source.name = name
     self.source.flags = 0x1111 -- Pet flags
     return self
@@ -87,21 +114,21 @@ end
 
 -- Методы для установки цели
 function CombatEventBuilder:ToPlayer(name)
-    self.target.guid = GUIDGenerator:GeneratePlayerGUID() 
+    self.target.guid = GUIDGenerator:GeneratePlayerGUID(name)
     self.target.name = name or UnitName("player")
     self.target.flags = PLAYER_FLAGS
     return self
 end
 
 function CombatEventBuilder:ToEnemy(name)
-    self.target.guid = GUIDGenerator:GenerateNPCGUID()
+    self.target.guid = GUIDGenerator:GenerateNPCGUID(name)
     self.target.name = name
     self.target.flags = ENEMY_FLAGS
     return self
 end
 
 function CombatEventBuilder:ToPet(name)
-    self.target.guid = GUIDGenerator:GeneratePetGUID()
+    self.target.guid = GUIDGenerator:GeneratePetGUID(name)
     self.target.name = name
     self.target.flags = 0x1111 -- Pet flags
     return self

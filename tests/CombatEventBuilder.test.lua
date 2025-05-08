@@ -2,6 +2,7 @@ require('tests.mocks')
 local Builder = require('../utils/CombatEventBuilder')
 
 local BOSS_FLAGS = 0x60a48
+local ENEMY_FLAGS = 0xa48
 local PLAYER_FLAGS = 0x511
 
 describe("Combat Event Builder", function()
@@ -21,7 +22,7 @@ describe("Combat Event Builder", function()
         -- Проверяем базовые параметры
         assert.equals("SWING_DAMAGE", event)
         assert.equals("Леди Смертный Шепот", sourceName)
-        assert.equals(BOSS_FLAGS, sourceFlags)
+        assert.equals(ENEMY_FLAGS, sourceFlags)
         assert.equals("Игрок", destName)
         assert.equals(PLAYER_FLAGS, destFlags)
         assert.equals(1000, amount)
@@ -75,7 +76,7 @@ describe("Combat Event Builder", function()
 
         assert.equals("UNIT_DIED", event)
         assert.equals("Леди Смертный Шепот", destName)
-        assert.equals(BOSS_FLAGS, destFlags)
+        assert.equals(ENEMY_FLAGS, destFlags)
         assert.equals("0xF130000000000001", destGUID)
     end)
 end)

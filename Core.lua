@@ -63,8 +63,6 @@ function blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFlags, de
     args.destName = destName
     args.destFlags = destFlags
     
-    print("RL Быдло: " .. event )
-
     if event == "SWING_DAMAGE" then
         args.amount, args.overkill, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
             select(1, ...)
@@ -205,17 +203,21 @@ local function isPlayerTargeted(event)
     return bit.band(event.destFlags or 0, TestAddon.PLAYER_FLAGS) == TestAddon.PLAYER_FLAGS
 end 
 
+local function isEnemy(flags) 
+    return bit.band(flags or 0, TestAddon.ENEMY_FLAGS) == TestAddon.ENEMY_FLAGS
+end
+
 function TestAddon:trackCombatants(event)
-    local isEnemy = bit.band(event.sourceFlags, self.ENEMY_FLAGS) == self.ENEMY_FLAGS
-    
-    print("RL Быдло: " .. event.sourceName .. " (" .. event.sourceGUID .. ") " .. (isEnemy and "враг" or "игрок") .. " нанес урон " .. event.destName .. " (" .. event.destGUID .. ")")
-    
-    if isEnemy then
+    if isEnemy(event.sourceFlags) then
         self.activeEnemies[event.sourceGUID] = true
-        self.activePlayers[event.destGUID] = self.activePlayers[event.destGUID] or false
     else
-        self.activeEnemies[event.destGUID] = true
         self.activePlayers[event.sourceGUID] = self.activePlayers[event.sourceGUID] or false
+    end
+
+    if isEnemy(event.destFlags) then
+        self.activeEnemies[event.destGUID] = true
+    else
+        self.activePlayers[event.destGUID] = self.activePlayers[event.destGUID] or false
     end
 end
 
@@ -230,7 +232,6 @@ function TestAddon:EndCombat(reason)
     if self.db.profile.debug then
         self:Print("Combat ended: " .. (reason or "unknown"))
     end
-    print("Combat ended: " .. (reason or "unknown"))
     self.inCombat = false
     wipe(self.activeEnemies)
     wipe(self.activePlayers)
@@ -238,7 +239,6 @@ end
 
 function TestAddon:checkCombatEndConditions()
     if not next(self.activeEnemies) then
-        print("All enemies dead")
         self:EndCombat("all_enemies_dead")
         return true
     end
@@ -270,19 +270,12 @@ end
 
 function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 
-    print("RL Быдло: COMBAT_LOG_EVENT_UNFILTERED: " .. event)
-
     local eventData = blizzardEvent(...)
-    print("RL Быдло: COMBAT_LOG_EVENT_UNFILTERED 2: " .. event)
     
+    self:trackCombatants(eventData)
 
-    if eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE" then
-        self:trackCombatants(eventData)
-    end
-    print('Enemy: ' .. eventData.sourceGUID )
     -- Track deaths
-    if eventData.event == "UNIT_DIED" then
-        
+    if eventData.event == "UNIT_DIED" then       
         if self.activeEnemies[eventData.sourceGUID] then
             self.activeEnemies[eventData.sourceGUID] = nil
         else

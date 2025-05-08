@@ -46,7 +46,7 @@ function SpiritTracker:handleEvent(eventData, log)
         log(eventData.destName, string.format(
             "%s |cFFFFFFFF%s|r взорвал духа", 
             date("%H:%M:%S", eventData.timestamp), 
-            eventData.destName
+            eventData.destName0
         ))
 
         return

@@ -33,7 +33,7 @@ TestAddon.BOSS_FLAGS = 0x60a48
 TestAddon.PLAYER_FLAGS = 0x511
 TestAddon.ENEMY_FLAGS = 0xa48
 TestAddon.MAX_RAID_SIZE = 25 -- Максимальный размер боевого рейда
-TestAddon.DIVINE_INTERVENTION = 19752  -- ID баффа Божественного вмешательства
+TestAddon.DIVINE_INTERVENTION = 19752 -- ID баффа Божественного вмешательства
 
 -- Default settings
 local defaults = {
@@ -62,7 +62,7 @@ function blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFlags, de
     args.destGUID = destGUID
     args.destName = destName
     args.destFlags = destFlags
-    
+
     if event == "SWING_DAMAGE" then
         args.amount, args.overkill, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
             select(1, ...)
@@ -188,22 +188,25 @@ function TestAddon:OnInitialize()
     self.mainFrame:Show()
 
     self:Print("RL Быдло: Аддон включен")
-end
+    if DBM then
+        self:Print("DBM Loaded")
+    else
+        self:Print("DBM is missing")
+    end
 
+end
 
 function TestAddon:OnEnable()
-    -- if self.db.profile.debug then
-    --     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-    --     self:RegisterEvent("PLAYER_REGEN_DISABLED")
-    -- end
+
+    self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    self:RegisterEvent("PLAYER_REGEN_DISABLED")
 end
 
-
-local function isPlayerTargeted(event) 
+local function isPlayerTargeted(event)
     return bit.band(event.destFlags or 0, TestAddon.PLAYER_FLAGS) == TestAddon.PLAYER_FLAGS
-end 
+end
 
-local function isEnemy(flags) 
+local function isEnemy(flags)
     return bit.band(flags or 0, TestAddon.ENEMY_FLAGS) == TestAddon.ENEMY_FLAGS
 end
 
@@ -242,10 +245,10 @@ function TestAddon:checkCombatEndConditions()
         self:EndCombat("all_enemies_dead")
         return true
     end
-    
+
     local hasAlivePlayers = false
     local hasPlayersWithoutDI = false
-    
+
     for guid, hasDI in pairs(self.activePlayers) do
         hasAlivePlayers = true
         if not hasDI then
@@ -253,33 +256,37 @@ function TestAddon:checkCombatEndConditions()
             break
         end
     end
-    
+
     if not hasAlivePlayers then
         self:EndCombat("all_players_dead")
         return true
     end
-    
+
     -- All remaining players have Divine Intervention
     if not hasPlayersWithoutDI then
         self:EndCombat("all_players_divine_intervention")
         return true
     end
-    
+
     return false
 end
 
 function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 
     local eventData = blizzardEvent(...)
-    
+
+    -- if self.db.profile.debug then
+    --     self:Print("RL Быдло: " .. eventData.event .. " - " .. eventData.sourceName .. " -> " .. eventData.destName, eventData.destFlags, eventData.destFlags == self.ENEMY_FLAGS)
+    -- end
+
     self:trackCombatants(eventData)
 
     -- Track deaths
-    if eventData.event == "UNIT_DIED" then       
+    if eventData.event == "UNIT_DIED" then
         if self.activeEnemies[eventData.sourceGUID] then
             self.activeEnemies[eventData.sourceGUID] = nil
         else
-            self.activePlayers[eventData.sourceGUID] = nil          
+            self.activePlayers[eventData.sourceGUID] = nil
         end
     end
 
@@ -294,7 +301,6 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
         self:EndCombat("conditions_met")
     end
 end
-
 
 -- CombatLog class definition
 local CombatLog = {}
@@ -315,11 +321,11 @@ end
 function CombatLog:AddEntry(player, message)
     self.entryCount = self.entryCount + 1
     local entryId = self.entryCount
-   
+
     local entry = {
         id = entryId,
         player = player,
-        message = message,
+        message = message
     }
 
     table.insert(self.entries, entry)
@@ -344,13 +350,12 @@ end
 -- Make CombatLog available to TestAddon
 TestAddon.CombatLog = CombatLog
 
-
 function TestAddon:OnCombatLogEvent(player, message)
     if not self.inCombat then
         self.inCombat = true
         self.currentCombatLog = CombatLog:New()
     end
-    
+
     self:Print("RL Быдло: " .. player .. ": " .. message)
     self.currentCombatLog:AddEntry(player, message)
     self:UpdateModuleDisplays()
@@ -362,13 +367,6 @@ function TestAddon:withHandler(handler)
     handlerI = handlerI + 1
     handlers[handlerI] = handler
     self:Print("RL Быдло: добавлен обработчик #" .. handlerI)
-end
-
-function TestAddon:OnCombatEnd()
-    if self.db.profile.debug then
-        self:Print("Конец боя")
-    end
-    self:EndCombat("combat_end")
 end
 
 function TestAddon:UpdateButtonsVisibility()
@@ -388,6 +386,22 @@ function TestAddon:UpdateButtonsVisibility()
             end
         end
     end
+end
+
+local function sendSync(prefix, msg)
+    msg = msg or ""
+    local zoneType = select(2, IsInInstance())
+    if zoneType == "pvp" or zoneType == "arena" then
+        TestAddon:Print("RL Быдло: Отправлено в BATTLEGROUND")
+        SendAddonMessage(prefix, msg, "BATTLEGROUND")
+    elseif GetRealNumRaidMembers() > 0 then
+        TestAddon:Print("RL Быдло: Отправлено в RAID")
+        SendAddonMessage(prefix, msg, "RAID")
+    elseif GetRealNumPartyMembers() > 0 then
+        TestAddon:Print("RL Быдло: Отправлено в PARTY")
+        SendAddonMessage(prefix, msg, "PARTY")
+    end
+
 end
 
 function TestAddon:CreateMainFrame()
@@ -441,7 +455,6 @@ function TestAddon:CreateMainFrame()
     local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeButton:SetPoint("TOPRIGHT", -5, -5)
 
-
     if self.db.profile.debug then
         -- Test log button
         local pull15Btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -449,26 +462,22 @@ function TestAddon:CreateMainFrame()
         pull15Btn:SetPoint("TOP", title, "BOTTOM", -85, -10)
         pull15Btn:SetText("Пул 15")
         pull15Btn:SetScript("OnClick", function()
-            -- Пробуем отправить в разные каналы для тестирования
-            -- SendAddonMessage("DBMv4-Pizza", "15\tPull in", "GUILD")
-            SendAddonMessage("DBMv4-Pizza", "15\tPull in", "PARTY")
-            -- SendAddonMessage("DBMv4-Pizza", "15\tPull in", IsInRaid() and "RAID" or "PARTY")
+            self:Print("RL Быдло: Пул 15");
+            DBM:CreatePizzaTimer(15, "Pull", true)
         end)
         frame.pull15Btn = pull15Btn
 
         local pull75Btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         pull75Btn:SetSize(80, 25)
         pull75Btn:SetPoint("TOP", title, "BOTTOM", 85, -10)
-        pull75Btn:SetText("Пул 75")
+        pull75Btn:SetText("Пул 70")
         pull75Btn:SetScript("OnClick", function()
-            -- Пробуем отправить в разные каналы для тестирования
-            -- SendAddonMessage("DBMv4-Pizza", "75\tPull in", "GUILD")
-            SendAddonMessage("DBMv4-Pizza", "75\tPull in", "PARTY")
-            -- SendAddonMessage("DBMv4-Pizza", "75\tPull in", IsInRaid() and "RAID" or "PARTY")
+            self:Print("RL Быдло: Пул 70");
+            DBM:CreatePizzaTimer(70, "Pull", true)
         end)
         frame.pull75Btn = pull75Btn
     end
-    
+
     local resetBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     resetBtn:SetSize(80, 25)
     resetBtn:SetPoint("TOP", title, "BOTTOM", 0, -10)
@@ -504,7 +513,6 @@ function TestAddon:CreateMainFrame()
 
     self.mainFrame = frame
 
-    -- Обновляем layout при изменении размера
     frame:SetScript("OnSizeChanged", function(self, width, height)
         if scrollChild then
             -- Принудительно обновляем размеры и позиции всех элементов
@@ -517,11 +525,11 @@ function TestAddon:CreateMainFrame()
 end
 
 function TestAddon:UpdateLogEntryLayout()
-    
+
     if not self.mainFrame then
         return
     end
-    
+
     local scrollChild = self.mainFrame.logScrollChild
     if not scrollChild then
         return
@@ -538,7 +546,7 @@ function TestAddon:UpdateLogEntryLayout()
     local totalHeight = 0
     local previousEntry
     local children = {scrollChild:GetChildren()}
-    
+
     -- Сначала обновляем ширину всех текстовых элементов
     for _, entryFrame in ipairs(children) do
         if entryFrame.messageText then
@@ -546,7 +554,7 @@ function TestAddon:UpdateLogEntryLayout()
             entryFrame.messageText:SetWidth(newWidth - 20)
         end
     end
-    
+
     -- Затем делаем небольшую задержку перед обновлением высоты
     -- C_Timer.After(0.05, function()
     --     for _, entryFrame in ipairs(children) do
@@ -555,7 +563,7 @@ function TestAddon:UpdateLogEntryLayout()
     --             local textHeight = entryFrame.messageText:GetStringHeight()
     --             local frameHeight = math.max(24, textHeight + 8)
     --             entryFrame:SetHeight(frameHeight)
-                
+
     --             -- Переопределяем позицию фрейма
     --             if previousEntry then
     --                 entryFrame:ClearAllPoints()
@@ -564,12 +572,12 @@ function TestAddon:UpdateLogEntryLayout()
     --                 entryFrame:Clea rAllPoints()
     --                 entryFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 5, -5)
     --             end
-                
+
     --             totalHeight = totalHeight + frameHeight + 2
     --             previousEntry = entryFrame
     --         end
     --     end
-        
+
     --     scrollChild:SetHeight(math.max(totalHeight + 10, scrollFrame:GetHeight()))
     -- end)
 end
@@ -580,7 +588,7 @@ function TestAddon:UpdateModuleDisplays()
         TestAddon:Print("ERROR: No mainFrame found")
         return
     end
-    
+
     if not self.currentCombatLog then
         TestAddon:Print("ERROR: No currentCombatLog found")
         return
@@ -599,9 +607,9 @@ function TestAddon:UpdateModuleDisplays()
     end
 
     scrollChild:SetWidth(self.mainFrame.logScrollFrame:GetWidth())
-    
+
     local entries = self.currentCombatLog:GetEntries()
-    
+
     local previousEntry
 
     for i, entry in ipairs(entries) do
@@ -629,7 +637,7 @@ function TestAddon:UpdateModuleDisplays()
     self:UpdateLogEntryLayout()
 end
 
-function TestAddon:CreateLogEntryFrame(entry)  
+function TestAddon:CreateLogEntryFrame(entry)
     local entryFrame = CreateFrame("Button")
     entryFrame:SetSize(400, 24)
     entryFrame:EnableMouse(true)
@@ -644,11 +652,11 @@ function TestAddon:CreateLogEntryFrame(entry)
     messageText:SetJustifyV("TOP")
     messageText:SetWordWrap(true)
     messageText:SetText(entry.message)
-    
+
     -- Store references
     entryFrame.messageText = messageText
     entryFrame.playerName = entry.player
-    
+
     -- Set initial height
     messageText:SetWidth(400 - 20) -- Initial width with padding
     local initialHeight = math.max(24, messageText:GetStringHeight() + 8)
@@ -832,7 +840,7 @@ function TestAddon:ParseCombatLogText()
 9/30 14:53:15.260  SWING_DAMAGE,0xF130009093767EE5,"Проклятый",0xa48,0x00000000003B8668,"Биполярник",0x10511,352,0,1,0,0,0,nil,nil,nil
 9/30 14:53:18.300  SWING_DAMAGE,0xF130009093767EE5,"Проклятый",0xa48,0x00000000003B8668,"Биполярник",0x10511,3155,58,1,0,0,0,nil,nil,nil
 9/30 14:53:18.300  UNIT_DIED,0x0000000000000000,nil,0x80000000,0x00000000003B8668,"Биполярник",0x511
-    ]] 
+    ]]
 
     if not logText or logText == "" then
         self:Print("Введите текст лога для тестирования")

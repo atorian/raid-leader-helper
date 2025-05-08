@@ -20,5 +20,7 @@ This addon for World of Warcraft 3.3.5a assists Raid Leaders in identifying rule
 - Setup and Framework: Initialize addon with Ace3, create basic UI, and integrate with EPGP.
 - Modular Rule System: Develop a system to add, load, and unload raid rule modules dynamically in-game.
 - Rule Monitoring: Implement detection of rule-breaking actions based on loaded modules (e.g., incorrect positioning, failure to follow mechanics).
+    - taunts
+    - 
 - Penalty System: Develop functionality to apply GP penalties via EPGP with customizable reasons tied to specific rule violations.
 - Reporting UI and Testing: Create a user-friendly interface for Raid Leaders to manage modules, view violations, and apply penalties; test in raid environments and refine based on feedback

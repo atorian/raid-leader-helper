@@ -4,8 +4,10 @@
 ## Author: Atorian
 ## Version: 0.0.1
 ## SavedVariables: TestAddonDB
+## Dependencies: DBM-Core
 ## OptionalDeps: Ace3
 ## X-Category: Raid Tools
+
 
 # Libraries
 Libs\LibStub\LibStub.lua
@@ -14,6 +16,8 @@ Libs\AceAddon-3.0\AceAddon-3.0.xml
 Libs\AceConsole-3.0\AceConsole-3.0.xml
 Libs\AceEvent-3.0\AceEvent-3.0.xml
 Libs\AceModule-3.0\AceModule-3.0.xml
+# Libs\Ace3\AceComm-3.0\ChatThrottleLib.lua
+# Libs\Ace3\AceComm-3.0\AceComm-3.0.lua
 Libs\AceDB-3.0\AceDB-3.0.xml
 Libs\AceGUI-3.0\AceGUI-3.0.xml
 

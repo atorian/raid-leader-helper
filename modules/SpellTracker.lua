@@ -8,19 +8,18 @@ function SppellTracker:OnEnable()
     end)
 end
 
--- Таунты, короны, диваны.
 -- Список отслеживаемых способностей
 local TRACKED_SPELLS = {
-    [355] = true,    -- Warrior: Taunt
-    [694] = true,    -- Warrior: Mocking Blow
-    [1161] = true,   -- Warrior: Challenging Shout
-    [49560] = true,  -- Death Knight: Death Grip
-    [51399] = true,  -- Death Knight: Death Grip Taunt Effect
-    [56222] = true,  -- Death Knight: Dark Command
-    [62124] = true,  -- Paladin: Hand of Reckoning
-    [6795] = true,   -- Druid: Growl
-    [66009] = true,  -- Paladin: Корона
-    [10278] = true,  -- Paladin: Hand of Protection (BoP)
+    [355] = "Interface\\Icons\\spell_nature_reincarnation",    -- Warrior: Taunt
+    [694] =  "Interface\\Icons\\ability_warrior_punishingblow",    -- Warrior: Mocking Blow
+    [1161] = "Interface\\Icons\\ability_bullrush",   -- Warrior: Challenging Shout
+    [49560] = "Interface\\Icons\\Spell_DeathKnight_Strangulate", -- Death Knight: Death Grip
+    [51399] = "Interface\\Icons\\Spell_DeathKnight_Strangulate", -- Death Knight: Death Grip Taunt Effect
+    [56222] = "Interface\\Icons\\Spell_Nature_ShamanRage", -- Death Knight: Dark Command
+    [62124] = "Interface\\Icons\\Spell_Holy_UnyildingFaith", -- Paladin: Hand of Reckoning
+    [5209] = "Interface\\Icons\\Ability_Druid_ChallangingRoar",   -- Druid: Growl
+    [66009] = "Interface\\Icons\\Spell_Holy_SealOfProtection",  -- Paladin: Корона
+    [19752] = "Interface\\Icons\\Spell_Nature_TimeStop",  -- Paladin: Hand of Protection (BoP)
 }
 
 function SppellTracker:OnInitialize()
@@ -28,9 +27,9 @@ function SppellTracker:OnInitialize()
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 end
 
--- TODO: Register only SPELL_CAST_SUCCESS
 function SppellTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     self:handleEvent(blizzardEvent(...), function (...)
+        TestAddon:Print("RL Быдло: SppellTracker =>", ...) 
         TestAddon:OnCombatLogEvent(...)
     end)
 end
@@ -38,11 +37,16 @@ end
 function SppellTracker:handleEvent(eventData, log)
     if (eventData.event == "SPELL_AURA_APPLIED") then
         if TRACKED_SPELLS[eventData.spellId] then
+
+            if self.db.profile.debug then
+                TestAddon:Print("RL Быдло: SppellTracker =>", GetSpellTexture(eventData.spellName), eventData.spellName) 
+            end
+            
             log(eventData.sourceName, string.format(
                 "%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", 
                 date("%H:%M:%S", eventData.timestamp), 
                 eventData.sourceName, 
-                GetSpellTexture(eventData.spellName), 
+                TRACKED_SPELLS[eventData.spellId], 
                 eventData.destName
             ))
         end

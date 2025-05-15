@@ -37,9 +37,6 @@ end
 
 function SppellTracker:handleEvent(eventData, log)
 
-    -- TestAddon:Print("RL Быдло: SppellTracker =>", GetSpellTexture(eventData.spellName), eventData.spellId,
-    --     eventData.spellName)
-
     if (eventData.event == "SPELL_AURA_APPLIED") then
         if TRACKED_SPELLS[eventData.spellId] then
 

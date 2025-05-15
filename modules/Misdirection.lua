@@ -1,12 +1,21 @@
 local TestAddon = LibStub("AceAddon-3.0"):GetAddon("TestAddon")
 local MisdirectionTracker = TestAddon:NewModule("MisdirectionTracker", "AceEvent-3.0")
 
-local MISDIRECTION_SPELL_ID = 34477
+local MISDIRECTION_START_SPELL_ID = 34477
+local MISDIRECTION_SPELL_ID = 35079
 -- Список отслеживаемых способностей
 local TRACKED_SPELLS = {
     [34477] = "Interface\\Icons\\Ability_Hunter_Misdirection",
-    [75] = "Interface\\Icons\\inv_weapon_bow_55",
-    [53209] = "Interface\\Icons\\Ability_Hunter_ChimeraShot2"
+    [35079] = "Interface\\Icons\\Ability_Hunter_Misdirection",
+    [58434] = "Interface\\Icons\\Ability_Marksmansmanship",
+    [53209] = "Interface\\Icons\\Ability_Hunter_ChimeraShot2",
+    [49050] = "Interface\\Icons\\INV_Spear_07",
+    [49052] = "Interface\\Icons\\Ability_Hunter_SteadyShot",
+    [49045] = "Interface\\Icons\\Ability_Hunter_ImpalingBolt",
+    [34490] = "Interface\\Icons\\Ability_TheBlackArrow",
+    [49048] = "Interface\\Icons\\Ability_UpgradeMoonGlaive",
+    [53353] = "Interface\\Icons\\Ability_Hunter_ChimeraShot2",
+    [75] = "Interface\\Icons\\inv_weapon_bow_55"
 }
 
 -- Active pulls tracking
@@ -40,16 +49,20 @@ end
 
 function MisdirectionTracker:handleEvent(eventData, log)
     -- Track Misdirection application
-    if eventData.event == "SPELL_AURA_APPLIED" and eventData.spellId == MISDIRECTION_SPELL_ID then
+    if eventData.event == "SPELL_CAST_SUCCESS" and eventData.spellId == MISDIRECTION_START_SPELL_ID then
         self:OnMisdirection(eventData)
     end
+
     -- Track Misdirection removal
     if eventData.event == "SPELL_AURA_REMOVED" and eventData.spellId == MISDIRECTION_SPELL_ID then
         self:OnMisdirectionRemoved(eventData, log)
     end
-    -- Track damage during active pull
-    if eventData.event == "SPELL_DAMAGE" or eventData.event == "SWING_DAMAGE" then
-        self:OnDamage(eventData)
+
+    if activePulls[eventData.sourceName] then
+        -- if eventData.event == "SPELL_DAMAGE" or eventData.event == "RANGE_DAMAGE" or eventData.event == "SWING_DAMAGE" then
+        if eventData.event == "SPELL_DAMAGE" then
+            self:OnDamage(eventData)
+        end
     end
 end
 
@@ -76,7 +89,8 @@ function MisdirectionTracker:GenerateReport(hunterName, log)
         TRACKED_SPELLS[MISDIRECTION_SPELL_ID], activePulls[hunterName])
 
     -- Add damage breakdown
-    for _, spellId in pairs(pullDamage) do
+    for _, spellId in pairs(pullDamage[hunterName]:getAll()) do
+        TestAddon:Print("SPELL => ", spellId)
         report = report .. string.format(" |T%s:24:24:0:0|t", TRACKED_SPELLS[spellId] or TRACKED_SPELLS[75])
     end
 

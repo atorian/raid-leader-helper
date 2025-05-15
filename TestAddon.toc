@@ -27,5 +27,5 @@ TestAddon.xml
 # Other modules
 modules\SpellTracker.lua
 modules\SpiritTracker.lua
-#modules\Misdirection.lua
+modules\Misdirection.lua
 #modules\DeathTracker.lua

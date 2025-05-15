@@ -7,6 +7,9 @@ build:
 clean:
 	echo "Cleaning the project..."
 
+lint:
+	luacheck Core.lua ./modules/ tests/
+
 test:
 	busted --verbose ./tests/*.lua	
 

@@ -1,7 +1,6 @@
 local M = require('tests.mocks')
 local TestAddon = require("Core")
 
-
 -- Test suites
 describe("TestAddon.blizzardEvent", function()
     it("should parse SWING_DAMAGE event correctly", function()
@@ -15,7 +14,8 @@ describe("TestAddon.blizzardEvent", function()
         local destName = "Мыша"
         local destFlags = 0x514
         local damage = 234
-        local args = blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags, damage, 0, 1, 0, 0, 0, nil, nil, nil)
+        local args = blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags,
+            damage, 0, 1, 0, 0, 0, nil, nil, nil)
 
         assert.are.equal(args.timestamp, timestamp)
         assert.are.equal(args.event, event)
@@ -36,7 +36,8 @@ describe("TestAddon.blizzardEvent", function()
         local destName = "Movagorn"
         local destFlags = 0x514
         local missType = "DODGE"
-        local args = blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags, missType)
+        local args = blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags,
+            missType)
 
         assert.are.equal(args.timestamp, timestamp)
         assert.are.equal(args.event, event)
@@ -68,6 +69,35 @@ describe("TestAddon.blizzardEvent", function()
         assert.are.equal(args.destName, destName)
         assert.are.equal(args.destFlags, destFlags)
     end)
+
+    it("should parse SPELL_AURA_APPLIED event correctly", function()
+        -- Example: SPELL_AURA_APPLIED,0x00000000003CDB62,"Охотник",0x514,0x00000000003CDB62,"Охотник",0x514,34477,"Перенаправление",0x1,BUFF
+        local timestamp = 1696870838.300
+        local event = "SPELL_AURA_APPLIED"
+        local sourceGUID = 0x00000000003CDB62
+        local sourceName = "Охотник"
+        local sourceFlags = 0x514
+        local destGUID = 0x00000000003CDB62
+        local destName = "Охотник"
+        local destFlags = 0x514
+        local spellId = 34477
+        local spellName = "Перенаправление"
+        local spellSchool = 0x1
+        local auraType = "BUFF"
+        local args = blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags,
+            spellId, spellName, spellSchool, auraType)
+
+        assert.are.equal(args.timestamp, timestamp)
+        assert.are.equal(args.event, event)
+        assert.are.equal(args.sourceGUID, sourceGUID)
+        assert.are.equal(args.sourceName, sourceName)
+        assert.are.equal(args.destGUID, destGUID)
+        assert.are.equal(args.destName, destName)
+        assert.are.equal(args.spellId, spellId)
+        assert.are.equal(args.spellName, spellName)
+        assert.are.equal(args.spellSchool, spellSchool)
+        assert.are.equal(args.auraType, auraType)
+    end)
 end)
 
 -- CombatLog class tests
@@ -89,7 +119,7 @@ describe("CombatLog", function()
 
         assert.are.equal(2, log.entryCount)
         assert.are.equal(2, #log:GetEntries())
-        
+
         local entries = log:GetEntries()
         assert.are.equal("Player1", entries[1].player)
         assert.are.equal("Test message 1", entries[1].message)

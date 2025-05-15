@@ -188,12 +188,6 @@ function TestAddon:OnInitialize()
     self.mainFrame:Show()
 
     self:Print("RL Быдло: Аддон включен")
-    if DBM then
-        self:Print("DBM Loaded")
-    else
-        self:Print("DBM is missing")
-    end
-
 end
 
 function TestAddon:OnEnable()
@@ -232,9 +226,6 @@ function TestAddon:PLAYER_REGEN_DISABLED()
 end
 
 function TestAddon:EndCombat(reason)
-    if self.db.profile.debug then
-        self:Print("Combat ended: " .. (reason or "unknown"))
-    end
     self.inCombat = false
     wipe(self.activeEnemies)
     wipe(self.activePlayers)

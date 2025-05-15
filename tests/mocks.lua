@@ -2,15 +2,19 @@ local M = {}
 
 -- Mock для AceEvent-3.0
 local AceEvent = {
-    RegisterEvent = function(self, eventName) end,
-    UnregisterEvent = function(self, eventName) end,
-    SendMessage = function(self, message, ...) end,
-    RegisterMessage = function(self, message, ...) end,
+    RegisterEvent = function(self, eventName)
+    end,
+    UnregisterEvent = function(self, eventName)
+    end,
+    SendMessage = function(self, message, ...)
+    end,
+    RegisterMessage = function(self, message, ...)
+    end
 }
 
 -- Mock bit functions used by the addon
 bit = {
-    band = function(a, b) 
+    band = function(a, b)
         -- Implementation of bitwise AND for older Lua versions
         local result = 0
         local bitval = 1
@@ -19,8 +23,8 @@ bit = {
                 result = result + bitval
             end
             bitval = bitval * 2
-            a = math.floor(a/2)
-            b = math.floor(b/2)
+            a = math.floor(a / 2)
+            b = math.floor(b / 2)
         end
         return result
     end
@@ -62,13 +66,16 @@ function M:GetAddon(name)
     function addon:NewModule(moduleName, mixins)
         return {
             name = moduleName,
-            OnInitialize = function() end,
-            OnEnable = function() end,
+            OnInitialize = function()
+            end,
+            OnEnable = function()
+            end,
             RegisterEvent = AceEvent.RegisterEvent,
             UnregisterEvent = AceEvent.UnregisterEvent,
             SendMessage = AceEvent.SendMessage,
             RegisterMessage = AceEvent.RegisterMessage,
-            Print = function() end,
+            Print = function()
+            end
         }
     end
     return addon
@@ -77,30 +84,46 @@ end
 function M:NewModule(name)
     local module = {
         name = name,
-        OnInitialize = function() end,
-        OnEnable = function() end,
+        OnInitialize = function()
+        end,
+        OnEnable = function()
+        end,
         RegisterEvent = AceEvent.RegisterEvent,
         UnregisterEvent = AceEvent.UnregisterEvent,
         SendMessage = AceEvent.SendMessage,
         RegisterMessage = AceEvent.RegisterMessage,
-        Print = function() end,
+        Print = function(...)
+            local str = ""
+            for i, v in ipairs(...) do
+                str = str .. tostring(v)
+            end
+            print(str)
+        end
     }
-    
+
     return module
 end
 
 function M:NewAddon(name)
     local module = {
         name = name,
-        OnInitialize = function() end,
-        OnEnable = function() end,
+        OnInitialize = function()
+        end,
+        OnEnable = function()
+        end,
         RegisterEvent = AceEvent.RegisterEvent,
         UnregisterEvent = AceEvent.UnregisterEvent,
         SendMessage = AceEvent.SendMessage,
         RegisterMessage = AceEvent.RegisterMessage,
-        Print = function() end,
+        Print = function(...)
+            local str = ""
+            for i, v in ipairs(...) do
+                str = str .. tostring(v)
+            end
+            print(str)
+        end
     }
-    
+
     return module
 end
 
@@ -108,14 +131,22 @@ LibStub = function(name)
     return M
 end
 
-time = function() return 1234567890 end
-Text = function(text) return text end
-date = function(format, timestamp) 
+time = function()
+    return 1234567890
+end
+Text = function(text)
+    return text
+end
+date = function(format, timestamp)
     return "SOME DATE"
 end
 
-GetTime = function() return 1234567890 end
-GetSpellTexture = function(spellName) return "texture_path" end
+GetTime = function()
+    return 1234567890
+end
+GetSpellTexture = function(spellName)
+    return "texture_path"
+end
 
 -- Мокк для проверки боевого состояния юнитов
 UnitAffectingCombat = function(unitId)
@@ -123,20 +154,20 @@ UnitAffectingCombat = function(unitId)
     if unitId == "player" then
         return M.UnitAffectingCombat1 ~= false
     end
-    
+
     -- Проверяем участников группы
     local partyIndex = unitId:match("party(%d+)")
     if partyIndex then
-        local index = tonumber(partyIndex) + 1  -- +1 because player is index 1
+        local index = tonumber(partyIndex) + 1 -- +1 because player is index 1
         return M["UnitAffectingCombat" .. index] ~= false
     end
-    
+
     -- Проверяем участников рейда
     local raidIndex = unitId:match("raid(%d+)")
     if raidIndex then
         return M["UnitAffectingCombat" .. raidIndex] ~= false
     end
-    
+
     return true -- По умолчанию считаем что в бою
 end
 

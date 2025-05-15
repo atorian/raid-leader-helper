@@ -21,7 +21,7 @@ function SpiritTracker:OnEnable()
 end
 
 function SpiritTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
-    self:handleEvent(blizzardEvent(...), function (...)
+    self:handleEvent(blizzardEvent(...), function(...)
         TestAddon:OnCombatLogEvent(...)
     end)
 end
@@ -34,37 +34,35 @@ function SpiritTracker:handleEvent(eventData, log)
     if eventData.event == "SPELL_SUMMON" and eventData.spellId == 71426 then
         self.currentSpirits[eventData.destGUID] = {
             name = eventData.destName,
-            summonTime = eventData.timestamp,
+            summonTime = eventData.timestamp
         }
         return
     end
-    
+
     if eventData.event == "SWING_DAMAGE" then
         local spiritInfo = self.currentSpirits[eventData.sourceGUID]
-        if not spiritInfo then return end
-        
-        log(eventData.destName, string.format(
-            "%s |cFFFFFFFF%s|r взорвал духа", 
-            date("%H:%M:%S", eventData.timestamp), 
-            eventData.destName0
-        ))
+        if not spiritInfo then
+            return
+        end
+
+        log(eventData.destName, string.format("%s |cFFFFFFFF%s|r взорвал духа",
+            date("%H:%M:%S", eventData.timestamp), eventData.destName))
 
         return
     end
-    
+
     if eventData.event == "SWING_MISSED" then
         local spiritInfo = self.currentSpirits[eventData.sourceGUID]
-        if not spiritInfo then return end
-        
-        log(eventData.destName, string.format(
-            "%s Дух автоатачил |cFFFFFFFF%s|r", 
-            date("%H:%M:%S", eventData.timestamp), 
-            eventData.destName
-        ))
+        if not spiritInfo then
+            return
+        end
+
+        log(eventData.destName,
+            string.format("%s Дух автоатачил |cFFFFFFFF%s|r", date("%H:%M:%S", eventData.timestamp),
+                eventData.destName))
 
         return
     end
 end
-
 
 return SpiritTracker

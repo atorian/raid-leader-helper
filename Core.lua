@@ -348,7 +348,9 @@ function TestAddon:OnCombatLogEvent(player, message)
     end
 
     self:Print("RL Быдло: " .. player .. ": " .. message)
+
     self.currentCombatLog:AddEntry(player, message)
+
     self:UpdateModuleDisplays()
 end
 
@@ -395,13 +397,40 @@ local function sendSync(prefix, msg)
 
 end
 
+function TestAddon:MinimizeWindow()
+    if not self.mainFrame then
+        return
+    end
+
+    -- Save current size if not already minimized
+    if not self.isMinimized then
+        self.savedSize = {
+            width = self.mainFrame:GetWidth(),
+            height = self.mainFrame:GetHeight()
+        }
+    end
+
+    -- Set minimum size
+    self.mainFrame:SetSize(270, 200)
+    self.isMinimized = true
+end
+
+function TestAddon:RestoreWindow()
+    if not self.mainFrame or not self.savedSize then
+        return
+    end
+
+    self.mainFrame:SetSize(self.savedSize.width, self.savedSize.height)
+    self.isMinimized = false
+end
+
 function TestAddon:CreateMainFrame()
     local frame = CreateFrame("Frame", "TestAddonMainFrame", UIParent)
     frame:SetSize(350, 600)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:SetResizable(true)
-    frame:SetMinResize(200, 100)
+    frame:SetMinResize(200, 150)
     frame:SetMaxResize(800, 1000)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
@@ -439,39 +468,44 @@ function TestAddon:CreateMainFrame()
 
     -- Title
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOP", 0, -15)
+    title:SetPoint("BOTTOMLEFT", 15, 15)
     title:SetText("RL Быдло")
 
     -- Close button
     local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeButton:SetPoint("TOPRIGHT", -5, -5)
 
-    if self.db.profile.debug then
-        -- Test log button
-        local pull15Btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        pull15Btn:SetSize(80, 25)
-        pull15Btn:SetPoint("TOP", title, "BOTTOM", -85, -10)
-        pull15Btn:SetText("Пул 15")
-        pull15Btn:SetScript("OnClick", function()
-            self:Print("RL Быдло: Пул 15");
-            DBM:CreatePizzaTimer(15, "Pull", true)
-        end)
-        frame.pull15Btn = pull15Btn
+    -- Создаем контейнер для кнопок
+    local buttonContainer = CreateFrame("Frame", nil, frame)
+    buttonContainer:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -15)
+    buttonContainer:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -15, -15)
+    buttonContainer:SetHeight(85) -- Увеличиваем высоту для двух строк кнопок
 
-        local pull75Btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        pull75Btn:SetSize(80, 25)
-        pull75Btn:SetPoint("TOP", title, "BOTTOM", 85, -10)
-        pull75Btn:SetText("Пул 70")
-        pull75Btn:SetScript("OnClick", function()
-            self:Print("RL Быдло: Пул 70");
-            DBM:CreatePizzaTimer(70, "Pull", true)
-        end)
-        frame.pull75Btn = pull75Btn
-    end
+    -- Первая строка кнопок
 
-    local resetBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    resetBtn:SetSize(80, 25)
-    resetBtn:SetPoint("TOP", title, "BOTTOM", 0, -10)
+    local pull15Btn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
+    pull15Btn:SetSize(60, 25)
+    pull15Btn:SetPoint("TOPLEFT", buttonContainer, "TOPLEFT", 0, 0)
+    pull15Btn:SetText("Пул 15")
+    pull15Btn:SetScript("OnClick", function()
+        DBM:CreatePizzaTimer(15, "Pull", true)
+        TestAddon:MinimizeWindow()
+    end)
+    frame.pull15Btn = pull15Btn
+
+    local pull75Btn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
+    pull75Btn:SetSize(60, 25)
+    pull75Btn:SetPoint("LEFT", pull15Btn, "RIGHT", 5, 0)
+    pull75Btn:SetText("Пул 70")
+    pull75Btn:SetScript("OnClick", function()
+        DBM:CreatePizzaTimer(70, "Pull", true)
+        TestAddon:MinimizeWindow()
+    end)
+    frame.pull75Btn = pull75Btn
+
+    local resetBtn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
+    resetBtn:SetSize(60, 25)
+    resetBtn:SetPoint("LEFT", pull75Btn, "RIGHT", 5, 0)
     resetBtn:SetText("Ресет")
     resetBtn:SetScript("OnClick", function()
         if self.currentCombatLog then
@@ -481,17 +515,74 @@ function TestAddon:CreateMainFrame()
     end)
     frame.resetBtn = resetBtn
 
+    -- local function toggleGpBtns(btn)
+    --     frame.btn100:Enable()
+    --     frame.btn200:Enable()
+    --     frame.btn500:Enable()
+    --     frame.btn1000:Enable()
+    --     btn:Disable()
+    -- end
+
+    -- local btn100 = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
+    -- btn100:SetSize(50, 25)
+    -- btn100:SetPoint("TOPLEFT", buttonContainer, "TOPLEFT", 0, -30)
+    -- btn100:SetText("100")
+    -- btn100:SetScript("OnClick", function()
+    --     toggleGpBtns(btn100)
+    --     self:Print("RL Быдло: Штраф 100")
+    --     -- self:ApplyPenalty("custom", nil, 100)
+    -- end)
+    -- frame.btn100 = btn100
+
+    -- local btn200 = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
+    -- btn200:SetSize(50, 25)
+    -- btn200:SetPoint("LEFT", btn100, "RIGHT", 5, 0)
+    -- btn200:SetText("200")
+    -- btn200:SetScript("OnClick", function()
+    --     toggleGpBtns(btn200)
+    --     self:Print("RL Быдло: Штраф 200")
+    --     -- self:ApplyPenalty("custom", nil, 200)
+    -- end)
+    -- frame.btn200 = btn200
+
+    -- local btn500 = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
+    -- btn500:SetSize(50, 25)
+    -- btn500:SetPoint("LEFT", btn200, "RIGHT", 5, 0)
+    -- btn500:SetText("500")
+    -- btn500:SetScript("OnClick", function()
+    --     toggleGpBtns(btn500)
+    --     self:Print("RL Быдло: Штраф 500")
+    --     -- self:ApplyPenalty("custom", nil, 500)
+    -- end)
+    -- frame.btn500 = btn500
+
+    -- local btn1000 = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
+    -- btn1000:SetSize(60, 25)
+    -- btn1000:SetPoint("LEFT", btn500, "RIGHT", 5, 0)
+    -- btn1000:SetText("1000")
+    -- btn1000:SetScript("OnClick", function()
+    --     toggleGpBtns(btn1000)
+    --     self:Print("RL Быдло: Штраф 1000")
+    --     -- self:ApplyPenalty("custom", nil, 1000)
+    -- end)
+    -- frame.btn1000 = btn1000
+
     -- Scroll frame
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOP", resetBtn, "BOTTOM", 0, -10)
+    scrollFrame:SetPoint("TOP", buttonContainer, "BOTTOM", 0, -10)
     scrollFrame:SetPoint("BOTTOM", frame, "BOTTOM", 0, 10)
     scrollFrame:SetPoint("LEFT", frame, "LEFT", 12, 0)
     scrollFrame:SetPoint("RIGHT", frame, "RIGHT", -32, 0)
     scrollFrame:EnableMouseWheel(true)
     scrollFrame:SetScript("OnMouseWheel", function(self, delta)
         local current = self:GetVerticalScroll()
+        local maxScroll = self:GetVerticalScrollRange()
         local step = 20
-        self:SetVerticalScroll(current - delta * step)
+        local newScroll = current - delta * step
+
+        -- Ограничиваем скролл границами
+        newScroll = math.max(0, math.min(newScroll, maxScroll))
+        self:SetVerticalScroll(newScroll)
     end)
 
     -- Scroll child
@@ -501,6 +592,7 @@ function TestAddon:CreateMainFrame()
 
     frame.logScrollFrame = scrollFrame
     frame.logScrollChild = scrollChild
+    frame.buttonContainer = buttonContainer
 
     self.mainFrame = frame
 
@@ -510,13 +602,26 @@ function TestAddon:CreateMainFrame()
             self.logScrollFrame:SetWidth(width - 32)
             TestAddon:UpdateLogEntryLayout()
         end
+
+        -- Проверяем видимость кнопок
+        local buttons = {self.pull15Btn, self.pull75Btn, self.resetBtn}
+        for _, button in ipairs(buttons) do
+            if button then
+                local buttonBottom = button:GetBottom()
+                local frameBottom = self:GetBottom()
+                if buttonBottom < frameBottom + 10 then
+                    button:Hide()
+                else
+                    button:Show()
+                end
+            end
+        end
     end)
 
     frame:Hide()
 end
 
 function TestAddon:UpdateLogEntryLayout()
-
     if not self.mainFrame then
         return
     end
@@ -538,43 +643,31 @@ function TestAddon:UpdateLogEntryLayout()
     local previousEntry
     local children = {scrollChild:GetChildren()}
 
-    -- Сначала обновляем ширину всех текстовых элементов
+    -- Обновляем ширину и позиции всех элементов
     for _, entryFrame in ipairs(children) do
         if entryFrame.messageText then
             entryFrame:SetWidth(newWidth - 10)
             entryFrame.messageText:SetWidth(newWidth - 20)
+
+            -- Переопределяем позицию фрейма
+            if previousEntry then
+                entryFrame:ClearAllPoints()
+                entryFrame:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, -2)
+            else
+                entryFrame:ClearAllPoints()
+                entryFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 5, -5)
+            end
+
+            totalHeight = totalHeight + entryFrame:GetHeight() + 2
+            previousEntry = entryFrame
         end
     end
 
-    -- Затем делаем небольшую задержку перед обновлением высоты
-    -- C_Timer.After(0.05, function()
-    --     for _, entryFrame in ipairs(children) do
-    --         if entryFrame.messageText then
-    --             -- Пересчитываем высоту текста после изменения ширины
-    --             local textHeight = entryFrame.messageText:GetStringHeight()
-    --             local frameHeight = math.max(24, textHeight + 8)
-    --             entryFrame:SetHeight(frameHeight)
-
-    --             -- Переопределяем позицию фрейма
-    --             if previousEntry then
-    --                 entryFrame:ClearAllPoints()
-    --                 entryFrame:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, -2)
-    --             else
-    --                 entryFrame:Clea rAllPoints()
-    --                 entryFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 5, -5)
-    --             end
-
-    --             totalHeight = totalHeight + frameHeight + 2
-    --             previousEntry = entryFrame
-    --         end
-    --     end
-
-    --     scrollChild:SetHeight(math.max(totalHeight + 10, scrollFrame:GetHeight()))
-    -- end)
+    -- Устанавливаем высоту контейнера
+    scrollChild:SetHeight(math.max(totalHeight + 10, scrollFrame:GetHeight()))
 end
 
 function TestAddon:UpdateModuleDisplays()
-
     if not self.mainFrame then
         TestAddon:Print("ERROR: No mainFrame found")
         return
@@ -591,17 +684,23 @@ function TestAddon:UpdateModuleDisplays()
         return
     end
 
+    local scrollFrame = self.mainFrame.logScrollFrame
+    if not scrollFrame then
+        TestAddon:Print("ERROR: No scrollFrame found")
+        return
+    end
+
     local children = {scrollChild:GetChildren()}
     for _, child in pairs(children) do
         child:Hide()
         child:SetParent(nil)
     end
 
-    scrollChild:SetWidth(self.mainFrame.logScrollFrame:GetWidth())
+    scrollChild:SetWidth(scrollFrame:GetWidth())
 
     local entries = self.currentCombatLog:GetEntries()
-
     local previousEntry
+    local totalHeight = 0
 
     for i, entry in ipairs(entries) do
         local wrapperButton = self:CreateLogEntryFrame(entry)
@@ -616,16 +715,15 @@ function TestAddon:UpdateModuleDisplays()
 
         wrapperButton:Show()
         previousEntry = wrapperButton
+        totalHeight = totalHeight + wrapperButton:GetHeight() + 2
     end
 
-    if previousEntry then
-        local height = (#entries * (previousEntry:GetHeight() + 2))
-        scrollChild:SetHeight(height)
-    else
-        scrollChild:SetHeight(1)
-    end
+    -- Устанавливаем высоту контейнера
+    scrollChild:SetHeight(math.max(totalHeight + 10, scrollFrame:GetHeight()))
 
-    self:UpdateLogEntryLayout()
+    -- Обновляем скролл
+    scrollFrame:UpdateScrollChildRect()
+    scrollFrame:SetVerticalScroll(0)
 end
 
 function TestAddon:CreateLogEntryFrame(entry)
@@ -641,17 +739,15 @@ function TestAddon:CreateLogEntryFrame(entry)
     messageText:SetPoint("RIGHT", entryFrame, "RIGHT", -5, 0)
     messageText:SetJustifyH("LEFT")
     messageText:SetJustifyV("TOP")
-    messageText:SetWordWrap(true)
+    messageText:SetWordWrap(false)
     messageText:SetText(entry.message)
 
     -- Store references
     entryFrame.messageText = messageText
     entryFrame.playerName = entry.player
 
-    -- Set initial height
-    messageText:SetWidth(400 - 20) -- Initial width with padding
-    local initialHeight = math.max(24, messageText:GetStringHeight() + 8)
-    entryFrame:SetHeight(initialHeight)
+    -- Set fixed height
+    entryFrame:SetHeight(24)
 
     return entryFrame
 end
@@ -661,11 +757,11 @@ function TestAddon:OpenSettings()
     -- print("Настройки временно недоступны")
 end
 
-function TestAddon:ApplyPenalty(penaltyType, targetName)
+function TestAddon:ApplyPenalty(penaltyType, targetName, amount)
     local penalties = self.db.profile.penalties
-    local amount = penalties[penaltyType]
+    local existingAmount = penalties[penaltyType]
 
-    if amount then
+    if existingAmount then
         -- Check if EPGP is loaded and available
         if EPGP then
             local target = targetName or UnitName("target")

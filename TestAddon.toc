@@ -28,4 +28,4 @@ TestAddon.xml
 modules\SpellTracker.lua
 modules\SpiritTracker.lua
 modules\Misdirection.lua
-modules\DeathTracker.lua
+#modules\DeathTracker.lua

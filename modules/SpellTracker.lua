@@ -30,7 +30,6 @@ end
 
 function SppellTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     self:handleEvent(blizzardEvent(...), function(...)
-        TestAddon:Print("RL Быдло: SppellTracker =>", ...)
         TestAddon:OnCombatLogEvent(...)
     end)
 end
@@ -39,7 +38,6 @@ function SppellTracker:handleEvent(eventData, log)
 
     if (eventData.event == "SPELL_AURA_APPLIED") then
         if TRACKED_SPELLS[eventData.spellId] then
-
             log(eventData.sourceName,
                 string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", eventData.timestamp),
                     eventData.sourceName, TRACKED_SPELLS[eventData.spellId], eventData.destName))

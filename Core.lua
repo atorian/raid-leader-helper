@@ -479,7 +479,7 @@ function TestAddon:CreateMainFrame()
     local buttonContainer = CreateFrame("Frame", nil, frame)
     buttonContainer:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -15)
     buttonContainer:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -15, -15)
-    buttonContainer:SetHeight(85) -- Увеличиваем высоту для двух строк кнопок
+    buttonContainer:SetHeight(30) -- Увеличиваем высоту для двух строк кнопок
 
     -- Первая строка кнопок
 
@@ -509,7 +509,7 @@ function TestAddon:CreateMainFrame()
     resetBtn:SetText("Ресет")
     resetBtn:SetScript("OnClick", function()
         if self.currentCombatLog then
-            self.currentCombatLog:Clear()
+            self.currentCombatLog = CombatLog:New()
             self:UpdateModuleDisplays()
         end
     end)

@@ -362,25 +362,6 @@ function TestAddon:withHandler(handler)
     self:Print("RL Быдло: добавлен обработчик #" .. handlerI)
 end
 
-function TestAddon:UpdateButtonsVisibility()
-    if not self.mainFrame then
-        return
-    end
-
-    local buttons = {self.mainFrame.settingsBtn, self.mainFrame.mistakeBtn, self.mainFrame.wipeBtn,
-                     self.mainFrame.mainSpecBtn, self.mainFrame.offSpecBtn}
-
-    for _, button in pairs(buttons) do
-        if button then
-            if self.inCombat then
-                button:Hide()
-            else
-                button:Show()
-            end
-        end
-    end
-end
-
 local function sendSync(prefix, msg)
     msg = msg or ""
     local zoneType = select(2, IsInInstance())
@@ -514,58 +495,6 @@ function TestAddon:CreateMainFrame()
         end
     end)
     frame.resetBtn = resetBtn
-
-    -- local function toggleGpBtns(btn)
-    --     frame.btn100:Enable()
-    --     frame.btn200:Enable()
-    --     frame.btn500:Enable()
-    --     frame.btn1000:Enable()
-    --     btn:Disable()
-    -- end
-
-    -- local btn100 = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
-    -- btn100:SetSize(50, 25)
-    -- btn100:SetPoint("TOPLEFT", buttonContainer, "TOPLEFT", 0, -30)
-    -- btn100:SetText("100")
-    -- btn100:SetScript("OnClick", function()
-    --     toggleGpBtns(btn100)
-    --     self:Print("RL Быдло: Штраф 100")
-    --     -- self:ApplyPenalty("custom", nil, 100)
-    -- end)
-    -- frame.btn100 = btn100
-
-    -- local btn200 = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
-    -- btn200:SetSize(50, 25)
-    -- btn200:SetPoint("LEFT", btn100, "RIGHT", 5, 0)
-    -- btn200:SetText("200")
-    -- btn200:SetScript("OnClick", function()
-    --     toggleGpBtns(btn200)
-    --     self:Print("RL Быдло: Штраф 200")
-    --     -- self:ApplyPenalty("custom", nil, 200)
-    -- end)
-    -- frame.btn200 = btn200
-
-    -- local btn500 = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
-    -- btn500:SetSize(50, 25)
-    -- btn500:SetPoint("LEFT", btn200, "RIGHT", 5, 0)
-    -- btn500:SetText("500")
-    -- btn500:SetScript("OnClick", function()
-    --     toggleGpBtns(btn500)
-    --     self:Print("RL Быдло: Штраф 500")
-    --     -- self:ApplyPenalty("custom", nil, 500)
-    -- end)
-    -- frame.btn500 = btn500
-
-    -- local btn1000 = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
-    -- btn1000:SetSize(60, 25)
-    -- btn1000:SetPoint("LEFT", btn500, "RIGHT", 5, 0)
-    -- btn1000:SetText("1000")
-    -- btn1000:SetScript("OnClick", function()
-    --     toggleGpBtns(btn1000)
-    --     self:Print("RL Быдло: Штраф 1000")
-    --     -- self:ApplyPenalty("custom", nil, 1000)
-    -- end)
-    -- frame.btn1000 = btn1000
 
     -- Scroll frame
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
@@ -728,9 +657,7 @@ end
 
 function TestAddon:CreateLogEntryFrame(entry)
     local entryFrame = CreateFrame("Button")
-    entryFrame:SetSize(400, 24)
-    entryFrame:EnableMouse(true)
-    entryFrame:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    entryFrame:SetSize(400, 20)
     entryFrame:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight", "ADD")
 
     -- Create and position the message text
@@ -738,7 +665,7 @@ function TestAddon:CreateLogEntryFrame(entry)
     messageText:SetPoint("LEFT", entryFrame, "LEFT", 5, 0)
     messageText:SetPoint("RIGHT", entryFrame, "RIGHT", -5, 0)
     messageText:SetJustifyH("LEFT")
-    messageText:SetJustifyV("TOP")
+    -- messageText:SetJustifyV("TOP")
     messageText:SetWordWrap(false)
     messageText:SetText(entry.message)
 
@@ -746,36 +673,12 @@ function TestAddon:CreateLogEntryFrame(entry)
     entryFrame.messageText = messageText
     entryFrame.playerName = entry.player
 
-    -- Set fixed height
-    entryFrame:SetHeight(24)
-
     return entryFrame
 end
 
 function TestAddon:OpenSettings()
     -- To be implemented
     -- print("Настройки временно недоступны")
-end
-
-function TestAddon:ApplyPenalty(penaltyType, targetName, amount)
-    local penalties = self.db.profile.penalties
-    local existingAmount = penalties[penaltyType]
-
-    if existingAmount then
-        -- Check if EPGP is loaded and available
-        if EPGP then
-            local target = targetName or UnitName("target")
-            if target then
-                -- Add GP penalty through EPGP
-                -- EPGP.IncGPBy(target, "Penalty", amount)
-                print(string.format("Применен штраф %d GP для %s", amount, target))
-            else
-                print("Выберите цель для применения штрафа")
-            end
-        else
-            print("EPGP аддон не загружен")
-        end
-    end
 end
 
 function TestAddon:HandleSlashCommand(input)
@@ -806,180 +709,6 @@ function TestAddon:HandleSlashCommand(input)
     end
 end
 
-function TestAddon:WrapModuleFrame(moduleFrame)
-    -- Создаем кнопку-обертку
-    local wrapperButton = CreateFrame("Button")
-    wrapperButton:SetSize(400, 24)
-    wrapperButton:EnableMouse(true)
-    wrapperButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    wrapperButton:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight", "ADD")
-
-    -- Добавляем индикатор штрафа
-    local penaltyText = wrapperButton:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    penaltyText:SetPoint("RIGHT", wrapperButton, "RIGHT", -5, 0)
-    wrapperButton.penaltyText = penaltyText
-
-    -- Встраиваем фрейм модуля
-    moduleFrame:SetParent(wrapperButton)
-    moduleFrame:ClearAllPoints()
-    moduleFrame:SetPoint("LEFT", wrapperButton, "LEFT", 0, 0)
-    moduleFrame:SetPoint("RIGHT", penaltyText, "LEFT", -5, 0)
-    wrapperButton.moduleFrame = moduleFrame
-
-    -- Функция обновления штрафа
-    function wrapperButton:UpdatePenalty(penaltyType)
-        if penaltyType == "mistake" then
-            penaltyText:SetText("Косяк")
-            penaltyText:SetTextColor(1, 0.5, 0)
-        elseif penaltyType == "wipe" then
-            penaltyText:SetText("Руина")
-            penaltyText:SetTextColor(1, 0, 0)
-        else
-            penaltyText:SetText("")
-        end
-
-        if moduleFrame.OnPenaltyChanged then
-            moduleFrame:OnPenaltyChanged(penaltyType)
-        end
-    end
-
-    -- Обработка кликов для штрафов
-    wrapperButton:SetScript("OnClick", function(self, button)
-        local playerName = moduleFrame.playerName -- Модули должны предоставить имя игрока
-        if not playerName then
-            return
-        end
-
-        if button == "LeftButton" then
-            if self.currentPenalty == "mistake" then
-                -- Отменяем штраф
-                if EPGP then
-                    self.currentPenalty = nil
-                    print(string.format("Отменен штраф за косяк для %s", playerName))
-                end
-            else
-                -- Применяем штраф за косяк
-                TestAddon:ApplyPenalty("mistake", playerName)
-                self.currentPenalty = "mistake"
-            end
-        elseif button == "RightButton" then
-            -- Применяем штраф за руину
-            TestAddon:ApplyPenalty("wipe", playerName)
-            self.currentPenalty = "wipe"
-        end
-        self:UpdatePenalty(self.currentPenalty)
-    end)
-
-    return wrapperButton
-end
-
-function parseCSVLine(line)
-    local result = {}
-    local pos = 1
-    local len = #line
-
-    while pos <= len do
-        local c = line:sub(pos, pos)
-        local value
-
-        if c == '"' then
-            -- Кавычки: начинаем парсинг значения в кавычках
-            local start_pos = pos + 1
-            local quote_pos = start_pos
-
-            while true do
-                quote_pos = line:find('"', quote_pos, true)
-                if not quote_pos then
-                    break
-                end
-
-                if line:sub(quote_pos + 1, quote_pos + 1) == '"' then
-                    quote_pos = quote_pos + 2 -- экранированная кавычка
-                else
-                    break
-                end
-            end
-
-            value = line:sub(start_pos, quote_pos - 1):gsub('""', '"')
-            pos = (line:find(",", quote_pos + 1, true) or len + 1) + 1
-        else
-            -- Без кавычек: ищем следующую запятую
-            local next_comma = line:find(",", pos, true) or (len + 1)
-            value = line:sub(pos, next_comma - 1):match("^%s*(.-)%s*$") -- trim
-            pos = next_comma + 1
-        end
-
-        table.insert(result, value)
-    end
-
-    return result
-end
-
-function TestAddon:ParseCombatLogText()
-
-    local logText = [[
-10/8 21:10:08.708  SPELL_SUMMON,0xF130008FF7383494,"Леди Смертный Шепот",0x10a48,0xF13000954E394779,"Мстительный дух",0xa48,71426,"Призыв духа",0x1
-10/8 21:10:09.048  SPELL_SUMMON,0xF130008FF7383494,"Леди Смертный Шепот",0x10a48,0xF13000954E39479E,"Мстительный дух",0xa48,71426,"Призыв духа",0x1
-10/8 21:10:09.205  SPELL_SUMMON,0xF130008FF7383494,"Леди Смертный Шепот",0x10a48,0xF13000954E3947A1,"Мстительный дух",0xa48,71426,"Призыв духа",0x1
-10/8 21:10:10.774  SWING_DAMAGE,0xF13000954E394779,"Мстительный дух",0xa48,0x0000000000250FF2,"Мыша",0x514,234,0,1,0,0,0,nil,nil,nil
-10/8 21:10:10.778  SPELL_DAMAGE,0xF13000954E394779,"Мстительный дух",0xa48,0x0000000000250FF2,"Мыша",0x514,72010,"Вспышка мщения",0x30,15409,0,48,3852,0,0,nil,nil,nil
-10/8 21:10:25.763  SWING_MISSED,0xF13000954E3947A1,"Мстительный дух",0xa48,0x00000000003F6153,"Movagorn",0x514,DODGE
-9/30 14:53:15.260  SWING_DAMAGE,0xF130009093767EE5,"Проклятый",0xa48,0x00000000003B8668,"Биполярник",0x10511,352,0,1,0,0,0,nil,nil,nil
-9/30 14:53:18.300  SWING_DAMAGE,0xF130009093767EE5,"Проклятый",0xa48,0x00000000003B8668,"Биполярник",0x10511,3155,58,1,0,0,0,nil,nil,nil
-9/30 14:53:18.300  UNIT_DIED,0x0000000000000000,nil,0x80000000,0x00000000003B8668,"Биполярник",0x511
-    ]]
-
-    if not logText or logText == "" then
-        self:Print("Введите текст лога для тестирования")
-        return
-    end
-    -- Создаем новый лог для тестирования
-    self.currentCombatLog = CombatLog:New()
-    self.inCombat = true
-    -- Разбиваем текст на строки
-    for line in logText:gmatch("[^\r\n]+") do
-        self:Print("Тестовая строка: ", line)
-        -- Извлекаем timestamp и данные, отбрасываем дату
-        local _, _, timestamp, remainder = line:find("^%d+/%d+%s(%d%d:%d%d:%d%d.%d%d%d)%s%s(.*)$")
-        if timestamp and remainder then
-
-            -- Разбиваем данные по запятой, сохраняя закавыченные строки как единое целое
-            local data = {}
-            data[1] = parseTimeToTimestamp(timestamp)
-            local logData = parseCSVLine(remainder)
-            for i, value in ipairs(logData) do
-                if value ~= "" then
-                    data[i + 1] = value
-                end
-            end
-
-            -- Вызываем каждый обработчик с timestamp и развернутыми данными
-            for i, handler in ipairs(handlers) do
-                handler(unpack(data))
-            end
-        end
-    end
-
-    -- Очищаем поле ввода
-    self.mainFrame.logEditBox:SetText("")
-    self.mainFrame.logEditBox:ClearFocus()
-end
-
-function parseTimeToTimestamp(timeStr)
-    local h, m, s, ms = timeStr:match("(%d+):(%d+):(%d+)%.(%d+)")
-    if not h then
-        return nil, "Invalid format"
-    end
-
-    local now = date("*t")
-    now.hour = tonumber(h)
-    now.min = tonumber(m)
-    now.sec = tonumber(s)
-
-    local baseTimestamp = time(now) -- вместо os.time
-    return baseTimestamp + tonumber(ms) / 1000
-end
-
 function createRingBuffer(size)
     local buffer = {
         data = {},
@@ -1005,34 +734,6 @@ function createRingBuffer(size)
     end
 
     return buffer
-end
-
-function Time(value)
-    return {
-        type = "text",
-        value = date("%H:%M:%S", value)
-    }
-end
-
-function Text(value)
-    return {
-        type = "text",
-        value = value and tostring(value) or "nil"
-    }
-end
-
-function SpelIcon(spellName)
-    return {
-        type = "icon",
-        value = spellName and GetSpellTexture(spellName) or "Interface\\Icons\\INV_Misc_QuestionMark"
-    }
-end
-
-function Icon(iconPath)
-    return {
-        type = "icon",
-        value = iconPath
-    }
 end
 
 return TestAddon

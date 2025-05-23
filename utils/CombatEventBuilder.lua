@@ -69,7 +69,7 @@ function CombatEventBuilder:New()
             flags = 0
         },
         target = {
-            guid = "0x0000000000000000", 
+            guid = "0x0000000000000000",
             name = "Unknown",
             flags = 0
         },
@@ -162,6 +162,14 @@ function CombatEventBuilder:ApplyAura(spellId, spellName, auraType)
     return self
 end
 
+function CombatEventBuilder:CastSuccess(spellId, spellName, auraType)
+    self.event = "SPELL_CAST_SUCCESS"
+    self.spell.id = spellId
+    self.spell.name = spellName
+    self.type = auraType or "BUFF"
+    return self
+end
+
 function CombatEventBuilder:RemoveAura(spellId, spellName)
     self.event = "SPELL_AURA_REMOVED"
     self.spell.id = spellId
@@ -172,44 +180,38 @@ end
 -- Построить и вернуть событие в формате COMBAT_LOG_EVENT_UNFILTERED
 function CombatEventBuilder:Build()
     if self.event == "SWING_DAMAGE" then
-        return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event,
-            self.source.guid, self.source.name, self.source.flags,
-            self.target.guid, self.target.name, self.target.flags,
-            self.amount, -- amount
-            0,          -- overkill
-            1,          -- school (physical)
-            0,          -- resisted
-            0,          -- blocked
-            0,          -- absorbed
-            false,      -- critical
-            false,      -- glancing
-            false       -- crushing
+        return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event, self.source.guid, self.source.name,
+            self.source.flags, self.target.guid, self.target.name, self.target.flags, self.amount, -- amount
+            0, -- overkill
+            1, -- school (physical)
+            0, -- resisted
+            0, -- blocked
+            0, -- absorbed
+            false, -- critical
+            false, -- glancing
+            false -- crushing
     elseif self.event == "SPELL_DAMAGE" then
-        return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event,
-            self.source.guid, self.source.name, self.source.flags,
-            self.target.guid, self.target.name, self.target.flags,
-            self.spell.id, self.spell.name, self.spell.school,
-            self.amount, -- amount
-            0,          -- overkill
+        return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event, self.source.guid, self.source.name,
+            self.source.flags, self.target.guid, self.target.name, self.target.flags, self.spell.id, self.spell.name,
+            self.spell.school, self.amount, -- amount
+            0, -- overkill
             self.spell.school, -- school
-            0,          -- resisted
-            0,          -- blocked
-            0,          -- absorbed
-            false,      -- critical
-            false,      -- glancing
-            false       -- crushing
+            0, -- resisted
+            0, -- blocked
+            0, -- absorbed
+            false, -- critical
+            false, -- glancing
+            false -- crushing
     elseif self.event == "UNIT_DIED" then
         -- 4/22 20:33:49.642  UNIT_DIED,0x0000000000000000,nil,0x80000000,0x0000000000327B39,"Zippo",0x514
-        return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event,
-            "0x0000000000000000", nil, 0x80000000,
+        return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event, "0x0000000000000000", nil, 0x80000000,
             self.target.guid, self.target.name, self.target.flags
-    elseif self.event == "SPELL_AURA_APPLIED" or self.event == "SPELL_AURA_REMOVED" then
-        return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event,
-            self.source.guid, self.source.name, self.source.flags,
-            self.target.guid, self.target.name, self.target.flags,
-            self.spell.id, self.spell.name, self.spell.school,
-            self.type,    -- auraType (BUFF/DEBUFF)
-            1            -- amount (используется для стаков баффа)
+    elseif self.event == "SPELL_AURA_APPLIED" or self.event == "SPELL_AURA_REMOVED" or self.event ==
+        "SPELL_CAST_SUCCESS" then
+        return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event, self.source.guid, self.source.name,
+            self.source.flags, self.target.guid, self.target.name, self.target.flags, self.spell.id, self.spell.name,
+            self.spell.school, self.type, -- auraType (BUFF/DEBUFF)
+            1 -- amount (используется для стаков баффа)
     end
 end
 

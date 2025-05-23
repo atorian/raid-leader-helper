@@ -33,12 +33,6 @@ local defaults = {
         debug = false,
         minimap = {
             hide = false
-        },
-        penalties = {
-            mistake = 200,
-            wipe = 500,
-            mainSpec = 500,
-            offSpec = 250
         }
     }
 }

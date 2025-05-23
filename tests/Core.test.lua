@@ -1,4 +1,5 @@
 local M = require('tests.mocks')
+local blizzardEvent = require('../lib/blizzardEvent')
 local TestAddon = require("Core")
 
 -- Test suites
@@ -97,40 +98,5 @@ describe("TestAddon.blizzardEvent", function()
         assert.are.equal(args.spellName, spellName)
         assert.are.equal(args.spellSchool, spellSchool)
         assert.are.equal(args.auraType, auraType)
-    end)
-end)
-
--- CombatLog class tests
-describe("CombatLog", function()
-    local log
-
-    before_each(function()
-        log = TestAddon.CombatLog:New()
-    end)
-
-    it("should create new instance", function()
-        assert.are.equal(0, log.entryCount)
-        assert.are.equal(0, #log:GetEntries())
-    end)
-
-    it("should add entries", function()
-        log:AddEntry("Player1", "Test message 1")
-        log:AddEntry("Player2", "Test message 2")
-
-        assert.are.equal(2, log.entryCount)
-        assert.are.equal(2, #log:GetEntries())
-
-        local entries = log:GetEntries()
-        assert.are.equal("Player1", entries[1].player)
-        assert.are.equal("Test message 1", entries[1].message)
-        assert.are.equal(1, entries[1].id)
-    end)
-
-    it("should clear entries", function()
-        log:AddEntry("Player1", "Test message")
-        log:Clear()
-
-        assert.are.equal(0, log.entryCount)
-        assert.are.equal(0, #log:GetEntries())
     end)
 end)

@@ -1,4 +1,6 @@
 require('tests.mocks')
+require('../lib/blizzardEvent')
+require('../lib/List')
 local TestAddon = require('../Core')
 local Builder = require('../utils/CombatEventBuilder')
 local MisdirectionTracker = require('../modules/Misdirection')
@@ -22,20 +24,23 @@ describe("Misdirection Tracker", function()
     it("отслеживает урон во время активного напула", function()
         -- Начинаем напул
         MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
-            :ApplyAura(34477, "Перенаправление"):Build())
+            :CastSuccess(34477, "Перенаправление"):Build())
+
+        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Охотник"):ToPlayer(
+            "Охотник"):ApplyAura(35079, "Перенаправление"):Build())
 
         -- Охотник наносит урон
         MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Охотник"):ToEnemy("Враг")
-            :Damage(1000):Build())
-
+            :SpellDamage(49050, "", 1000):Build())
         -- Аура спадает
         MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
-            :RemoveAura(34477, "Перенаправление"):Build())
+            :RemoveAura(35079, "Перенаправление"):Build())
 
         -- Проверяем что был сгенерирован отчет
         assert.spy(MisdirectionTracker.log).was_called_with("Охотник",
-            string.format("%s |cFFFFFFFFОхотник|r |T%s:24:24:0:0|t Танк |T%s:24:24:0:0|t",
-                date("%H:%M:%S", GetTime()), misdirect, bow))
+            string.format(
+                "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк |TInterface\\Icons\\INV_Spear_07:24:24:0:-2|t",
+                date("%H:%M:%S", GetTime()), misdirect))
     end)
 
     -- it("генерирует отчет при спадении ауры", function()

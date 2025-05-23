@@ -120,7 +120,6 @@ function MisdirectionTracker:GenerateReport(hunterName, log)
         activePulls[hunterName].target)
 
     for spellId in pullDamage[hunterName]:iter() do
-        TestAddon:Print("SPELL => ", spellId)
         report = report ..
                      string.format(" |T%s:24:24:0:-2|t",
                 TRACKED_SPELLS[spellId] or "Interface\\Icons\\INV_Misc_QuestionMark")

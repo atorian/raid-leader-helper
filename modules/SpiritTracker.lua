@@ -1,3 +1,5 @@
+-- TODO: enable only when entering ICC
+-- TODO: report on spirits when battle ended
 local TestAddon = LibStub("AceAddon-3.0"):GetAddon("TestAddon")
 local SpiritTracker = TestAddon:NewModule("SpiritTracker", "AceEvent-3.0")
 
@@ -7,10 +9,14 @@ local TRACKED_SPELLS = {
     [72010] = "vengeful_blast" -- Вспышка мщения
 }
 
+local shieldOffRu = "Довольно! Пришла пора взять все в свои руки!"
+local shieldOffEn = "Enough! I see I must take matters into my own hands!"
+
 function SpiritTracker:OnInitialize()
     TestAddon:Print("SpiritTracker: Инициализация")
     self.currentSpirits = {}
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    self:RegisterEvent("CHAT_MSG_MONSTER_YELL")
 end
 
 function SpiritTracker:OnEnable()
@@ -19,6 +25,23 @@ function SpiritTracker:OnEnable()
         self:handleEvent(...)
     end)
 end
+
+function SpiritTracker:CHAT_MSG_MONSTER_YELL(msg)
+    if msg == shieldOffRu then
+        TestAddon:OnCombatLogEvent(nil, string.format("%s Леди: Щит разбит",
+            date("%H:%M:%S", eventData.timestamp)))
+        -- self:UnregisterEvent("CHAT_MSG_MONSTER_YELL")
+    end
+end
+
+-- function SpiritTracker:ZONE_CHANGED_NEW_AREA()
+-- local 
+-- if 
+-- end
+
+-- function SpiritTracker:PLAYER_ENTERING_WORLD()
+--
+-- end
 
 function SpiritTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     self:handleEvent(blizzardEvent(...), function(...)

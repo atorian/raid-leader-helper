@@ -20,13 +20,15 @@ Libs\AceModule-3.0\AceModule-3.0.xml
 # Libs\Ace3\AceComm-3.0\AceComm-3.0.lua
 Libs\AceDB-3.0\AceDB-3.0.xml
 Libs\AceGUI-3.0\AceGUI-3.0.xml
+
+lib\blizzardEvent.lua
 lib\List.lua
+lib\RingBuffer.lua
 
 # Core files
 Core.lua
-TestAddon.xml
 # Other modules
 modules\SpellTracker.lua
 modules\SpiritTracker.lua
 modules\Misdirection.lua
-#modules\DeathTracker.lua
+modules\DeathTracker.lua

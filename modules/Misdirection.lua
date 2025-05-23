@@ -92,7 +92,11 @@ function MisdirectionTracker:handleEvent(eventData, log)
 end
 
 function MisdirectionTracker:OnMisdirection(eventData)
-    activePulls[eventData.sourceName] = eventData.destName
+    activePulls[eventData.sourceName] = {
+        ["time"] = eventData.timestamp,
+        ["target"] = eventData.destName,
+        ["spellId"] = eventData.spellId
+    }
     pullDamage[eventData.sourceName] = List.new()
 end
 
@@ -111,12 +115,15 @@ end
 
 function MisdirectionTracker:GenerateReport(hunterName, log)
     -- Create damage report
-    local report = string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", GetTime()), hunterName,
-        TRACKED_SPELLS[MISDIRECTION_SPELL_ID], activePulls[hunterName])
+    local report = string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:-2|t %s",
+        date("%H:%M:%S", activePulls[hunterName].time), hunterName, TRACKED_SPELLS[activePulls[hunterName].spellId],
+        activePulls[hunterName].target)
 
     for spellId in pullDamage[hunterName]:iter() do
         TestAddon:Print("SPELL => ", spellId)
-        report = report .. string.format(" |T%s:24:24:0:0|t", TRACKED_SPELLS[spellId] or TRACKED_SPELLS[75])
+        report = report ..
+                     string.format(" |T%s:24:24:0:-2|t",
+                TRACKED_SPELLS[spellId] or "Interface\\Icons\\INV_Misc_QuestionMark")
     end
 
     log(hunterName, report)

@@ -8,14 +8,6 @@ local function wipe(t)
     return t
 end
 
-local function count(tbl)
-    local n = 0
-    for _ in pairs(tbl or {}) do
-        n = n + 1
-    end
-    return n
-end
-
 local function toString(val)
     if type(val) == "table" then
         local str = "{"
@@ -29,7 +21,6 @@ local function toString(val)
 end
 
 -- Constants
-TestAddon.BOSS_FLAGS = 0x60a48
 TestAddon.PLAYER_FLAGS = 0x511
 TestAddon.ENEMY_FLAGS = 0xa48
 TestAddon.MAX_RAID_SIZE = 25 -- Максимальный размер боевого рейда
@@ -51,122 +42,6 @@ local defaults = {
         }
     }
 }
-
-function blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags, ...)
-    local args = {}
-    args.timestamp = timestamp
-    args.event = event
-    args.sourceGUID = sourceGUID
-    args.sourceName = sourceName
-    args.sourceFlags = sourceFlags
-    args.destGUID = destGUID
-    args.destName = destName
-    args.destFlags = destFlags
-
-    if event == "SWING_DAMAGE" then
-        args.amount, args.overkill, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
-            select(1, ...)
-    elseif event == "SWING_MISSED" then
-        args.spellName = ACTION_SWING
-        args.missType = select(1, ...)
-    elseif event:sub(1, 5) == "RANGE" then
-        args.spellId, args.spellName, args.spellSchool = select(1, ...)
-        if event == "RANGE_DAMAGE" then
-            args.amount, args.overkill, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
-                select(4, ...)
-        elseif event == "RANGE_MISSED" then
-            args.missType = select(4, ...)
-        end
-    elseif event:sub(1, 5) == "SPELL" then
-        args.spellId, args.spellName, args.spellSchool = select(1, ...)
-        if event == "SPELL_DAMAGE" then
-            args.amount, args.overkill, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
-                select(4, ...)
-        elseif event == "SPELL_MISSED" then
-            args.missType, args.amountMissed = select(4, ...)
-        elseif event == "SPELL_HEAL" then
-            args.amount, args.overheal, args.absorbed, args.critical = select(4, ...)
-            args.school = args.spellSchool
-        elseif event == "SPELL_ENERGIZE" then
-            args.valueType = 2
-            args.amount, args.powerType = select(4, ...)
-        elseif event:sub(1, 14) == "SPELL_PERIODIC" then
-            if event == "SPELL_PERIODIC_MISSED" then
-                args.missType = select(4, ...)
-            elseif event == "SPELL_PERIODIC_DAMAGE" then
-                args.amount, args.overkill, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
-                    select(4, ...)
-            elseif event == "SPELL_PERIODIC_HEAL" then
-                args.amount, args.overheal, args.absorbed, args.critical = select(4, ...)
-                args.school = args.spellSchool
-            elseif event == "SPELL_PERIODIC_DRAIN" then
-                args.amount, args.powerType, args.extraAmount = select(4, ...)
-                args.valueType = 2
-            elseif event == "SPELL_PERIODIC_LEECH" then
-                args.amount, args.powerType, args.extraAmount = select(4, ...)
-                args.valueType = 2
-            elseif event == "SPELL_PERIODIC_ENERGIZE" then
-                args.amount, args.powerType = select(4, ...)
-                args.valueType = 2
-            end
-        elseif event == "SPELL_DRAIN" then
-            args.amount, args.powerType, args.extraAmount = select(4, ...)
-            args.valueType = 2
-        elseif event == "SPELL_LEECH" then
-            args.amount, args.powerType, args.extraAmount = select(4, ...)
-            args.valueType = 2
-        elseif event == "SPELL_INTERRUPT" then
-            args.extraSpellId, args.extraSpellName, args.extraSpellSchool = select(4, ...)
-        elseif event == "SPELL_EXTRA_ATTACKS" then
-            args.amount = select(4, ...)
-        elseif event == "SPELL_DISPEL_FAILED" then
-            args.extraSpellId, args.extraSpellName, args.extraSpellSchool = select(4, ...)
-        elseif event == "SPELL_AURA_DISPELLED" then
-            args.extraSpellId, args.extraSpellName, args.extraSpellSchool = select(4, ...)
-            args.auraType = select(7, ...)
-        elseif event == "SPELL_AURA_STOLEN" then
-            args.extraSpellId, args.extraSpellName, args.extraSpellSchool = select(4, ...)
-            args.auraType = select(7, ...)
-        elseif event == "SPELL_AURA_APPLIED" or event == "SPELL_AURA_REMOVED" then
-            args.auraType = select(4, ...)
-        elseif event == "SPELL_AURA_APPLIED_DOSE" or event == "SPELL_AURA_REMOVED_DOSE" then
-            args.auraType, args.amount = select(4, ...)
-            args.sourceName = args.destName
-            args.sourceGUID = args.destGUID
-            args.sourceFlags = args.destFlags
-        elseif event == "SPELL_CAST_FAILED" then
-            args.missType = select(4, ...)
-        end
-    elseif event == "DAMAGE_SHIELD" then
-        args.spellId, args.spellName, args.spellSchool = select(1, ...)
-        args.amount, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
-            select(4, ...)
-    elseif event == "DAMAGE_SHIELD_MISSED" then
-        args.spellId, args.spellName, args.spellSchool = select(1, ...)
-        args.missType = select(4, ...)
-    elseif event == "ENCHANT_APPLIED" then
-        args.spellName = select(1, ...)
-        args.itemId, args.itemName = select(2, ...)
-    elseif event == "ENCHANT_REMOVED" then
-        args.spellName = select(1, ...)
-        args.itemId, args.itemName = select(2, ...)
-    elseif event == "UNIT_DIED" or event == "UNIT_DESTROYED" then
-        args.sourceName = args.destName
-        args.sourceGUID = args.destGUID
-        args.sourceFlags = args.destFlags
-    elseif event == "ENVIRONMENTAL_DAMAGE" then
-        args.environmentalType = select(1, ...)
-        args.amount, args.overkill, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
-            select(2, ...)
-        args.spellName = _G["ACTION_" .. event .. "_" .. args.environmentalType]
-        args.spellSchool = args.school
-    elseif event == "DAMAGE_SPLIT" then
-        args.spellId, args.spellName, args.spellSchool = select(1, ...)
-        args.amount, args.school, args.resisted, args.blocked, args.absorbed, args.critical, args.glancing, args.crushing =
-            select(4, ...)
-    end
-    return args
-end
 
 -- Combat tracking
 TestAddon.activeEnemies = {}
@@ -191,7 +66,6 @@ function TestAddon:OnInitialize()
 end
 
 function TestAddon:OnEnable()
-
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterEvent("PLAYER_REGEN_DISABLED")
 end
@@ -229,6 +103,7 @@ function TestAddon:EndCombat(reason)
     self.inCombat = false
     wipe(self.activeEnemies)
     wipe(self.activePlayers)
+    -- emit combat ended
 end
 
 function TestAddon:checkCombatEndConditions()
@@ -293,63 +168,17 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     end
 end
 
--- CombatLog class definition
-local CombatLog = {}
-
-function CombatLog:New()
-    local instance = {
-        entries = {},
-        frames = {},
-        startTime = GetTime(),
-        entryCount = 0
-    }
-    setmetatable(instance, {
-        __index = CombatLog
-    })
-    return instance
-end
-
-function CombatLog:AddEntry(player, message)
-    self.entryCount = self.entryCount + 1
-    local entryId = self.entryCount
-
-    local entry = {
-        id = entryId,
-        player = player,
-        message = message
-    }
-
-    table.insert(self.entries, entry)
-end
-
-function CombatLog:GetEntries()
-    return self.entries
-end
-
-function CombatLog:Clear()
-    for _, frame in ipairs(self.frames) do
-        frame:Hide()
-        frame:SetParent(nil)
-    end
-
-    wipe(self.entries)
-    wipe(self.frames)
-    self.startTime = GetTime()
-    self.entryCount = 0
-end
-
--- Make CombatLog available to TestAddon
-TestAddon.CombatLog = CombatLog
+local List = List
 
 function TestAddon:OnCombatLogEvent(player, message)
     if not self.inCombat then
         self.inCombat = true
-        self.currentCombatLog = CombatLog:New()
+        self.currentCombatLog = List:new()
     end
 
     self:Print("RL Быдло: " .. player .. ": " .. message)
 
-    self.currentCombatLog:AddEntry(player, message)
+    self.currentCombatLog:push_front(message)
 
     self:UpdateModuleDisplays()
 end
@@ -490,7 +319,7 @@ function TestAddon:CreateMainFrame()
     resetBtn:SetText("Ресет")
     resetBtn:SetScript("OnClick", function()
         if self.currentCombatLog then
-            self.currentCombatLog = CombatLog:New()
+            self.currentCombatLog = List:new()
             self:UpdateModuleDisplays()
         end
     end)
@@ -627,11 +456,10 @@ function TestAddon:UpdateModuleDisplays()
 
     scrollChild:SetWidth(scrollFrame:GetWidth())
 
-    local entries = self.currentCombatLog:GetEntries()
     local previousEntry
     local totalHeight = 0
 
-    for i, entry in ipairs(entries) do
+    for entry in self.currentCombatLog:iter() do
         local wrapperButton = self:CreateLogEntryFrame(entry)
         wrapperButton:SetParent(scrollChild)
         wrapperButton:SetWidth(scrollChild:GetWidth() - 10)
@@ -655,7 +483,7 @@ function TestAddon:UpdateModuleDisplays()
     scrollFrame:SetVerticalScroll(0)
 end
 
-function TestAddon:CreateLogEntryFrame(entry)
+function TestAddon:CreateLogEntryFrame(message)
     local entryFrame = CreateFrame("Button")
     entryFrame:SetSize(400, 20)
     entryFrame:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight", "ADD")
@@ -665,20 +493,11 @@ function TestAddon:CreateLogEntryFrame(entry)
     messageText:SetPoint("LEFT", entryFrame, "LEFT", 5, 0)
     messageText:SetPoint("RIGHT", entryFrame, "RIGHT", -5, 0)
     messageText:SetJustifyH("LEFT")
-    -- messageText:SetJustifyV("TOP")
+    messageText:SetJustifyV("TOP")
     messageText:SetWordWrap(false)
-    messageText:SetText(entry.message)
-
-    -- Store references
-    entryFrame.messageText = messageText
-    entryFrame.playerName = entry.player
+    messageText:SetText(message)
 
     return entryFrame
-end
-
-function TestAddon:OpenSettings()
-    -- To be implemented
-    -- print("Настройки временно недоступны")
 end
 
 function TestAddon:HandleSlashCommand(input)
@@ -694,46 +513,10 @@ function TestAddon:HandleSlashCommand(input)
         print("/rlh - показать/скрыть окно")
         print("/rlh help - показать помощь")
         print("/rlh debug - включить/выключить режим отладки")
-        print("/rlh clear - очистить лог")
     elseif input == "debug" then
         self.db.profile.debug = not self.db.profile.debug
         print("Режим отладки: " .. (self.db.profile.debug and "включен" or "выключен"))
-    elseif input == "clear" then
-        if self.currentCombatLog then
-            self.currentCombatLog:Clear()
-            self:Print("Лог очищен")
-        else
-            self:Print("Нет активного лога")
-        end
-        self:UpdateModuleDisplays()
     end
-end
-
-function createRingBuffer(size)
-    local buffer = {
-        data = {},
-        size = size or 5,
-        index = 1,
-        count = 0
-    }
-
-    function buffer:add(value)
-        self.data[self.index] = value
-        self.index = self.index % self.size + 1
-        self.count = math.min(self.count + 1, self.size)
-    end
-
-    function buffer:getAll()
-        local result = {}
-        local start = (self.index - self.count - 1 + self.size) % self.size + 1
-        for i = 1, self.count do
-            local idx = (start + i - 1 - 1) % self.size + 1
-            table.insert(result, self.data[idx])
-        end
-        return result
-    end
-
-    return buffer
 end
 
 return TestAddon

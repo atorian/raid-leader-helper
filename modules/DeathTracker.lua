@@ -6,6 +6,7 @@ function DeathTracker:OnInitialize()
     self.dmgEvents = {}
     self.healEvents = {}
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    -- TestAddon:withHandler(DeathTracker)
 end
 
 -- 67662 Ледной Рев
@@ -19,13 +20,16 @@ local LEZVIA = 77845
 
 function DeathTracker:OnEnable()
     TestAddon:Print("DeathTracker: Включен")
-    TestAddon:withHandler(function(...)
-        self:handleEvent(...)
-    end)
+    self:RegisterMessage("TestAddon_CombatEnded", "reset")
 end
 
 function DeathTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     self:handleEvent(...)
+end
+
+function DeathTracker:reset()
+    self.dmgEvents = {}
+    self.healEvents = {}
 end
 
 function DeathTracker:logDmg(playerName, eventData)
@@ -78,8 +82,8 @@ function DeathTracker:ProcessPlayerDeath(playerName, timestamp)
     local lastDamage = self.dmgEvents[playerName]:getAll()[1]
 
     if lastDamage then
-        TestAddon:Print("DeathTracker: Последний урон", lastDamage.timestamp, lastDamage.source,
-            lastDamage.spellName, lastDamage.amount)
+        -- TestAddon:Print("DeathTracker: Последний урон", lastDamage.timestamp, lastDamage.source,
+        --     lastDamage.spellName, lastDamage.amount)
 
         if lastDamage.spellId == METEORIT then
             msg = msg .. " от метеорита"
@@ -97,7 +101,7 @@ function DeathTracker:ProcessPlayerDeath(playerName, timestamp)
             msg = msg .. " " .. lastDamage.spellName
         end
 
-        TestAddon:OnCombatLogEvent(playerName, msg)
+        TestAddon:OnCombatLogEvent(msg)
     end
 end
 

@@ -3,9 +3,7 @@ local SppellTracker = TestAddon:NewModule("SppellTracker", "AceEvent-3.0")
 
 function SppellTracker:OnEnable()
     TestAddon:Print("RL Быдло: TauntTracker включен")
-    TestAddon:withHandler(function(...)
-        self:handleEvent(...)
-    end)
+
 end
 
 -- Список отслеживаемых способностей
@@ -34,8 +32,10 @@ function SppellTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     end)
 end
 
-function SppellTracker:handleEvent(eventData, log)
+function SppellTracker:reset()
+end
 
+function SppellTracker:handleEvent(eventData, log)
     if (eventData.event == "SPELL_AURA_APPLIED") then
         if TRACKED_SPELLS[eventData.spellId] then
             log(eventData.sourceName,

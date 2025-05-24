@@ -49,6 +49,7 @@ function TestAddon:OnInitialize()
     self.activePlayers = self.activePlayers or {}
 
     self.db = LibStub("AceDB-3.0"):New("TestAddonDB", defaults, true)
+    self.currentCombatLog = List.new()
 
     self:RegisterChatCommand("rlh", "HandleSlashCommand")
 
@@ -65,7 +66,7 @@ function TestAddon:OnEnable()
 end
 
 local function isPlayerTargeted(event)
-    return bit.band(event.destFlags or 0, TestAddon.PLAYER_FLAGS) == TestAddon.PLAYER_FLAGS
+    return bit.band(event.destFlags, COMBATLOG_OBJECT_TYPE_PLAYER) == COMBATLOG_OBJECT_TYPE_PLAYER
 end
 
 local function isEnemy(flags)
@@ -93,12 +94,24 @@ function TestAddon:PLAYER_REGEN_DISABLED()
     end
 end
 
-function TestAddon:EndCombat(reason)
-    self.inCombat = false
-    wipe(self.activeEnemies)
-    wipe(self.activePlayers)
-    -- emit combat ended
-end
+-- local Combat = {}
+-- Combat.__index = Combat
+
+-- function Combat.new()
+--     return setmetatable({
+--         inCombat = false,
+--         activeEnemies = {},
+--         activePlayers = {}
+--     }, Combat)
+-- end
+
+-- function Combat:join()
+--     self.inCombat = true
+-- end
+
+-- function Combat:onEvent(event)
+
+-- end
 
 function TestAddon:checkCombatEndConditions()
     if not next(self.activeEnemies) then
@@ -131,13 +144,12 @@ function TestAddon:checkCombatEndConditions()
     return false
 end
 
+-- TODO: Case: после Халиона кто-то может сагрить Трэш и это ресетнет лог.
+-- можно запоминать бои с боссами
+--
 function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 
     local eventData = blizzardEvent(...)
-
-    -- if self.db.profile.debug then
-    --     self:Print("RL Быдло: " .. eventData.event .. " - " .. eventData.sourceName .. " -> " .. eventData.destName, eventData.destFlags, eventData.destFlags == self.ENEMY_FLAGS)
-    -- end
 
     self:trackCombatants(eventData)
 
@@ -149,7 +161,6 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
             self.activePlayers[eventData.sourceGUID] = nil
         end
     end
-
     -- Track Divine Intervention
     if eventData.event == "SPELL_AURA_APPLIED" and eventData.spellId == self.DIVINE_INTERVENTION then
         self.activePlayers[eventData.destGUID] = true
@@ -157,7 +168,8 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
         self.activePlayers[eventData.destGUID] = false
     end
 
-    if self:checkCombatEndConditions() then
+    -- TODO: inCombat логику проверить, чтобы правильно отключить бой
+    if self.inCombat and self:checkCombatEndConditions() then
         self:EndCombat("conditions_met")
     end
 end
@@ -177,12 +189,17 @@ function TestAddon:OnCombatLogEvent(player, message)
     self:UpdateModuleDisplays()
 end
 
-local handlers = {}
-local handlerI = 0
-function TestAddon:withHandler(handler)
-    handlerI = handlerI + 1
-    handlers[handlerI] = handler
-    self:Print("RL Быдло: добавлен обработчик #" .. handlerI)
+-- local handlers = List.new()
+-- function TestAddon:withHandler(handler)
+--     handlers.push_back(handler)
+-- end
+
+function TestAddon:EndCombat(reason)
+    self.inCombat = false
+    wipe(self.activeEnemies)
+    wipe(self.activePlayers)
+    self:Print("Combat ended", reason)
+    self:SendMessage("TestAddon_CombatEnded")
 end
 
 local function sendSync(prefix, msg)
@@ -198,7 +215,6 @@ local function sendSync(prefix, msg)
         TestAddon:Print("RL Быдло: Отправлено в PARTY")
         SendAddonMessage(prefix, msg, "PARTY")
     end
-
 end
 
 function TestAddon:MinimizeWindow()
@@ -294,6 +310,8 @@ function TestAddon:CreateMainFrame()
     pull15Btn:SetScript("OnClick", function()
         DBM:CreatePizzaTimer(15, "Pull", true)
         TestAddon:MinimizeWindow()
+        self.currentCombatLog = List:new()
+        self:UpdateModuleDisplays()
     end)
     frame.pull15Btn = pull15Btn
 
@@ -304,6 +322,8 @@ function TestAddon:CreateMainFrame()
     pull75Btn:SetScript("OnClick", function()
         DBM:CreatePizzaTimer(70, "Pull", true)
         TestAddon:MinimizeWindow()
+        self.currentCombatLog = List:new()
+        self:UpdateModuleDisplays()
     end)
     frame.pull75Btn = pull75Btn
 

@@ -15,19 +15,18 @@ local shieldOffEn = "Enough! I see I must take matters into my own hands!"
 function SpiritTracker:OnInitialize()
     TestAddon:Print("SpiritTracker: Инициализация")
     self.currentSpirits = {}
+    self.report = {}
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterEvent("CHAT_MSG_MONSTER_YELL")
+    self:RegisterMessage("TestAddon_CombatEnded", "reset")
 end
 
 function SpiritTracker:OnEnable()
     TestAddon:Print("SpiritTracker: Включен")
-    TestAddon:withHandler(function(...)
-        self:handleEvent(...)
-    end)
 end
 
 function SpiritTracker:CHAT_MSG_MONSTER_YELL(msg)
-    if msg == shieldOffRu then
+    if msg == shieldOffRu or msg == shieldOffEn then
         TestAddon:OnCombatLogEvent(nil, string.format("%s Леди: Щит разбит",
             date("%H:%M:%S", eventData.timestamp)))
         -- self:UnregisterEvent("CHAT_MSG_MONSTER_YELL")
@@ -50,7 +49,19 @@ function SpiritTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 end
 
 function SpiritTracker:reset()
-    self.currentSpirits = {};
+    self.currentSpirits = {}
+    local msg = ""
+    for n, c in ipairs(self.report) do
+        msg = msg .. string.format(" %s(%s)", n, c)
+    end
+
+    SendChatMessage("Духов взорвали")
+
+    if msg ~= "" then
+        SendChatMessage("Духов взорвали: " .. msg, "RAID")
+    end
+
+    self.report = {}
 end
 
 function SpiritTracker:handleEvent(eventData, log)
@@ -67,6 +78,9 @@ function SpiritTracker:handleEvent(eventData, log)
         if not spiritInfo then
             return
         end
+
+        self.report[eventData.destName] = self.report[eventData.destName] or 0
+        self.report[eventData.destName] = self.report[eventData.destName] + 1
 
         log(eventData.destName, string.format("%s |cFFFFFFFF%s|r взорвал духа",
             date("%H:%M:%S", eventData.timestamp), eventData.destName))

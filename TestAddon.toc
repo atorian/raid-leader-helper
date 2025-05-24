@@ -29,6 +29,6 @@ lib\RingBuffer.lua
 Core.lua
 # Other modules
 modules\SpellTracker.lua
-modules\SpiritTracker.lua
 modules\Misdirection.lua
+modules\SpiritTracker.lua
 modules\DeathTracker.lua

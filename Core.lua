@@ -185,6 +185,10 @@ function TestAddon:OnCombatLogEvent(player, message)
     self:Print("RL Быдло: " .. player .. ": " .. message)
 
     self.currentCombatLog:push_front(message)
+    self.currentCombatLog:push_front(
+        "some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. ")
+    self.currentCombatLog:push_front(
+        "some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. ")
 
     self:UpdateModuleDisplays()
 end
@@ -231,7 +235,7 @@ function TestAddon:MinimizeWindow()
     end
 
     -- Set minimum size
-    self.mainFrame:SetSize(270, 200)
+    self.mainFrame:SetSize(240, 200)
     self.isMinimized = true
 end
 
@@ -246,12 +250,12 @@ end
 
 function TestAddon:CreateMainFrame()
     local frame = CreateFrame("Frame", "TestAddonMainFrame", UIParent)
-    frame:SetSize(350, 600)
+    frame:SetSize(300, 600)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:SetResizable(true)
-    frame:SetMinResize(200, 150)
-    frame:SetMaxResize(800, 1000)
+    frame:SetMinResize(240, 200)
+    -- frame:SetMaxResize(800, 1000)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
@@ -299,7 +303,7 @@ function TestAddon:CreateMainFrame()
     local buttonContainer = CreateFrame("Frame", nil, frame)
     buttonContainer:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -15)
     buttonContainer:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -15, -15)
-    buttonContainer:SetHeight(30) -- Увеличиваем высоту для двух строк кнопок
+    buttonContainer:SetHeight(30)
 
     -- Первая строка кнопок
 
@@ -341,11 +345,12 @@ function TestAddon:CreateMainFrame()
 
     -- Scroll frame
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOP", buttonContainer, "BOTTOM", 0, -10)
-    scrollFrame:SetPoint("BOTTOM", frame, "BOTTOM", 0, 10)
+    scrollFrame:SetPoint("TOP", buttonContainer, "BOTTOM", 0, -8)
+    scrollFrame:SetPoint("BOTTOM", frame, "BOTTOM", 0, 8)
     scrollFrame:SetPoint("LEFT", frame, "LEFT", 12, 0)
     scrollFrame:SetPoint("RIGHT", frame, "RIGHT", -32, 0)
     scrollFrame:EnableMouseWheel(true)
+
     scrollFrame:SetScript("OnMouseWheel", function(self, delta)
         local current = self:GetVerticalScroll()
         local maxScroll = self:GetVerticalScrollRange()
@@ -359,7 +364,8 @@ function TestAddon:CreateMainFrame()
 
     -- Scroll child
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetHeight(1)
+    scrollChild:SetPoint("TOPLEFT", scrollFrame, "TOPLEFT", 0, 0)
+    scrollChild:SetPoint("BOTTOMRIGHT", scrollFrame, "BOTTOMRIGHT", 0, 0)
     scrollFrame:SetScrollChild(scrollChild)
 
     frame.logScrollFrame = scrollFrame
@@ -370,8 +376,8 @@ function TestAddon:CreateMainFrame()
 
     frame:SetScript("OnSizeChanged", function(self, width, height)
         if scrollChild then
-            -- Принудительно обновляем размеры и позиции всех элементов
-            self.logScrollFrame:SetWidth(width - 32)
+            -- self.logScrollFrame:SetWidth(width)
+            -- TestAddon:UpdateModuleDisplays()
             TestAddon:UpdateLogEntryLayout()
         end
 
@@ -417,22 +423,22 @@ function TestAddon:UpdateLogEntryLayout()
 
     -- Обновляем ширину и позиции всех элементов
     for _, entryFrame in ipairs(children) do
-        if entryFrame.messageText then
-            entryFrame:SetWidth(newWidth - 10)
-            entryFrame.messageText:SetWidth(newWidth - 20)
 
-            -- Переопределяем позицию фрейма
-            if previousEntry then
-                entryFrame:ClearAllPoints()
-                entryFrame:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, -2)
-            else
-                entryFrame:ClearAllPoints()
-                entryFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 5, -5)
-            end
+        -- entryFrame:SetWidth(newWidth - 10)
+        -- entryFrame.messageText:SetWidth(newWidth - 20)
 
-            totalHeight = totalHeight + entryFrame:GetHeight() + 2
-            previousEntry = entryFrame
+        -- Переопределяем позицию фрейма
+        entryFrame:ClearAllPoints()
+        if previousEntry then
+            entryFrame:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, 0)
+            entryFrame:SetPoint("TOPRIGHT", previousEntry, "TOPRIGHT", 0, 0)
+        else
+            entryFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
+            entryFrame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, 0)
         end
+
+        totalHeight = totalHeight + entryFrame:GetHeight() + 2
+        previousEntry = entryFrame
     end
 
     -- Устанавливаем высоту контейнера
@@ -468,7 +474,7 @@ function TestAddon:UpdateModuleDisplays()
         child:SetParent(nil)
     end
 
-    scrollChild:SetWidth(scrollFrame:GetWidth())
+    -- scrollChild:SetWidth(scrollFrame:GetWidth())
 
     local previousEntry
     local totalHeight = 0
@@ -476,15 +482,19 @@ function TestAddon:UpdateModuleDisplays()
     for entry in self.currentCombatLog:iter() do
         local wrapperButton = self:CreateLogEntryFrame(entry)
         wrapperButton:SetParent(scrollChild)
-        wrapperButton:SetWidth(scrollChild:GetWidth() - 10)
 
         if previousEntry then
-            wrapperButton:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, -2)
+            wrapperButton:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, 0)
+            wrapperButton:SetPoint("TOPRIGHT", previousEntry, "BOTTOMRIGHT", 0, 0)
         else
-            wrapperButton:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 5, -5)
+            wrapperButton:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
+            wrapperButton:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -30, 0)
         end
 
         wrapperButton:Show()
+
+        -- wrapperButton:SetWidth(scrollChild:GetWidth())
+        TestAddon:Print("scrollChild width:", scrollChild:GetWidth())
         previousEntry = wrapperButton
         totalHeight = totalHeight + wrapperButton:GetHeight() + 2
     end

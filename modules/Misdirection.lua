@@ -32,7 +32,7 @@ local TRACKED_SPELLS = {
     [48638] = "Interface\\Icons\\Spell_shadow_ritualofsacrifice",
     [2098] = "Interface\\Icons\\ability_rogue_eviscerate",
     [5171] = "Interface\\Icons\\ability_rogue_slicedice",
-    [57842] = "Interface\\Icons\\ability_whirlwind",
+    [57842] = "Interface\\Icons\\ability_rogue_murderspree",
     [13750] = "Interface\\Icons\\spell_shadow_shadowworddominate",
     [13877] = "Interface\\Icons\\ability_warrior_punishingblow",
     [11273] = "Interface\\Icons\\ability_rogue_rupture",
@@ -40,12 +40,16 @@ local TRACKED_SPELLS = {
     [31224] = "Interface\\Icons\\spell_shadow_nethercloak",
     [1857] = "Interface\\Icons\\ability_vanish",
     [57970] = "Interface\\Icons\\ability_rogue_dualweild",
-    -- [57965] = "Interface\\Icons\\ability_poisons",
+    [57965] = "Interface\\Icons\\ability_poisons",
     -- [57965] = "", -- Яд скип
-    [57841] = "Interface\\Icons\\ability_warrior_focusedrage",
+    [57841] = "Interface\\Icons\\ability_rogue_murderspree",
     [22482] = "Interface\\Icons\\ability_rogue_slicedice",
     [52874] = "Interface\\Icons\\ability_rogue_fanofknives",
     [48668] = "Interface\\Icons\\ability_rogue_eviscerate"
+}
+
+local SKIP_SPELLS = {
+    [57965] = true
 }
 
 -- Active pulls tracking
@@ -116,7 +120,9 @@ function MisdirectionTracker:OnMisdirectionRemoved(eventData, log)
 end
 
 function MisdirectionTracker:OnDamage(eventData)
-    pullDamage[eventData.sourceName]:push_back(eventData.spellId)
+    if not SKIP_SPELLS[eventData.spellId] then
+        pullDamage[eventData.sourceName]:push_back(eventData.spellId)
+    end
 end
 
 function MisdirectionTracker:GenerateReport(hunterName, log)
@@ -126,19 +132,13 @@ function MisdirectionTracker:GenerateReport(hunterName, log)
         activePulls[hunterName].target)
 
     for spellId in pullDamage[hunterName]:iter() do
-
-        -- if spellId == 57965 then
-        --     break
-        -- end
-
-        if not TRACKED_SPELLS[spellId] then
-            TestAddon:Print('Spell => ', spellId)
-            break
+        if TRACKED_SPELLS[spellId] then
+            report = report ..
+                         string.format(" |T%s:24:24:0:-2|t",
+                    TRACKED_SPELLS[spellId] or "Interface\\Icons\\INV_Misc_QuestionMark")
+        else
+            SendChatMessage('Spell => ' .. spellId, "WHISPER", nil, UnitName("player"))
         end
-
-        report = report ..
-                     string.format(" |T%s:24:24:0:-2|t",
-                TRACKED_SPELLS[spellId] or "Interface\\Icons\\INV_Misc_QuestionMark")
     end
 
     log(hunterName, report)

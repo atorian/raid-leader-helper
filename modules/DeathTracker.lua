@@ -18,13 +18,20 @@ local LUZHA = 75949
 local LEZVIA = 77845
 -- 74792 - metka
 
+local spells = {
+    [METEORIT] = " от метеорита",
+    [LUZHA] = " в луже",
+    [LEZVIA] = " в лезвиях"
+}
+
 function DeathTracker:OnEnable()
-    TestAddon:Print("DeathTracker: Включен")
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
 end
 
 function DeathTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
-    self:handleEvent(...)
+    self:handleEvent(blizzardEvent(...), function(...)
+        TestAddon:OnCombatLogEvent(...)
+    end)
 end
 
 function DeathTracker:reset()
@@ -32,41 +39,33 @@ function DeathTracker:reset()
     self.healEvents = {}
 end
 
-function DeathTracker:logDmg(playerName, eventData)
-    if self.dmgEvents[playerName] == nil then
-        self.dmgEvents[playerName] = createRingBuffer(3)
-    end
-
-    self.dmgEvents[playerName]:add(eventData)
+function DeathTracker:logDmg(playerName, event)
+    self.dmgEvents[playerName] = event
 end
 
 function DeathTracker:logHeal(playerName, event)
-    if self.healEvents[playerName] == nil then
-        self.healEvents[playerName] = createRingBuffer(3)
-    end
-
-    self.healEvents[playerName]:add(event)
+    self.healEvents[playerName] = event
 end
 
-function DeathTracker:handleEvent(...)
-    local eventData = blizzardEvent(...)
+function DeathTracker:handleEvent(eventData, log)
     if bit.band(eventData.destFlags, COMBATLOG_OBJECT_TYPE_PLAYER) > 0 then
-        if eventData.event == "UNIT_DIED" then
-            self:ProcessPlayerDeath(eventData.destName, eventData.timestamp)
-        elseif eventData.event == "SWING_DAMAGE" then
-            self:logDmg(eventData.destName, {
-                source = eventData.sourceName,
-                amount = eventData.amount,
-                spellName = "Автоатака"
-            })
-        elseif eventData.event == "SPELL_DAMAGE" then
+        if eventData.event == "SPELL_DAMAGE" then
             self:logDmg(eventData.destName, {
                 source = eventData.sourceName,
                 amount = eventData.amount,
                 spellId = eventData.spellId,
                 spellName = eventData.spellName
             })
+        elseif eventData.event == "SWING_DAMAGE" then
+            self:logDmg(eventData.destName, {
+                source = eventData.sourceName,
+                amount = eventData.amount,
+                spellName = "Автоатака"
+            })
+        elseif eventData.event == "UNIT_DIED" then
+            self:ProcessPlayerDeath(log, eventData.destName, eventData.timestamp)
         end
+        -- self:ProcessPlayerDeath(log, eventData.destName, eventData.timestamp)
     end
 end
 
@@ -75,33 +74,20 @@ end
 --     table.wipe(self.lastHealTime)
 -- end
 
-function DeathTracker:ProcessPlayerDeath(playerName, timestamp)
+function DeathTracker:ProcessPlayerDeath(log, playerName, timestamp)
     local msg = string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t", date("%H:%M:%S", timestamp), playerName,
         "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8")
 
-    local lastDamage = self.dmgEvents[playerName]:getAll()[1]
+    local lastDamage = self.dmgEvents[playerName]
 
     if lastDamage then
-        -- TestAddon:Print("DeathTracker: Последний урон", lastDamage.timestamp, lastDamage.source,
-        --     lastDamage.spellName, lastDamage.amount)
+        TestAddon:Print("DeathTracker: Последний урон", lastDamage.source, lastDamage.spellName,
+            lastDamage.amount)
 
-        if lastDamage.spellId == METEORIT then
-            msg = msg .. " от метеорита"
+        if spells[lastDamage.spellId] then
+            msg = msg .. spells[lastDamage.spellId]
+            log(playerName, msg)
         end
-
-        if lastDamage.spellId == LUZHA then
-            msg = msg .. " в луже"
-        end
-
-        if lastDamage.spellId == LEZVIA then
-            msg = msg .. " в лезвиях"
-        end
-
-        if lastDamage.spellId then
-            msg = msg .. " " .. lastDamage.spellName
-        end
-
-        TestAddon:OnCombatLogEvent(msg)
     end
 end
 

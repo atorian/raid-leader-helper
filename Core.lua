@@ -1,4 +1,5 @@
 local TestAddon = LibStub("AceAddon-3.0"):NewAddon("TestAddon", "AceConsole-3.0", "AceEvent-3.0")
+local List = List
 
 -- Utility functions
 local function wipe(t)
@@ -94,25 +95,6 @@ function TestAddon:PLAYER_REGEN_DISABLED()
     end
 end
 
--- local Combat = {}
--- Combat.__index = Combat
-
--- function Combat.new()
---     return setmetatable({
---         inCombat = false,
---         activeEnemies = {},
---         activePlayers = {}
---     }, Combat)
--- end
-
--- function Combat:join()
---     self.inCombat = true
--- end
-
--- function Combat:onEvent(event)
-
--- end
-
 function TestAddon:checkCombatEndConditions()
     if not next(self.activeEnemies) then
         self:EndCombat("all_enemies_dead")
@@ -153,14 +135,16 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 
     self:trackCombatants(eventData)
 
-    -- Track deaths
     if eventData.event == "UNIT_DIED" then
         if self.activeEnemies[eventData.sourceGUID] then
             self.activeEnemies[eventData.sourceGUID] = nil
         else
             self.activePlayers[eventData.sourceGUID] = nil
         end
+
+        return self.inCombat and self:checkCombatEndConditions()
     end
+
     -- Track Divine Intervention
     if eventData.event == "SPELL_AURA_APPLIED" and eventData.spellId == self.DIVINE_INTERVENTION then
         self.activePlayers[eventData.destGUID] = true
@@ -169,12 +153,8 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     end
 
     -- TODO: inCombat логику проверить, чтобы правильно отключить бой
-    if self.inCombat and self:checkCombatEndConditions() then
-        self:EndCombat("conditions_met")
-    end
+    return self.inCombat and self:checkCombatEndConditions()
 end
-
-local List = List
 
 function TestAddon:OnCombatLogEvent(player, message)
     if not self.inCombat then
@@ -185,10 +165,6 @@ function TestAddon:OnCombatLogEvent(player, message)
     self:Print("RL Быдло: " .. player .. ": " .. message)
 
     self.currentCombatLog:push_front(message)
-    self.currentCombatLog:push_front(
-        "some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. ")
-    self.currentCombatLog:push_front(
-        "some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. some long message. ")
 
     self:UpdateModuleDisplays()
 end
@@ -235,7 +211,7 @@ function TestAddon:MinimizeWindow()
     end
 
     -- Set minimum size
-    self.mainFrame:SetSize(240, 200)
+    self.mainFrame:SetSize(240, 150)
     self.isMinimized = true
 end
 
@@ -254,8 +230,8 @@ function TestAddon:CreateMainFrame()
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:SetResizable(true)
-    frame:SetMinResize(240, 200)
-    -- frame:SetMaxResize(800, 1000)
+    frame:SetMinResize(240, 150)
+    frame:SetMaxResize(800, 1000)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
@@ -493,8 +469,6 @@ function TestAddon:UpdateModuleDisplays()
 
         wrapperButton:Show()
 
-        -- wrapperButton:SetWidth(scrollChild:GetWidth())
-        TestAddon:Print("scrollChild width:", scrollChild:GetWidth())
         previousEntry = wrapperButton
         totalHeight = totalHeight + wrapperButton:GetHeight() + 2
     end

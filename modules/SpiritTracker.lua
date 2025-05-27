@@ -55,8 +55,6 @@ function SpiritTracker:reset()
         msg = msg .. string.format(" %s(%s)", n, c)
     end
 
-    SendChatMessage("Духов взорвали")
-
     if msg ~= "" then
         SendChatMessage("Духов взорвали: " .. msg, "RAID")
     end

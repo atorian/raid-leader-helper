@@ -37,20 +37,19 @@ local TRACKED_SPELLS = {
     [13750] = "Interface\\Icons\\spell_shadow_shadowworddominate",
     [13877] = "Interface\\Icons\\ability_warrior_punishingblow",
     [11273] = "Interface\\Icons\\ability_rogue_rupture",
-    [51723] = "Interface\\Icons\\ability_rogue_fanofknives",
     [31224] = "Interface\\Icons\\spell_shadow_nethercloak",
     [1857] = "Interface\\Icons\\ability_vanish",
     [57970] = "Interface\\Icons\\ability_rogue_dualweild",
     [57965] = "Interface\\Icons\\ability_poisons",
-    -- [57965] = "", -- Яд скип
     [57841] = "Interface\\Icons\\ability_rogue_murderspree",
-    [22482] = "Interface\\Icons\\ability_rogue_slicedice", -- шквал клинков
+    [51723] = "Interface\\Icons\\ability_rogue_fanofknives", -- веер клинков
+    [22482] = "Interface\\Icons\\ability_rogue_slicedice", -- шквал клинков - todo: группировать, выводить иконку + счетчик целей
     [52874] = "Interface\\Icons\\ability_rogue_fanofknives",
     [48668] = "Interface\\Icons\\ability_rogue_eviscerate"
 }
 
 local SKIP_SPELLS = {
-    [57965] = true,
+    [57965] = true, -- яд роги
     [53254] = true -- "мятежная стрела ханта(лук с леди?)"
 }
 

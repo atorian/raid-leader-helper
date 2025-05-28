@@ -25,13 +25,14 @@ local TRACKED_SPELLS = {
     [49065] = "Interface\\Icons\\spell_fire_selfdestruct",
     [53353] = "Interface\\Icons\\Ability_Hunter_ChimeraShot2",
     [53352] = "Interface\\Icons\\ability_hunter_explosiveshot",
+    [48996] = "Interface\\Icons\\ability_meleedamage", -- удар ящера
     [75] = "Interface\\Icons\\inv_weapon_bow_55",
     -- Рога
     [57934] = "Interface\\Icons\\ability_rogue_tricksofthetrade",
     [59628] = "Interface\\Icons\\ability_rogue_tricksofthetrade",
     [48638] = "Interface\\Icons\\Spell_shadow_ritualofsacrifice",
     [2098] = "Interface\\Icons\\ability_rogue_eviscerate",
-    [5171] = "Interface\\Icons\\ability_rogue_slicedice",
+    [5171] = "Interface\\Icons\\ability_rogue_slicedice", -- 
     [57842] = "Interface\\Icons\\ability_rogue_murderspree",
     [13750] = "Interface\\Icons\\spell_shadow_shadowworddominate",
     [13877] = "Interface\\Icons\\ability_warrior_punishingblow",
@@ -43,13 +44,14 @@ local TRACKED_SPELLS = {
     [57965] = "Interface\\Icons\\ability_poisons",
     -- [57965] = "", -- Яд скип
     [57841] = "Interface\\Icons\\ability_rogue_murderspree",
-    [22482] = "Interface\\Icons\\ability_rogue_slicedice",
+    [22482] = "Interface\\Icons\\ability_rogue_slicedice", -- шквал клинков
     [52874] = "Interface\\Icons\\ability_rogue_fanofknives",
     [48668] = "Interface\\Icons\\ability_rogue_eviscerate"
 }
 
 local SKIP_SPELLS = {
-    [57965] = true
+    [57965] = true,
+    [53254] = true -- "мятежная стрела ханта(лук с леди?)"
 }
 
 -- Active pulls tracking

@@ -46,11 +46,13 @@ local TRACKED_SPELLS = {
     [22482] = "Interface\\Icons\\ability_rogue_slicedice", -- шквал клинков - todo: группировать, выводить иконку + счетчик целей
     [52874] = "Interface\\Icons\\ability_rogue_fanofknives",
     [48668] = "Interface\\Icons\\ability_rogue_eviscerate"
+    -- 71834
 }
 
 local SKIP_SPELLS = {
     [57965] = true, -- яд роги
-    [53254] = true -- "мятежная стрела ханта(лук с леди?)"
+    [53254] = true, -- "мятежная стрела ханта(лук с леди?)"
+    [71834] = true -- быстрая стрельба
 }
 
 -- Active pulls tracking

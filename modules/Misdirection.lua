@@ -69,8 +69,6 @@ function MisdirectionTracker:OnInitialize()
         TestAddon:Print("RL Быдло: MisdirectionTracker =>", ...)
         TestAddon:OnCombatLogEvent(...)
     end
-    -- TestAddon:withHandler(MisdirectionTracker)
-
 end
 
 function MisdirectionTracker:reset()
@@ -83,22 +81,17 @@ function MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 end
 
 function MisdirectionTracker:handleEvent(eventData, log)
-    -- Track Misdirection application
-
     if eventData.event == "SPELL_CAST_SUCCESS" and
         (eventData.spellId == MISDIRECTION_START_SPELL_ID or eventData.spellId == SMALL_TRICKS_START_SPELL_ID) then
-        -- # TODO: Use time of this spess as log entry time
         self:OnMisdirection(eventData)
     end
 
-    -- Track Misdirection removal
     if eventData.event == "SPELL_AURA_REMOVED" and
         (eventData.spellId == MISDIRECTION_SPELL_ID or eventData.spellId == SMALL_TRICKS_SPELL_ID) then
         self:OnMisdirectionRemoved(eventData, log)
     end
 
     if activePulls[eventData.sourceName] then
-        -- if eventData.event == "SPELL_DAMAGE" or eventData.event == "RANGE_DAMAGE" or eventData.event == "SWING_DAMAGE" then
         if eventData.event == "SPELL_DAMAGE" then
             self:OnDamage(eventData)
         end
@@ -111,7 +104,7 @@ function MisdirectionTracker:OnMisdirection(eventData)
         ["target"] = eventData.destName,
         ["spellId"] = eventData.spellId
     }
-    pullDamage[eventData.sourceName] = List.new()
+    pullDamage[eventData.sourceName] = {}
 end
 
 function MisdirectionTracker:OnMisdirectionRemoved(eventData, log)
@@ -122,23 +115,40 @@ end
 
 function MisdirectionTracker:OnDamage(eventData)
     if not SKIP_SPELLS[eventData.spellId] then
-        pullDamage[eventData.sourceName]:push_back(eventData.spellId)
+        if not pullDamage[eventData.sourceName][eventData.timestamp] then
+            pullDamage[eventData.sourceName][eventData.timestamp] = {}
+        end
+
+        if not pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId] then
+            pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId] = 0
+        end
+
+        local val = pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId]
+        pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId] = val + 1
     end
 end
 
 function MisdirectionTracker:GenerateReport(hunterName, log)
-    -- Create damage report
+
+    local allHits = pullDamage[hunterName]
+
     local report = string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:-2|t %s",
         date("%H:%M:%S", activePulls[hunterName].time), hunterName, TRACKED_SPELLS[activePulls[hunterName].spellId],
         activePulls[hunterName].target)
 
-    for spellId in pullDamage[hunterName]:iter() do
-        if TRACKED_SPELLS[spellId] then
-            report = report ..
-                         string.format(" |T%s:24:24:0:-2|t",
-                    TRACKED_SPELLS[spellId] or "Interface\\Icons\\INV_Misc_QuestionMark")
-        else
-            SendChatMessage('Spell => ' .. spellId, "WHISPER", nil, UnitName("player"))
+    for ts, bucket in pairs(allHits) do
+        for spellId, hits in pairs(bucket) do
+            if TRACKED_SPELLS[spellId] then
+                local icon = TRACKED_SPELLS[spellId] or "Interface\\Icons\\INV_Misc_QuestionMark"
+                if hits == 1 then
+                    report = report .. string.format(" |T%s:24:24:0:-2|t", icon)
+                else
+                    report = report .. string.format(" %sx|T%s:24:24:0:-2|t", hits, icon)
+                end
+            else
+                SendChatMessage('Spell => ' .. spellId, "WHISPER", nil, UnitName("player"))
+            end
+
         end
     end
 

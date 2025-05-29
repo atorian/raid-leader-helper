@@ -89,7 +89,6 @@ function TestAddon:OnInitialize()
     self.activePlayers = self.activePlayers or {}
 
     self.db = LibStub("AceDB-3.0"):New("TestAddonDB", defaults, true)
-    self.currentCombatLog = List.new()
 
     self:RegisterChatCommand("rlh", "HandleSlashCommand")
 
@@ -198,20 +197,13 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 end
 
 function TestAddon:OnCombatLogEvent(message)
-    if not self.currentCombatLog then
-        self.currentCombatLog = List:new()
+    if not self.mainFrame or not self.mainFrame.logText then
+        self:Print("RL Быдло: No mainFrame or logText")
+        return
     end
 
     self:Print("RL Быдло: ", message)
-    self.currentCombatLog:push_front(message)
-
-    -- Update scroll bar max value
-    if self.mainFrame and self.mainFrame.logScrollBar then
-        local maxVisibleFrames = self.mainFrame.maxVisibleFrames or 30
-        self.mainFrame.logScrollBar:SetMinMaxValues(0, math.max(self.currentCombatLog:length() - maxVisibleFrames, 0))
-    end
-
-    self:UpdateModuleDisplays()
+    self.mainFrame.logText:AddMessage(message)
 end
 
 function TestAddon:EndCombat(reason)
@@ -265,6 +257,7 @@ function TestAddon:RestoreWindow()
 end
 
 function TestAddon:CreateMainFrame()
+    -- Create main frame
     local frame = CreateFrame("Frame", "TestAddonMainFrame", UIParent)
     frame:SetSize(300, 600)
     frame:SetPoint("CENTER")
@@ -276,21 +269,6 @@ function TestAddon:CreateMainFrame()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-
-    -- Resize button
-    local resizeButton = CreateFrame("Button", nil, frame)
-    resizeButton:SetSize(16, 16)
-    resizeButton:SetPoint("BOTTOMRIGHT", -5, 5)
-    resizeButton:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-    resizeButton:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
-    resizeButton:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-    resizeButton:SetScript("OnMouseDown", function()
-        frame:StartSizing("BOTTOMRIGHT")
-    end)
-    resizeButton:SetScript("OnMouseUp", function()
-        frame:StopMovingOrSizing()
-        TestAddon:UpdateModuleDisplays()
-    end)
 
     -- Background
     frame:SetBackdrop({
@@ -309,30 +287,29 @@ function TestAddon:CreateMainFrame()
 
     -- Title
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("BOTTOMLEFT", 15, 15)
+    title:SetPoint("TOPLEFT", 15, -15)
     title:SetText("RL Быдло")
 
     -- Close button
     local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeButton:SetPoint("TOPRIGHT", -5, -5)
 
-    -- Создаем контейнер для кнопок
+    -- Button container
     local buttonContainer = CreateFrame("Frame", nil, frame)
-    buttonContainer:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -15)
-    buttonContainer:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -15, -15)
+    buttonContainer:SetPoint("TOPLEFT", 15, -40)
+    buttonContainer:SetPoint("TOPRIGHT", -15, -40)
     buttonContainer:SetHeight(30)
 
+    -- Buttons
     local pull15Btn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
     pull15Btn:SetSize(60, 25)
-    pull15Btn:SetPoint("TOPLEFT", buttonContainer, "TOPLEFT", 0, 0)
+    pull15Btn:SetPoint("LEFT", buttonContainer, "LEFT", 0, 0)
     pull15Btn:SetText("Пул 15")
     pull15Btn:SetScript("OnClick", function()
         DBM:CreatePizzaTimer(15, "Pull", true)
         TestAddon:MinimizeWindow()
-        self.currentCombatLog = List:new()
-        self:UpdateModuleDisplays()
+        TestAddon.mainFrame.logText:Clear()
     end)
-    frame.pull15Btn = pull15Btn
 
     local pull75Btn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
     pull75Btn:SetSize(60, 25)
@@ -341,139 +318,67 @@ function TestAddon:CreateMainFrame()
     pull75Btn:SetScript("OnClick", function()
         DBM:CreatePizzaTimer(70, "Pull", true)
         TestAddon:MinimizeWindow()
-        self.currentCombatLog = List:new()
-        self:UpdateModuleDisplays()
+        TestAddon.mainFrame.logText:Clear()
     end)
-    frame.pull75Btn = pull75Btn
 
     local resetBtn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
     resetBtn:SetSize(60, 25)
     resetBtn:SetPoint("LEFT", pull75Btn, "RIGHT", 5, 0)
     resetBtn:SetText("Ресет")
     resetBtn:SetScript("OnClick", function()
-        if self.currentCombatLog then
-            self.currentCombatLog = List:new()
-            self:UpdateModuleDisplays()
+        TestAddon.mainFrame.logText:Clear()
+    end)
+
+    -- Resize button
+    local resizeButton = CreateFrame("Button", nil, frame)
+    resizeButton:SetSize(16, 16)
+    resizeButton:SetPoint("BOTTOMRIGHT", -5, 5)
+    resizeButton:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    resizeButton:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    resizeButton:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    resizeButton:SetScript("OnMouseDown", function()
+        frame:StartSizing("BOTTOMRIGHT")
+    end)
+    resizeButton:SetScript("OnMouseUp", function()
+        frame:StopMovingOrSizing()
+    end)
+
+    -- Log text
+    local logText = CreateFrame("ScrollingMessageFrame", nil, frame)
+    logText:SetPoint("TOPLEFT", buttonContainer, "BOTTOMLEFT", 0, -8)
+    logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 8)
+    logText:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    logText:SetJustifyH("LEFT")
+    logText:SetFading(false)
+    logText:SetMaxLines(1000)
+    logText:EnableMouseWheel(true)
+    logText:SetHyperlinksEnabled(false)
+    logText:SetIndentedWordWrap(true)
+    logText:SetInsertMode("TOP")
+
+    -- Mouse wheel handler
+    logText:SetScript("OnMouseWheel", function(self, delta)
+        for i = 1, math.abs(delta) do
+            if delta > 0 then
+                self:ScrollUp()
+            else
+                self:ScrollDown()
+            end
         end
     end)
-    frame.resetBtn = resetBtn
 
-    -- Scroll frame
-    local scrollFrame = CreateFrame("ScrollFrame", "TestAddonScrollFrame", frame)
-    scrollFrame:SetPoint("TOP", buttonContainer, "BOTTOM", 0, -8)
-    scrollFrame:SetPoint("BOTTOM", frame, "BOTTOM", 0, 8)
-    scrollFrame:SetPoint("LEFT", frame, "LEFT", 12, 0)
-    scrollFrame:SetPoint("RIGHT", frame, "RIGHT", -26, 0)
-    scrollFrame:EnableMouseWheel(true)
-
-    -- Create scroll bar using UIPanelScrollBarTemplate
-    local scrollBar = CreateFrame("Slider", nil, scrollFrame, "UIPanelScrollBarTemplate")
-    scrollBar:SetPoint("TOPLEFT", scrollFrame, "TOPRIGHT", 0, -16)
-    scrollBar:SetPoint("BOTTOMLEFT", scrollFrame, "BOTTOMRIGHT", 0, 16)
-    scrollBar:SetMinMaxValues(0, 30)
-    scrollBar:SetValueStep(1)
-    scrollBar:SetValue(0)
-    scrollBar:SetWidth(16)
-    scrollBar:SetScript("OnValueChanged", function(self, value)
-        scrollFrame:SetVerticalScroll(value)
-        TestAddon:UpdateModuleDisplays()
-    end)
-
-    self.scrollBar = scrollBar
-    -- Add mouse wheel handling
-    scrollFrame:SetScript("OnMouseWheel", function(self, delta)
-        local current = scrollBar:GetValue()
-        local step = scrollBar:GetValueStep()
-        local newValue = math.max(current - delta * step, 0)
-        scrollBar:SetValue(newValue)
-    end)
-
-    -- Scroll child
-    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetPoint("TOPLEFT", scrollFrame, "TOPLEFT", 0, 0)
-    scrollChild:SetPoint("BOTTOMRIGHT", scrollFrame, "BOTTOMRIGHT", 0, 0)
-    scrollFrame:SetScrollChild(scrollChild)
-
-    frame.logScrollFrame = scrollFrame
-    frame.logScrollChild = scrollChild
-    frame.logScrollBar = scrollBar
+    -- Store references
     frame.buttonContainer = buttonContainer
+    frame.logText = logText
+
+    -- Size changed handler
+    frame:SetScript("OnSizeChanged", function(self, width, height)
+        local availableHeight = height - buttonContainer:GetHeight() - 48 -- 48 for padding and title
+        logText:SetHeight(availableHeight)
+    end)
 
     self.mainFrame = frame
-
-    frame:SetScript("OnSizeChanged", function(self, width, height)
-        -- Calculate available height for log frames
-        local availableHeight = height - buttonContainer:GetHeight() - 16 -- 16 for padding
-        self.maxVisibleFrames = math.floor(availableHeight / 22) -- 22 is frame height
-
-        TestAddon:UpdateModuleDisplays()
-    end)
-
     frame:Hide()
-end
-
-function TestAddon:UpdateModuleDisplays()
-    if not self.mainFrame or not self.currentCombatLog then
-        self:Print("UpdateModuleDisplays: No mainFrame or currentCombatLog")
-        return
-    end
-
-    local scrollChild = self.mainFrame.logScrollChild
-    local scrollFrame = self.mainFrame.logScrollFrame
-    local scrollBar = self.mainFrame.logScrollBar
-
-    if not scrollChild or not scrollFrame or not scrollBar then
-        self:Print("UpdateModuleDisplays: Missing required frames")
-        return
-    end
-
-    local frameHeight = 22
-    local maxVisibleFrames = self.mainFrame.maxVisibleFrames or 30
-
-    -- Calculate visible range
-    local currentScroll = math.ceil(scrollFrame:GetVerticalScroll())
-    local startIndex = currentScroll + 1
-
-    -- Display visible frames
-    local index = 1
-    local previousEntry
-    local frameIndex = 1
-
-    for entry in self.currentCombatLog:iter() do
-        if index >= startIndex and frameIndex <= maxVisibleFrames then
-            local frame = logFramePool[frameIndex]
-            frame:SetParent(scrollChild)
-            frame.messageText:SetText(entry)
-            frame:SetWidth(scrollFrame:GetWidth())
-            frame:Show()
-
-            if previousEntry then
-                frame:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, 0)
-                frame:SetPoint("TOPRIGHT", previousEntry, "BOTTOMRIGHT", 0, 0)
-            else
-                frame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
-                frame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, 0)
-            end
-
-            previousEntry = frame
-            frameIndex = frameIndex + 1
-        end
-        index = index + 1
-    end
-
-    -- Hide unused frames
-    for i = frameIndex, MAX_LOG_FRAMES do
-        logFramePool[i]:Hide()
-    end
-
-    -- Set scroll child height
-    scrollChild:SetHeight(math.max(maxVisibleFrames * frameHeight, scrollFrame:GetHeight()))
-    -- scrollChild:SetHeight(maxVisibleFrames * frameHeight)
-    -- scrollChild:SetHeight(scrollFrame:GetHeight())
-    scrollChild:SetWidth(scrollFrame:GetWidth())
-
-    -- Update scroll
-    scrollFrame:UpdateScrollChildRect()
 end
 
 function TestAddon:HandleSlashCommand(input)
@@ -493,7 +398,8 @@ function TestAddon:HandleSlashCommand(input)
     elseif input == "fill" then
         for i = 1, 50 do
             self:OnCombatLogEvent(string.format(
-                "Test message %d: |T%s:24:24:0:-2|t |T%s:24:24:0:-2|t |T%s:24:24:0:-2|t", i,
+                "Test message %d: |T%s:24:24:0:0|t |T%s:24:24:0:0|t |T%s:24:24:0:0|t |T%s:24:24:0:0|t |T%s:24:24:0:0|t",
+                i, "Interface\\Icons\\INV_Misc_QuestionMark", "Interface\\Icons\\INV_Misc_QuestionMark",
                 "Interface\\Icons\\INV_Misc_QuestionMark", "Interface\\Icons\\INV_Misc_QuestionMark",
                 "Interface\\Icons\\INV_Misc_QuestionMark"))
         end

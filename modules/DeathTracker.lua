@@ -86,7 +86,7 @@ function DeathTracker:ProcessPlayerDeath(log, playerName, timestamp)
 
         if spells[lastDamage.spellId] then
             msg = msg .. spells[lastDamage.spellId]
-            log(playerName, msg)
+            log(msg)
         end
     end
 end

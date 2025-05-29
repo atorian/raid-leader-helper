@@ -38,6 +38,86 @@ local defaults = {
     }
 }
 
+-- Frame pool management
+local MAX_LOG_FRAMES = 30
+local logFramePool = {}
+local visibleLogFrames = {}
+
+local function createLogFrame()
+    local entryFrame = CreateFrame("Button")
+    -- entryFrame:SetSize(400, 20)
+    entryFrame:SetHeight(20)
+    entryFrame:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight", "ADD")
+
+    -- -- Add border and background
+    -- entryFrame:SetBackdrop({
+    --     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    --     edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    --     tile = true,
+    --     tileSize = 32,
+    --     edgeSize = 16,
+    --     insets = {
+    --         left = 4,
+    --         right = 4,
+    --         top = 4,
+    --         bottom = 4
+    --     }
+    -- })
+    -- entryFrame:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
+    -- entryFrame:SetBackdropColor(0, 0, 0, 0.5)
+
+    -- Create and position the message text
+    local messageText = entryFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    messageText:SetPoint("LEFT", entryFrame, "LEFT", 4, 0)
+    messageText:SetPoint("RIGHT", entryFrame, "RIGHT", -4, 0)
+    messageText:SetJustifyH("LEFT")
+    messageText:SetJustifyV("TOP")
+    messageText:SetWordWrap(false)
+    entryFrame.messageText = messageText
+
+    return entryFrame
+end
+
+local function initializeLogFramePool()
+    for i = 1, MAX_LOG_FRAMES do
+        local frame = createLogFrame()
+        frame:Hide()
+        table.insert(logFramePool, frame)
+    end
+end
+
+local function getLogFrame()
+    local frame = table.remove(logFramePool)
+    if frame then
+        frame:Show()
+        table.insert(visibleLogFrames, frame)
+    end
+    return frame
+end
+
+local function releaseLogFrame(frame)
+    frame:Hide()
+    frame:ClearAllPoints()
+    frame.messageText:SetText("")
+
+    -- Remove from visible frames
+    for i, f in ipairs(visibleLogFrames) do
+        if f == frame then
+            table.remove(visibleLogFrames, i)
+            break
+        end
+    end
+
+    -- Add back to pool
+    table.insert(logFramePool, frame)
+end
+
+local function releaseAllLogFrames()
+    for _, frame in ipairs(visibleLogFrames) do
+        releaseLogFrame(frame)
+    end
+end
+
 -- Combat tracking
 TestAddon.activeEnemies = {}
 TestAddon.activePlayers = {} -- Now stores only players with Divine Intervention as guid = true
@@ -53,6 +133,8 @@ function TestAddon:OnInitialize()
     self.currentCombatLog = List.new()
 
     self:RegisterChatCommand("rlh", "HandleSlashCommand")
+
+    initializeLogFramePool()
 
     self:CreateMainFrame()
 
@@ -156,16 +238,10 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     return self.inCombat and self:checkCombatEndConditions()
 end
 
-function TestAddon:OnCombatLogEvent(player, message)
-    if not self.inCombat then
-        self.inCombat = true
-        self.currentCombatLog = List:new()
-    end
-
-    self:Print("RL Быдло: " .. player .. ": " .. message)
-
+function TestAddon:OnCombatLogEvent(message)
+    self:Print("RL Быдло: ", message)
     self.currentCombatLog:push_front(message)
-
+    self.scrollBar:SetMinMaxValues(0, self.currentCombatLog:length())
     self:UpdateModuleDisplays()
 end
 
@@ -249,6 +325,7 @@ function TestAddon:CreateMainFrame()
     end)
     resizeButton:SetScript("OnMouseUp", function()
         frame:StopMovingOrSizing()
+        TestAddon:UpdateModuleDisplays()
     end)
 
     -- Background
@@ -280,8 +357,6 @@ function TestAddon:CreateMainFrame()
     buttonContainer:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -15)
     buttonContainer:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -15, -15)
     buttonContainer:SetHeight(30)
-
-    -- Первая строка кнопок
 
     local pull15Btn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
     pull15Btn:SetSize(60, 25)
@@ -320,22 +395,33 @@ function TestAddon:CreateMainFrame()
     frame.resetBtn = resetBtn
 
     -- Scroll frame
-    local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    local scrollFrame = CreateFrame("ScrollFrame", "TestAddonScrollFrame", frame)
     scrollFrame:SetPoint("TOP", buttonContainer, "BOTTOM", 0, -8)
     scrollFrame:SetPoint("BOTTOM", frame, "BOTTOM", 0, 8)
     scrollFrame:SetPoint("LEFT", frame, "LEFT", 12, 0)
-    scrollFrame:SetPoint("RIGHT", frame, "RIGHT", -32, 0)
+    scrollFrame:SetPoint("RIGHT", frame, "RIGHT", -26, 0)
     scrollFrame:EnableMouseWheel(true)
 
-    scrollFrame:SetScript("OnMouseWheel", function(self, delta)
-        local current = self:GetVerticalScroll()
-        local maxScroll = self:GetVerticalScrollRange()
-        local step = 20
-        local newScroll = current - delta * step
+    -- Create scroll bar using UIPanelScrollBarTemplate
+    local scrollBar = CreateFrame("Slider", nil, scrollFrame, "UIPanelScrollBarTemplate")
+    scrollBar:SetPoint("TOPLEFT", scrollFrame, "TOPRIGHT", 0, -16)
+    scrollBar:SetPoint("BOTTOMLEFT", scrollFrame, "BOTTOMRIGHT", 0, 16)
+    scrollBar:SetMinMaxValues(0, 30)
+    scrollBar:SetValueStep(1)
+    scrollBar:SetValue(0)
+    scrollBar:SetWidth(16)
+    scrollBar:SetScript("OnValueChanged", function(self, value)
+        scrollFrame:SetVerticalScroll(value)
+        TestAddon:UpdateModuleDisplays()
+    end)
 
-        -- Ограничиваем скролл границами
-        newScroll = math.max(0, math.min(newScroll, maxScroll))
-        self:SetVerticalScroll(newScroll)
+    self.scrollBar = scrollBar
+    -- Add mouse wheel handling
+    scrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        local current = scrollBar:GetValue()
+        local step = scrollBar:GetValueStep()
+        local newValue = current - delta * step
+        scrollBar:SetValue(newValue)
     end)
 
     -- Scroll child
@@ -346,156 +432,99 @@ function TestAddon:CreateMainFrame()
 
     frame.logScrollFrame = scrollFrame
     frame.logScrollChild = scrollChild
+    frame.logScrollBar = scrollBar
     frame.buttonContainer = buttonContainer
 
     self.mainFrame = frame
 
     frame:SetScript("OnSizeChanged", function(self, width, height)
-        if scrollChild then
-            -- self.logScrollFrame:SetWidth(width)
-            -- TestAddon:UpdateModuleDisplays()
-            TestAddon:UpdateLogEntryLayout()
-        end
-
-        -- Проверяем видимость кнопок
-        local buttons = {self.pull15Btn, self.pull75Btn, self.resetBtn}
-        for _, button in ipairs(buttons) do
-            if button then
-                local buttonBottom = button:GetBottom()
-                local frameBottom = self:GetBottom()
-                if buttonBottom < frameBottom + 10 then
-                    button:Hide()
-                else
-                    button:Show()
-                end
-            end
-        end
+        TestAddon:UpdateModuleDisplays()
     end)
 
     frame:Hide()
 end
 
-function TestAddon:UpdateLogEntryLayout()
-    if not self.mainFrame then
-        return
-    end
-
-    local scrollChild = self.mainFrame.logScrollChild
-    if not scrollChild then
-        return
-    end
-
-    local scrollFrame = self.mainFrame.logScrollFrame
-    if not scrollFrame then
-        return
-    end
-
-    local newWidth = scrollFrame:GetWidth()
-    scrollChild:SetWidth(newWidth)
-
-    local totalHeight = 0
-    local previousEntry
-    local children = {scrollChild:GetChildren()}
-
-    -- Обновляем ширину и позиции всех элементов
-    for _, entryFrame in ipairs(children) do
-
-        -- entryFrame:SetWidth(newWidth - 10)
-        -- entryFrame.messageText:SetWidth(newWidth - 20)
-
-        -- Переопределяем позицию фрейма
-        entryFrame:ClearAllPoints()
-        if previousEntry then
-            entryFrame:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, 0)
-            entryFrame:SetPoint("TOPRIGHT", previousEntry, "TOPRIGHT", 0, 0)
-        else
-            entryFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
-            entryFrame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, 0)
-        end
-
-        totalHeight = totalHeight + entryFrame:GetHeight() + 2
-        previousEntry = entryFrame
-    end
-
-    -- Устанавливаем высоту контейнера
-    scrollChild:SetHeight(math.max(totalHeight + 10, scrollFrame:GetHeight()))
-end
-
 function TestAddon:UpdateModuleDisplays()
-    if not self.mainFrame then
-        TestAddon:Print("ERROR: No mainFrame found")
-        return
-    end
-
-    if not self.currentCombatLog then
-        TestAddon:Print("ERROR: No currentCombatLog found")
+    if not self.mainFrame or not self.currentCombatLog then
+        self:Print("UpdateModuleDisplays: No mainFrame or currentCombatLog")
         return
     end
 
     local scrollChild = self.mainFrame.logScrollChild
-    if not scrollChild then
-        TestAddon:Print("ERROR: No scrollChild found")
-        return
-    end
-
     local scrollFrame = self.mainFrame.logScrollFrame
-    if not scrollFrame then
-        TestAddon:Print("ERROR: No scrollFrame found")
+    local scrollBar = self.mainFrame.logScrollBar
+
+    if not scrollChild or not scrollFrame or not scrollBar then
+        self:Print("UpdateModuleDisplays: Missing required frames")
         return
     end
 
-    local children = {scrollChild:GetChildren()}
-    for _, child in pairs(children) do
-        child:Hide()
-        child:SetParent(nil)
-    end
-
-    -- scrollChild:SetWidth(scrollFrame:GetWidth())
+    local frameHeight = 22 -- Height of each log frame + spacing
+    local maxVisibleFrames = 30 -- Always show all 30 frames
 
     local previousEntry
     local totalHeight = 0
+    local frameCount = 0
 
+    -- Calculate visible range
+    local currentScroll = scrollFrame:GetVerticalScroll()
+    TestAddon:Print("Current Scroll:", currentScroll)
+    local startIndex = math.floor(currentScroll / frameHeight) + 1
+
+    -- Get existing frames
+    local existingFrames = {scrollChild:GetChildren()}
+    local frameIndex = 1
+
+    -- Display visible frames
+    local index = 1
     for entry in self.currentCombatLog:iter() do
-        local wrapperButton = self:CreateLogEntryFrame(entry)
-        wrapperButton:SetParent(scrollChild)
+        if index >= currentScroll and frameCount < maxVisibleFrames then
+            local frame
+            if frameIndex <= #existingFrames then
+                -- Reuse existing frame
+                frame = existingFrames[frameIndex]
+                frame.messageText:SetText(entry)
+            else
+                -- Create new frame if needed
+                frame = getLogFrame()
+                if frame then
+                    frame:SetParent(scrollChild)
+                    frame.messageText:SetText(entry)
+                end
+            end
 
-        if previousEntry then
-            wrapperButton:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, 0)
-            wrapperButton:SetPoint("TOPRIGHT", previousEntry, "BOTTOMRIGHT", 0, 0)
-        else
-            wrapperButton:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
-            wrapperButton:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -30, 0)
+            if frame then
+                frame:SetWidth(scrollFrame:GetWidth() - 30) -- Account for scrollbar
+
+                if previousEntry then
+                    frame:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, 0)
+                    frame:SetPoint("TOPRIGHT", previousEntry, "BOTTOMRIGHT", 0, 0)
+                else
+                    frame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
+                    frame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -30, 0)
+                end
+
+                frame:Show()
+                previousEntry = frame
+                frameCount = frameCount + 1
+                totalHeight = totalHeight + frameHeight
+                frameIndex = frameIndex + 1
+            end
         end
-
-        wrapperButton:Show()
-
-        previousEntry = wrapperButton
-        totalHeight = totalHeight + wrapperButton:GetHeight() + 2
+        index = index + 1
     end
 
-    -- Устанавливаем высоту контейнера
+    -- Hide unused frames
+    for i = frameIndex, #existingFrames do
+        existingFrames[i]:Hide()
+    end
+
+    -- Set scroll child height
     scrollChild:SetHeight(math.max(totalHeight + 10, scrollFrame:GetHeight()))
+    scrollChild:SetWidth(scrollFrame:GetWidth() - 30)
 
-    -- Обновляем скролл
+    -- Update scroll
     scrollFrame:UpdateScrollChildRect()
-    scrollFrame:SetVerticalScroll(0)
-end
-
-function TestAddon:CreateLogEntryFrame(message)
-    local entryFrame = CreateFrame("Button")
-    entryFrame:SetSize(400, 20)
-    entryFrame:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight", "ADD")
-
-    -- Create and position the message text
-    local messageText = entryFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    messageText:SetPoint("LEFT", entryFrame, "LEFT", 5, 0)
-    messageText:SetPoint("RIGHT", entryFrame, "RIGHT", -5, 0)
-    messageText:SetJustifyH("LEFT")
-    messageText:SetJustifyV("TOP")
-    messageText:SetWordWrap(false)
-    messageText:SetText(message)
-
-    return entryFrame
 end
 
 function TestAddon:HandleSlashCommand(input)
@@ -511,6 +540,14 @@ function TestAddon:HandleSlashCommand(input)
         print("/rlh - показать/скрыть окно")
         print("/rlh help - показать помощь")
         print("/rlh debug - включить/выключить режим отладки")
+        print("/rlh fill - включить/выключить режим отладки")
+    elseif input == "fill" then
+        for i = 1, 10 do
+            self:OnCombatLogEvent(string.format(
+                "Test message %d: |T%s:24:24:0:-2|t |T%s:24:24:0:-2|t |T%s:24:24:0:-2|t", i,
+                "Interface\\Icons\\INV_Misc_QuestionMark", "Interface\\Icons\\INV_Misc_QuestionMark",
+                "Interface\\Icons\\INV_Misc_QuestionMark"))
+        end
     elseif input == "debug" then
         self.db.profile.debug = not self.db.profile.debug
         print("Режим отладки: " .. (self.db.profile.debug and "включен" or "выключен"))

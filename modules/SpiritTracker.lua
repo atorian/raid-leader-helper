@@ -27,7 +27,7 @@ end
 
 function SpiritTracker:CHAT_MSG_MONSTER_YELL(msg)
     if msg == shieldOffRu or msg == shieldOffEn then
-        TestAddon:OnCombatLogEvent(nil, string.format("%s Леди: Щит разбит",
+        TestAddon:OnCombatLogEvent(string.format("%s Леди: Щит разбит",
             date("%H:%M:%S", eventData.timestamp)))
         -- self:UnregisterEvent("CHAT_MSG_MONSTER_YELL")
     end

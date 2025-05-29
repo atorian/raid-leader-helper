@@ -38,9 +38,8 @@ end
 function SppellTracker:handleEvent(eventData, log)
     if (eventData.event == "SPELL_AURA_APPLIED") then
         if TRACKED_SPELLS[eventData.spellId] then
-            log(eventData.sourceName,
-                string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", eventData.timestamp),
-                    eventData.sourceName, TRACKED_SPELLS[eventData.spellId], eventData.destName))
+            log(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", eventData.timestamp),
+                eventData.sourceName, TRACKED_SPELLS[eventData.spellId], eventData.destName))
         end
     end
 end

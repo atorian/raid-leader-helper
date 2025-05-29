@@ -154,7 +154,7 @@ function MisdirectionTracker:GenerateReport(hunterName, log)
         end
     end
 
-    log(hunterName, report)
+    log(report)
 end
 
 return MisdirectionTracker

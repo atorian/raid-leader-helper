@@ -1,5 +1,4 @@
 local TestAddon = LibStub("AceAddon-3.0"):NewAddon("TestAddon", "AceConsole-3.0", "AceEvent-3.0")
-local List = List
 
 -- Utility functions
 local function wipe(t)
@@ -7,18 +6,6 @@ local function wipe(t)
         t[k] = nil
     end
     return t
-end
-
-local function toString(val)
-    if type(val) == "table" then
-        local str = "{"
-        for k, v in pairs(val) do
-            str = str .. tostring(k) .. "=" .. toString(v) .. ","
-        end
-        return str .. "}"
-    else
-        return tostring(val)
-    end
 end
 
 -- Constants
@@ -39,8 +26,6 @@ local defaults = {
 }
 
 -- Frame pool management
-local MAX_LOG_FRAMES = 30
-local logFramePool = {}
 
 local function createLogFrame()
     local entryFrame = CreateFrame("Button")
@@ -58,25 +43,6 @@ local function createLogFrame()
     return entryFrame
 end
 
-local function initializeLogFramePool()
-    for i = 1, MAX_LOG_FRAMES do
-        local frame = createLogFrame()
-        frame:Hide()
-        logFramePool[i] = frame
-    end
-end
-
-local function getLogFrame()
-    return table.remove(logFramePool)
-end
-
-local function releaseLogFrame(frame)
-    frame:Hide()
-    frame:ClearAllPoints()
-    frame.messageText:SetText("")
-    table.insert(logFramePool, frame)
-end
-
 -- Combat tracking
 TestAddon.activeEnemies = {}
 TestAddon.activePlayers = {} -- Now stores only players with Divine Intervention as guid = true
@@ -91,8 +57,6 @@ function TestAddon:OnInitialize()
     self.db = LibStub("AceDB-3.0"):New("TestAddonDB", defaults, true)
 
     self:RegisterChatCommand("rlh", "HandleSlashCommand")
-
-    initializeLogFramePool()
 
     self:CreateMainFrame()
 
@@ -287,7 +251,7 @@ function TestAddon:CreateMainFrame()
 
     -- Title
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", 15, -15)
+    title:SetPoint("TOPLEFT", 15, 10)
     title:SetText("RL Быдло")
 
     -- Close button
@@ -296,9 +260,9 @@ function TestAddon:CreateMainFrame()
 
     -- Button container
     local buttonContainer = CreateFrame("Frame", nil, frame)
-    buttonContainer:SetPoint("TOPLEFT", 15, -40)
-    buttonContainer:SetPoint("TOPRIGHT", -15, -40)
-    buttonContainer:SetHeight(30)
+    buttonContainer:SetPoint("TOPLEFT", 12, -12)
+    buttonContainer:SetPoint("TOPRIGHT", -15, -16)
+    buttonContainer:SetHeight(25)
 
     -- Buttons
     local pull15Btn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")

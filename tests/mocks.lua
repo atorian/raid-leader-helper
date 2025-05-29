@@ -30,6 +30,18 @@ bit = {
     end
 }
 
+local function toString(val)
+    if type(val) == "table" then
+        local str = "{"
+        for k, v in pairs(val) do
+            str = str .. tostring(k) .. "=" .. toString(v) .. ","
+        end
+        return str .. "}"
+    else
+        return tostring(val)
+    end
+end
+
 -- Таблица для хранения GUID'ов юнитов
 local unitGuids = {}
 

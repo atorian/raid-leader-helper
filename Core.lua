@@ -41,32 +41,12 @@ local defaults = {
 -- Frame pool management
 local MAX_LOG_FRAMES = 30
 local logFramePool = {}
-local visibleLogFrames = {}
 
 local function createLogFrame()
     local entryFrame = CreateFrame("Button")
-    -- entryFrame:SetSize(400, 20)
     entryFrame:SetHeight(20)
     entryFrame:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight", "ADD")
 
-    -- -- Add border and background
-    -- entryFrame:SetBackdrop({
-    --     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-    --     edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-    --     tile = true,
-    --     tileSize = 32,
-    --     edgeSize = 16,
-    --     insets = {
-    --         left = 4,
-    --         right = 4,
-    --         top = 4,
-    --         bottom = 4
-    --     }
-    -- })
-    -- entryFrame:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
-    -- entryFrame:SetBackdropColor(0, 0, 0, 0.5)
-
-    -- Create and position the message text
     local messageText = entryFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     messageText:SetPoint("LEFT", entryFrame, "LEFT", 4, 0)
     messageText:SetPoint("RIGHT", entryFrame, "RIGHT", -4, 0)
@@ -82,40 +62,19 @@ local function initializeLogFramePool()
     for i = 1, MAX_LOG_FRAMES do
         local frame = createLogFrame()
         frame:Hide()
-        table.insert(logFramePool, frame)
+        logFramePool[i] = frame
     end
 end
 
 local function getLogFrame()
-    local frame = table.remove(logFramePool)
-    if frame then
-        frame:Show()
-        table.insert(visibleLogFrames, frame)
-    end
-    return frame
+    return table.remove(logFramePool)
 end
 
 local function releaseLogFrame(frame)
     frame:Hide()
     frame:ClearAllPoints()
     frame.messageText:SetText("")
-
-    -- Remove from visible frames
-    for i, f in ipairs(visibleLogFrames) do
-        if f == frame then
-            table.remove(visibleLogFrames, i)
-            break
-        end
-    end
-
-    -- Add back to pool
     table.insert(logFramePool, frame)
-end
-
-local function releaseAllLogFrames()
-    for _, frame in ipairs(visibleLogFrames) do
-        releaseLogFrame(frame)
-    end
 end
 
 -- Combat tracking
@@ -239,9 +198,19 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 end
 
 function TestAddon:OnCombatLogEvent(message)
+    if not self.currentCombatLog then
+        self.currentCombatLog = List:new()
+    end
+
     self:Print("RL Быдло: ", message)
     self.currentCombatLog:push_front(message)
-    self.scrollBar:SetMinMaxValues(0, math.max(self.currentCombatLog:length() - 30, 30))
+
+    -- Update scroll bar max value
+    if self.mainFrame and self.mainFrame.logScrollBar then
+        local maxVisibleFrames = self.mainFrame.maxVisibleFrames or 30
+        self.mainFrame.logScrollBar:SetMinMaxValues(0, math.max(self.currentCombatLog:length() - maxVisibleFrames, 0))
+    end
+
     self:UpdateModuleDisplays()
 end
 
@@ -415,7 +384,7 @@ function TestAddon:CreateMainFrame()
     scrollFrame:SetScript("OnMouseWheel", function(self, delta)
         local current = scrollBar:GetValue()
         local step = scrollBar:GetValueStep()
-        local newValue = current - delta * step
+        local newValue = math.max(current - delta * step, 0)
         scrollBar:SetValue(newValue)
     end)
 
@@ -433,6 +402,10 @@ function TestAddon:CreateMainFrame()
     self.mainFrame = frame
 
     frame:SetScript("OnSizeChanged", function(self, width, height)
+        -- Calculate available height for log frames
+        local availableHeight = height - buttonContainer:GetHeight() - 16 -- 16 for padding
+        self.maxVisibleFrames = math.floor(availableHeight / 22) -- 22 is frame height
+
         TestAddon:UpdateModuleDisplays()
     end)
 
@@ -454,68 +427,50 @@ function TestAddon:UpdateModuleDisplays()
         return
     end
 
-    local frameHeight = 22 -- Height of each log frame + spacing
-    local maxVisibleFrames = 30 -- Always show all 30 frames
-
-    local previousEntry
-    local totalHeight = 0
-    local frameCount = 0
+    local frameHeight = 22
+    local maxVisibleFrames = self.mainFrame.maxVisibleFrames or 30
 
     -- Calculate visible range
     local currentScroll = math.ceil(scrollFrame:GetVerticalScroll())
-    TestAddon:Print("Current Scroll:", currentScroll)
-
-    -- Get existing frames
-    local existingFrames = {scrollChild:GetChildren()}
-    local frameIndex = 1
+    local startIndex = currentScroll + 1
 
     -- Display visible frames
     local index = 1
+    local previousEntry
+    local frameIndex = 1
+
     for entry in self.currentCombatLog:iter() do
-        if index >= currentScroll and frameCount < maxVisibleFrames then
-            local frame
-            if frameIndex <= #existingFrames then
-                -- Reuse existing frame
-                frame = existingFrames[frameIndex]
-                frame.messageText:SetText(entry)
+        if index >= startIndex and frameIndex <= maxVisibleFrames then
+            local frame = logFramePool[frameIndex]
+            frame:SetParent(scrollChild)
+            frame.messageText:SetText(entry)
+            frame:SetWidth(scrollFrame:GetWidth())
+            frame:Show()
+
+            if previousEntry then
+                frame:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, 0)
+                frame:SetPoint("TOPRIGHT", previousEntry, "BOTTOMRIGHT", 0, 0)
             else
-                -- Create new frame if needed
-                frame = getLogFrame()
-                if frame then
-                    frame:SetParent(scrollChild)
-                    frame.messageText:SetText(entry)
-                end
+                frame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
+                frame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, 0)
             end
 
-            if frame then
-                frame:SetWidth(scrollFrame:GetWidth() - 30) -- Account for scrollbar
-
-                if previousEntry then
-                    frame:SetPoint("TOPLEFT", previousEntry, "BOTTOMLEFT", 0, 0)
-                    frame:SetPoint("TOPRIGHT", previousEntry, "BOTTOMRIGHT", 0, 0)
-                else
-                    frame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
-                    frame:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", -30, 0)
-                end
-
-                frame:Show()
-                previousEntry = frame
-                frameCount = frameCount + 1
-                totalHeight = totalHeight + frameHeight
-                frameIndex = frameIndex + 1
-            end
+            previousEntry = frame
+            frameIndex = frameIndex + 1
         end
         index = index + 1
     end
 
     -- Hide unused frames
-    for i = frameIndex, #existingFrames do
-        existingFrames[i]:Hide()
+    for i = frameIndex, MAX_LOG_FRAMES do
+        logFramePool[i]:Hide()
     end
 
     -- Set scroll child height
-    scrollChild:SetHeight(math.max(totalHeight + 10, scrollFrame:GetHeight()))
-    scrollChild:SetWidth(scrollFrame:GetWidth() - 30)
+    scrollChild:SetHeight(math.max(maxVisibleFrames * frameHeight, scrollFrame:GetHeight()))
+    -- scrollChild:SetHeight(maxVisibleFrames * frameHeight)
+    -- scrollChild:SetHeight(scrollFrame:GetHeight())
+    scrollChild:SetWidth(scrollFrame:GetWidth())
 
     -- Update scroll
     scrollFrame:UpdateScrollChildRect()
@@ -536,7 +491,7 @@ function TestAddon:HandleSlashCommand(input)
         print("/rlh debug - включить/выключить режим отладки")
         print("/rlh fill - включить/выключить режим отладки")
     elseif input == "fill" then
-        for i = 1, 10 do
+        for i = 1, 50 do
             self:OnCombatLogEvent(string.format(
                 "Test message %d: |T%s:24:24:0:-2|t |T%s:24:24:0:-2|t |T%s:24:24:0:-2|t", i,
                 "Interface\\Icons\\INV_Misc_QuestionMark", "Interface\\Icons\\INV_Misc_QuestionMark",

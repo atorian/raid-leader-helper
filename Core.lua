@@ -241,14 +241,9 @@ end
 function TestAddon:OnCombatLogEvent(message)
     self:Print("RL Быдло: ", message)
     self.currentCombatLog:push_front(message)
-    self.scrollBar:SetMinMaxValues(0, self.currentCombatLog:length())
+    self.scrollBar:SetMinMaxValues(0, math.max(self.currentCombatLog:length() - 30, 30))
     self:UpdateModuleDisplays()
 end
-
--- local handlers = List.new()
--- function TestAddon:withHandler(handler)
---     handlers.push_back(handler)
--- end
 
 function TestAddon:EndCombat(reason)
     self.inCombat = false
@@ -467,9 +462,8 @@ function TestAddon:UpdateModuleDisplays()
     local frameCount = 0
 
     -- Calculate visible range
-    local currentScroll = scrollFrame:GetVerticalScroll()
+    local currentScroll = math.ceil(scrollFrame:GetVerticalScroll())
     TestAddon:Print("Current Scroll:", currentScroll)
-    local startIndex = math.floor(currentScroll / frameHeight) + 1
 
     -- Get existing frames
     local existingFrames = {scrollChild:GetChildren()}

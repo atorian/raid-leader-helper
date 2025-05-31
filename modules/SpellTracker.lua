@@ -1,9 +1,12 @@
 local TestAddon = LibStub("AceAddon-3.0"):GetAddon("TestAddon")
 local SppellTracker = TestAddon:NewModule("SppellTracker", "AceEvent-3.0")
 
+-- Флаг для отслеживания первого урона
+local firstDamageDone = false
+
 function SppellTracker:OnEnable()
     TestAddon:Print("RL Быдло: TauntTracker включен")
-
+    firstDamageDone = false
 end
 
 -- Список отслеживаемых способностей
@@ -24,6 +27,7 @@ local TRACKED_SPELLS = {
 function SppellTracker:OnInitialize()
     TestAddon:Print("RL Быдло: SppellTracker инициализируется")
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    self:RegisterMessage("TestAddon_CombatEnded", "reset")
 end
 
 function SppellTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
@@ -33,9 +37,16 @@ function SppellTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 end
 
 function SppellTracker:reset()
+    firstDamageDone = false
 end
 
 function SppellTracker:handleEvent(eventData, log)
+    if not firstDamageDone and (eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE") then
+        firstDamageDone = true
+        log(string.format("%s |cFFFFFFFF%s|r Первый урон по |cFFFFFFFF%s|r",
+            date("%H:%M:%S", eventData.timestamp), eventData.sourceName, eventData.destName))
+    end
+
     if (eventData.event == "SPELL_AURA_APPLIED") then
         if TRACKED_SPELLS[eventData.spellId] then
             log(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", eventData.timestamp),

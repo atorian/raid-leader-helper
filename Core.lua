@@ -291,6 +291,7 @@ function TestAddon:CreateMainFrame()
     resetBtn:SetText("Ресет")
     resetBtn:SetScript("OnClick", function()
         TestAddon.mainFrame.logText:Clear()
+        self:SendMessage("TestAddon_CombatEnded")
     end)
 
     -- Resize button
@@ -310,7 +311,7 @@ function TestAddon:CreateMainFrame()
     -- Log text
     local logText = CreateFrame("ScrollingMessageFrame", nil, frame)
     logText:SetPoint("TOPLEFT", buttonContainer, "BOTTOMLEFT", 0, -8)
-    logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 8)
+    logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -32, 8)
     logText:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
     logText:SetJustifyH("LEFT")
     logText:SetFading(false)
@@ -318,6 +319,7 @@ function TestAddon:CreateMainFrame()
     logText:EnableMouseWheel(true)
     logText:SetHyperlinksEnabled(false)
     logText:SetIndentedWordWrap(true)
+    logText:SetJustifyV("TOP")
     logText:SetInsertMode("TOP")
 
     -- Mouse wheel handler

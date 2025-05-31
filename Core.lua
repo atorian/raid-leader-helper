@@ -21,9 +21,18 @@ local defaults = {
         debug = false,
         minimap = {
             hide = false
-        }
+        },
+        combatHistory = {} -- Add combat history storage
     }
 }
+
+-- Combat history structures
+TestAddon.combatHistory = {} -- Array for combat history
+TestAddon.currentCombat = {
+    startTime = nil,
+    messages = List.new() -- List for current combat messages
+}
+TestAddon.viewingCurrentCombat = true -- Initialize to true by default
 
 TestAddon.activeEnemies = {}
 TestAddon.activePlayers = {}
@@ -35,6 +44,21 @@ function TestAddon:OnInitialize()
     self.activePlayers = self.activePlayers or {}
 
     self.db = LibStub("AceDB-3.0"):New("TestAddonDB", defaults, true)
+
+    -- Load combat history from DB
+    if self.db.profile.combatHistory then
+        for _, combat in ipairs(self.db.profile.combatHistory) do
+            local messages = List.new()
+            for _, msg in ipairs(combat.messages) do
+                messages:push_back(msg)
+            end
+            table.insert(self.combatHistory, {
+                startTime = combat.startTime,
+                endTime = combat.endTime,
+                messages = messages
+            })
+        end
+    end
 
     self:RegisterChatCommand("rlh", "HandleSlashCommand")
 
@@ -48,28 +72,57 @@ end
 function TestAddon:OnEnable()
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterEvent("PLAYER_REGEN_DISABLED")
+    self:RegisterEvent("PLAYER_REGEN_ENABLED")
 end
 
 local function isEnemy(flags)
     return bit.band(flags or 0, TestAddon.ENEMY_FLAGS) == TestAddon.ENEMY_FLAGS
 end
 
+local function isPlayer(flags)
+    return bit.band(flags or 0, TestAddon.PLAYER_FLAGS) == TestAddon.PLAYER_FLAGS
+end
+
 function TestAddon:trackCombatants(event)
-    if isEnemy(event.sourceFlags) then
-        self.activeEnemies[event.sourceGUID] = true
-    else
-        self.activePlayers[event.sourceGUID] = self.activePlayers[event.sourceGUID] or false
+
+    if not event.destName then
+        return
     end
 
-    if isEnemy(event.destFlags) then
-        self.activeEnemies[event.destGUID] = true
-    else
-        self.activePlayers[event.destGUID] = self.activePlayers[event.destGUID] or false
+    TestAddon:Print("From", event.sourceName, event.sourceFlags, "To", event.destName, event.destFlags, eventData.event)
+
+    if isEnemy(event.sourceFlags) then
+        self:Print("ENEMY 1:", event.sourceGUID, event.destName)
+        self.activeEnemies[event.sourceGUID] = true
+        return
     end
+    if isEnemy(event.destFlags) then
+        self:Print("ENEMY 2:", event.destName, event.destFlags)
+        self.activeEnemies[event.destGUID] = true
+        return
+    end
+    if isPlayer(event.sourceFlags) then
+        self:Print("PLAYER 1:", event.sourceGUID, event.destName, event.event)
+        self.activePlayers[event.sourceGUID] = self.activePlayers[event.sourceGUID] or false
+        return
+    end
+    if isPlayer(event.destFlags) then
+        self:Print("PLAYER 2:", event.destName, event.destFlags)
+        self.activePlayers[event.destGUID] = self.activePlayers[event.destGUID] or false
+        return
+    end
+end
+
+function TestAddon:PLAYER_REGEN_ENABLED()
+    -- Бой окончен
+    self:Print("Combat ended - Regen Enabled")
+    -- TODO: workaround Lady Deathwhisper
 end
 
 function TestAddon:PLAYER_REGEN_DISABLED()
     self.inCombat = true
+
+    self:DisplayCombat(self.currentCombat)
     if self.db.profile.debug then
         self:Print("Combat started - player entered combat")
     end
@@ -79,6 +132,8 @@ function TestAddon:checkCombatEndConditions()
     if not next(self.activeEnemies) then
         self:EndCombat("all_enemies_dead")
         return true
+    else
+        self:Print("Еще есть живые враги")
     end
 
     local hasAlivePlayers = false
@@ -102,16 +157,25 @@ function TestAddon:checkCombatEndConditions()
         self:EndCombat("all_players_divine_intervention")
         return true
     end
-
+    self:Print("not a combat")
     return false
+end
+
+function affectingGroup(event)
+    return bit.band(event.sourceFlags or 0, TestAddon.PLAYER_FLAGS) > 0 or
+               bit.band(event.destFlags or 0, TestAddon.PLAYER_FLAGS) > 0
 end
 
 -- TODO: Case: после Халиона кто-то может сагрить Трэш и это ресетнет лог.
 -- можно запоминать бои с боссами
 --
 function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
-
     local eventData = blizzardEvent(...)
+
+    if not affectingGroup(eventData) then
+        self:Print("Event not affecting team")
+        return
+    end
 
     self:trackCombatants(eventData)
 
@@ -137,12 +201,45 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 end
 
 function TestAddon:OnCombatLogEvent(message)
-    -- self:Print("RL Быдло: ", message)
+    if not self.currentCombat.startTime then
+        self.currentCombat.startTime = time()
+    end
+
+    self:Print("RL Быдло: ", message)
+
+    self.currentCombat.messages:push_back(message)
     self.mainFrame.logText:AddMessage(message)
 end
 
 function TestAddon:EndCombat(reason)
     self.inCombat = false
+
+    self:Print("Should save combat?", self.currentCombat.startTime, self.currentCombat.messages:length())
+
+    -- Save current combat to history if it has messages
+    if self.currentCombat.startTime and self.currentCombat.messages:length() > 0 then
+        -- Convert List to array for storage
+        local messages = {}
+        for msg in self.currentCombat.messages:iter() do
+            table.insert(messages, msg)
+        end
+
+        local combat = {
+            startTime = self.currentCombat.startTime,
+            endTime = time(),
+            messages = messages
+        }
+
+        table.insert(self.combatHistory, combat)
+        self:Print("Combat Saved to history")
+    end
+
+    -- Reset current combat
+    self.currentCombat = {
+        startTime = nil,
+        messages = List.new()
+    }
+
     wipe(self.activeEnemies)
     wipe(self.activePlayers)
     self:Print("Combat ended", reason)
@@ -165,11 +262,6 @@ local function sendSync(prefix, msg)
 end
 
 function TestAddon:MinimizeWindow()
-    if not self.mainFrame then
-        return
-    end
-
-    -- Save current size if not already minimized
     if not self.isMinimized then
         self.savedSize = {
             width = self.mainFrame:GetWidth(),
@@ -177,7 +269,6 @@ function TestAddon:MinimizeWindow()
         }
     end
 
-    -- Set minimum size
     self.mainFrame:SetSize(240, 150)
     self.isMinimized = true
 end
@@ -187,8 +278,27 @@ function TestAddon:RestoreWindow()
     self.isMinimized = false
 end
 
-function TestAddon:CreateMainFrame()
+function TestAddon:UpdateCombatDropdown()
+    local dropdown = self.mainFrame.combatDropdown
+    UIDropDownMenu_Initialize(dropdown, dropdown.initialize)
+end
 
+function TestAddon:DisplayCombat(combat)
+    self.mainFrame.logText:Clear()
+    if combat and combat.messages then
+        if type(combat.messages) == "table" and combat.messages.iter then
+            for message in combat.messages:iter() do
+                self.mainFrame.logText:AddMessage(message)
+            end
+        else
+            for _, message in ipairs(combat.messages) do
+                self.mainFrame.logText:AddMessage(message)
+            end
+        end
+    end
+end
+
+function TestAddon:CreateMainFrame()
     local frame = CreateFrame("Frame", "TestAddonMainFrame", UIParent)
     frame:SetSize(300, 600)
     frame:SetPoint("CENTER")
@@ -201,7 +311,6 @@ function TestAddon:CreateMainFrame()
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
 
-    -- Background
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -226,7 +335,7 @@ function TestAddon:CreateMainFrame()
 
     -- Button container
     local buttonContainer = CreateFrame("Frame", nil, frame)
-    buttonContainer:SetPoint("TOPLEFT", 12, -12)
+    buttonContainer:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -5)
     buttonContainer:SetPoint("TOPRIGHT", -15, -16)
     buttonContainer:SetHeight(25)
 
@@ -256,6 +365,11 @@ function TestAddon:CreateMainFrame()
     resetBtn:SetPoint("LEFT", pull75Btn, "RIGHT", 5, 0)
     resetBtn:SetText("Ресет")
     resetBtn:SetScript("OnClick", function()
+        TestAddon.activeEnemies = {}
+        TestAddon.currentCombat = {
+            startTime = nil,
+            messages = List.new()
+        }
         TestAddon.mainFrame.logText:Clear()
         self:SendMessage("TestAddon_CombatEnded")
     end)
@@ -305,12 +419,43 @@ function TestAddon:CreateMainFrame()
 
     -- Size changed handler
     frame:SetScript("OnSizeChanged", function(self, width, height)
-        local availableHeight = height - buttonContainer:GetHeight() - 48 -- 48 for padding and title
+        local availableHeight = height - buttonContainer:GetHeight() - 48
         logText:SetHeight(availableHeight)
     end)
 
     self.mainFrame = frame
     frame:Hide()
+end
+
+function TestAddon:ShowCombatHistory()
+    if #self.combatHistory == 0 then
+        self:Print("История боев пуста")
+        return
+    end
+
+    self:Print("История боев:")
+    for index, combat in ipairs(self.combatHistory) do
+        local startTime = date("%H:%M:%S", combat.startTime)
+        local endTime = date("%H:%M:%S", combat.endTime)
+        self:Print(string.format("%d. Бой (%s - %s)", index, startTime, endTime))
+    end
+end
+
+function TestAddon:ClearCombatHistory()
+    self.combatHistory = {}
+    self:Print("История боев очищена")
+end
+
+function TestAddon:ShowCombatByIndex(index)
+    if index < 1 or index > #self.combatHistory then
+        self:Print(
+            "Неверный номер боя. Используйте /rlh history для просмотра списка боев")
+        return
+    end
+
+    local combat = self.combatHistory[index]
+    self:DisplayCombat(combat)
+    self.mainFrame:Show()
 end
 
 function TestAddon:HandleSlashCommand(input)
@@ -327,6 +472,9 @@ function TestAddon:HandleSlashCommand(input)
         print("/rlh help - показать помощь")
         print("/rlh debug - включить/выключить режим отладки")
         print("/rlh fill - включить/выключить режим отладки")
+        print("/rlh hist - показать историю боев")
+        print("/rlh clear - очистить историю боев")
+        print("/rlh b # - показать бой по номеру")
     elseif input == "fill" then
         for i = 1, 50 do
             self:OnCombatLogEvent(string.format(
@@ -338,6 +486,13 @@ function TestAddon:HandleSlashCommand(input)
     elseif input == "debug" then
         self.db.profile.debug = not self.db.profile.debug
         print("Режим отладки: " .. (self.db.profile.debug and "включен" or "выключен"))
+    elseif input == "hist" then
+        self:ShowCombatHistory()
+    elseif input == "clear" then
+        self:ClearCombatHistory()
+    elseif input:match("^b%s+(%d+)$") then
+        local index = tonumber(input:match("^b%s+(%d+)$"))
+        self:ShowCombatByIndex(index)
     end
 end
 

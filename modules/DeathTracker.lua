@@ -15,13 +15,17 @@ end
 
 local METEORIT = 75879
 local LUZHA = 75949
-local LEZVIA = 77845
+local LEZVIA25OB = 77844
+local LEZVIA10HM = 77845
+local LEZVIA25HM = 77846
 -- 74792 - metka
 
 local spells = {
     [METEORIT] = " от метеорита",
     [LUZHA] = " в луже",
-    [LEZVIA] = " в лезвиях"
+    [LEZVIA10HM] = " в лезвиях",
+    [LEZVIA25HM] = " в лезвиях",
+    [LEZVIA25OB] = " в лезвиях"
 }
 
 function DeathTracker:OnEnable()
@@ -64,6 +68,7 @@ function DeathTracker:handleEvent(eventData, log)
                 spellName = "Автоатака"
             })
         elseif eventData.event == "UNIT_DIED" then
+            TestAddon:Print("DeathTracker: Событие смерти получено для", eventData.destName)
             self:ProcessPlayerDeath(log, eventData.destName, eventData.timestamp)
         end
     end
@@ -75,6 +80,7 @@ end
 -- end
 
 function DeathTracker:ProcessPlayerDeath(log, playerName, timestamp)
+    TestAddon:Print("DeathTracker: Обработка смерти", playerName)
     local msg = string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t", date("%H:%M:%S", timestamp), playerName,
         "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8")
 
@@ -86,7 +92,13 @@ function DeathTracker:ProcessPlayerDeath(log, playerName, timestamp)
 
         if spells[lastDamage.spellId] then
             msg = msg .. spells[lastDamage.spellId]
-            log(msg)
+            TestAddon:Print("DeathTracker: Отправка сообщения в лог:", msg)
+            if log then
+                log(msg)
+            else
+                TestAddon:Print(
+                    "DeathTracker: Ошибка - функция логирования не передана")
+            end
         end
     end
 end

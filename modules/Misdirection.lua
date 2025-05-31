@@ -26,6 +26,7 @@ local TRACKED_SPELLS = {
     [53353] = "Interface\\Icons\\Ability_Hunter_ChimeraShot2",
     [53352] = "Interface\\Icons\\ability_hunter_explosiveshot",
     [48996] = "Interface\\Icons\\ability_meleedamage", -- удар ящера
+    [61006] = "Interface\\Icons\\ability_hunter_assassinate2", -- удар ящера
     [75] = "Interface\\Icons\\inv_weapon_bow_55",
     -- Рога
     [57934] = "Interface\\Icons\\ability_rogue_tricksofthetrade",
@@ -52,7 +53,9 @@ local TRACKED_SPELLS = {
 local SKIP_SPELLS = {
     [57965] = true, -- яд роги
     [53254] = true, -- "мятежная стрела ханта(лук с леди?)"
-    [71834] = true -- быстрая стрельба
+    [71834] = true, -- быстрая стрельба
+    [69193] = true, -- Ранец Корабли
+    [71341] = true -- Пакт - Ланатель
 }
 
 -- Active pulls tracking

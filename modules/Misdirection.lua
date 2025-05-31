@@ -26,7 +26,7 @@ local TRACKED_SPELLS = {
     [53353] = "Interface\\Icons\\Ability_Hunter_ChimeraShot2",
     [53352] = "Interface\\Icons\\ability_hunter_explosiveshot",
     [48996] = "Interface\\Icons\\ability_meleedamage", -- удар ящера
-    [61006] = "Interface\\Icons\\ability_hunter_assassinate2", -- удар ящера
+    [61006] = "Interface\\Icons\\ability_hunter_assassinate2", -- Килшот
     [75] = "Interface\\Icons\\inv_weapon_bow_55",
     -- Рога
     [57934] = "Interface\\Icons\\ability_rogue_tricksofthetrade",
@@ -47,7 +47,6 @@ local TRACKED_SPELLS = {
     [22482] = "Interface\\Icons\\ability_rogue_slicedice", -- шквал клинков - todo: группировать, выводить иконку + счетчик целей
     [52874] = "Interface\\Icons\\ability_rogue_fanofknives",
     [48668] = "Interface\\Icons\\ability_rogue_eviscerate"
-    -- 71834
 }
 
 local SKIP_SPELLS = {
@@ -64,7 +63,6 @@ local pullDamage = {}
 
 function MisdirectionTracker:OnEnable()
     TestAddon:Print("RL Быдло: MisdirectionTracker включен")
-
 end
 
 function MisdirectionTracker:OnInitialize()

@@ -21,7 +21,8 @@ local TRACKED_SPELLS = {
     [5209] = "Interface\\Icons\\Ability_Druid_ChallangingRoar", -- Druid: Growl
     [10278] = "Interface\\Icons\\Spell_Holy_SealOfProtection", -- Paladin: Корона
     [31789] = "Interface\\Icons\\inv_shoulder_37", -- Paladin: Праведна защита
-    [19752] = "Interface\\Icons\\Spell_Nature_TimeStop" -- Paladin: Hand of Protection (BoP)
+    [19752] = "Interface\\Icons\\Spell_Nature_TimeStop", -- Paladin: Hand of Protection (BoP)
+    [20748] = "Interface\\Icons\\spell_nature_reincarnation" -- Paladin: Hand of Protection (BoP)
 }
 
 function SppellTracker:OnInitialize()

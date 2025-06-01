@@ -42,6 +42,7 @@ function SppellTracker:reset()
 end
 
 function SppellTracker:handleEvent(eventData, log)
+    -- TODO: filter only events from Party or Roid to avoid noise
     if not firstDamageDone and (eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE") then
         firstDamageDone = true
         log(string.format("%s |cFFFFFFFF%s|r Первый урон по |cFFFFFFFF%s|r",

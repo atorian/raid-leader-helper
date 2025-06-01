@@ -25,32 +25,12 @@ local defaults = {
     }
 }
 
--- Frame pool management
-
-local function createLogFrame()
-    local entryFrame = CreateFrame("Button")
-    entryFrame:SetHeight(20)
-    entryFrame:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight", "ADD")
-
-    local messageText = entryFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    messageText:SetPoint("LEFT", entryFrame, "LEFT", 4, 0)
-    messageText:SetPoint("RIGHT", entryFrame, "RIGHT", -4, 0)
-    messageText:SetJustifyH("LEFT")
-    messageText:SetJustifyV("TOP")
-    messageText:SetWordWrap(false)
-    entryFrame.messageText = messageText
-
-    return entryFrame
-end
-
--- Combat tracking
 TestAddon.activeEnemies = {}
-TestAddon.activePlayers = {} -- Now stores only players with Divine Intervention as guid = true
+TestAddon.activePlayers = {}
 
 function TestAddon:OnInitialize()
     self:Print("RL Быдло: Начало инициализации аддона")
 
-    -- Инициализируем таблицы для отслеживания
     self.activeEnemies = self.activeEnemies or {}
     self.activePlayers = self.activePlayers or {}
 
@@ -68,10 +48,6 @@ end
 function TestAddon:OnEnable()
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterEvent("PLAYER_REGEN_DISABLED")
-end
-
-local function isPlayerTargeted(event)
-    return bit.band(event.destFlags, COMBATLOG_OBJECT_TYPE_PLAYER) == COMBATLOG_OBJECT_TYPE_PLAYER
 end
 
 local function isEnemy(flags)
@@ -161,12 +137,7 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 end
 
 function TestAddon:OnCombatLogEvent(message)
-    if not self.mainFrame or not self.mainFrame.logText then
-        self:Print("RL Быдло: No mainFrame or logText")
-        return
-    end
-
-    self:Print("RL Быдло: ", message)
+    -- self:Print("RL Быдло: ", message)
     self.mainFrame.logText:AddMessage(message)
 end
 
@@ -212,22 +183,18 @@ function TestAddon:MinimizeWindow()
 end
 
 function TestAddon:RestoreWindow()
-    if not self.mainFrame or not self.savedSize then
-        return
-    end
-
     self.mainFrame:SetSize(self.savedSize.width, self.savedSize.height)
     self.isMinimized = false
 end
 
 function TestAddon:CreateMainFrame()
-    -- Create main frame
+
     local frame = CreateFrame("Frame", "TestAddonMainFrame", UIParent)
     frame:SetSize(300, 600)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:SetResizable(true)
-    frame:SetMinResize(240, 150)
+    frame:SetMinResize(240, 100)
     frame:SetMaxResize(800, 1000)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
@@ -249,7 +216,6 @@ function TestAddon:CreateMainFrame()
         }
     })
 
-    -- Title
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", 15, 10)
     title:SetText("RL Быдло")
@@ -313,13 +279,13 @@ function TestAddon:CreateMainFrame()
     logText:SetPoint("TOPLEFT", buttonContainer, "BOTTOMLEFT", 0, -8)
     logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -32, 8)
     logText:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    logText:SetJustifyV("TOP")
     logText:SetJustifyH("LEFT")
     logText:SetFading(false)
     logText:SetMaxLines(1000)
     logText:EnableMouseWheel(true)
     logText:SetHyperlinksEnabled(false)
     logText:SetIndentedWordWrap(true)
-    logText:SetJustifyV("TOP")
     logText:SetInsertMode("TOP")
 
     -- Mouse wheel handler

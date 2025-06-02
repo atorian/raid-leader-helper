@@ -68,7 +68,6 @@ function DeathTracker:handleEvent(eventData, log)
                 spellName = "Автоатака"
             })
         elseif eventData.event == "UNIT_DIED" then
-            TestAddon:Print("DeathTracker: Событие смерти получено для", eventData.destName)
             self:ProcessPlayerDeath(log, eventData.destName, eventData.timestamp)
         end
     end
@@ -80,25 +79,20 @@ end
 -- end
 
 function DeathTracker:ProcessPlayerDeath(log, playerName, timestamp)
-    TestAddon:Print("DeathTracker: Обработка смерти", playerName)
+    -- TestAddon:Print("DeathTracker: Обработка смерти", playerName)
     local msg = string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t", date("%H:%M:%S", timestamp), playerName,
         "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8")
 
     local lastDamage = self.dmgEvents[playerName]
 
     if lastDamage then
-        TestAddon:Print("DeathTracker: Последний урон", lastDamage.source, lastDamage.spellName,
-            lastDamage.amount)
+        -- TestAddon:Print("DeathTracker: Последний урон", lastDamage.source, lastDamage.spellName,
+        --     lastDamage.amount)
 
         if spells[lastDamage.spellId] then
             msg = msg .. spells[lastDamage.spellId]
-            TestAddon:Print("DeathTracker: Отправка сообщения в лог:", msg)
-            if log then
-                log(msg)
-            else
-                TestAddon:Print(
-                    "DeathTracker: Ошибка - функция логирования не передана")
-            end
+            -- TestAddon:Print("DeathTracker: Отправка сообщения в лог:", msg)
+            log(msg)
         end
     end
 end

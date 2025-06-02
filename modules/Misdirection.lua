@@ -69,7 +69,7 @@ function MisdirectionTracker:OnInitialize()
     TestAddon:Print("RL Быдло: MisdirectionTracker инициализируется")
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self.log = function(...)
-        TestAddon:Print("RL Быдло: MisdirectionTracker =>", ...)
+        -- TestAddon:Print("RL Быдло: MisdirectionTracker =>", ...)
         TestAddon:OnCombatLogEvent(...)
     end
 end

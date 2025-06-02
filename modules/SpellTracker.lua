@@ -38,15 +38,30 @@ function SppellTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 end
 
 function SppellTracker:reset()
+    TestAddon:Print("SppellTracker Got Reset")
     firstDamageDone = false
+end
+
+local PLAYER_FLAGS = 0x511
+local ENEMY_FLAGS = 0xa48
+local BOSS_FLAG = 0x00000001
+
+local function isPlayer(flags)
+    return bit.band(flags or 0, PLAYER_FLAGS) > 0
+end
+
+local function isBoss(flags)
+    return bit.band(flags or 0, BOSS_FLAG) > 0
 end
 
 function SppellTracker:handleEvent(eventData, log)
     -- TODO: filter only events from Party or Roid to avoid noise
     if not firstDamageDone and (eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE") then
-        firstDamageDone = true
-        log(string.format("%s |cFFFFFFFF%s|r Первый урон по |cFFFFFFFF%s|r",
-            date("%H:%M:%S", eventData.timestamp), eventData.sourceName, eventData.destName))
+        if isPlayer(eventData.sourceFlags) and isBoss(eventData.destFlags) then
+            firstDamageDone = true
+            log(string.format("%s |cFFFFFFFF%s|r Первый урон по |cFFFFFFFF%s|r",
+                date("%H:%M:%S", eventData.timestamp), eventData.sourceName, eventData.destName))
+        end
     end
 
     if (eventData.event == "SPELL_AURA_APPLIED") then

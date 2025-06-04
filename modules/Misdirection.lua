@@ -27,6 +27,7 @@ local TRACKED_SPELLS = {
     [53352] = "Interface\\Icons\\ability_hunter_explosiveshot",
     [48996] = "Interface\\Icons\\ability_meleedamage", -- удар ящера
     [61006] = "Interface\\Icons\\ability_hunter_assassinate2", -- Килшот
+    [53339] = "Interface\\Icons\\ability_hunter_swiftstrike", -- Килшот
     [75] = "Interface\\Icons\\inv_weapon_bow_55",
     -- Рога
     [57934] = "Interface\\Icons\\ability_rogue_tricksofthetrade",

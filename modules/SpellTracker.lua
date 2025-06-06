@@ -22,11 +22,12 @@ local TRACKED_SPELLS = {
     [10278] = "Interface\\Icons\\Spell_Holy_SealOfProtection", -- Paladin: Корона
     [31789] = "Interface\\Icons\\inv_shoulder_37", -- Paladin: Праведна защита
     [19752] = "Interface\\Icons\\Spell_Nature_TimeStop", -- Paladin: Hand of Protection (BoP)
-    [20748] = "Interface\\Icons\\spell_nature_reincarnation" -- Paladin: Hand of Protection (BoP)
+    [26994] = "Interface\\Icons\\spell_nature_reincarnation", -- Друид БР
+    [48477] = "Interface\\Icons\\spell_nature_reincarnation" -- Друид БР
 }
 
 function SppellTracker:OnInitialize()
-    TestAddon:Print("RL Быдло: SppellTracker инициализируется")
+    TestAddon:Debug("RL Быдло: SppellTracker инициализируется")
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
 end
@@ -38,26 +39,25 @@ function SppellTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 end
 
 function SppellTracker:reset()
-    TestAddon:Print("SppellTracker Got Reset")
+    TestAddon:Debug("SppellTracker Got Reset")
     firstDamageDone = false
 end
 
 local PLAYER_FLAGS = 0x511
 local ENEMY_FLAGS = 0xa48
-local BOSS_FLAG = 0x00000001
-
+-- 0x10a48
 local function isPlayer(flags)
-    return bit.band(flags or 0, PLAYER_FLAGS) > 0
+    return flags == PLAYER_FLAGS
 end
 
-local function isBoss(flags)
-    return bit.band(flags or 0, BOSS_FLAG) > 0
+local function isEnemy(flags)
+    return bit.band(flags or 0, ENEMY_FLAGS) > 0
 end
 
 function SppellTracker:handleEvent(eventData, log)
-    -- TODO: filter only events from Party or Roid to avoid noise
     if not firstDamageDone and (eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE") then
-        if isPlayer(eventData.sourceFlags) and isBoss(eventData.destFlags) then
+        if isPlayer(eventData.sourceFlags) and isEnemy(eventData.destFlags) then
+            TestAddon:Debug("First damage", eventData.sourceName, eventData.destName)
             firstDamageDone = true
             log(string.format("%s |cFFFFFFFF%s|r Первый урон по |cFFFFFFFF%s|r",
                 date("%H:%M:%S", eventData.timestamp), eventData.sourceName, eventData.destName))

@@ -36,12 +36,20 @@ TestAddon.viewingCurrentCombat = true -- Initialize to true by default
 
 TestAddon.activeEnemies = {}
 TestAddon.activePlayers = {}
+TestAddon.enemyEvents = {} -- Structure to track enemies and their events
+
+function TestAddon:Debug(...)
+    if self.db.profile.debug then
+        self:Print(...)
+    end
+end
 
 function TestAddon:OnInitialize()
     self:Print("RL Быдло: Начало инициализации аддона")
 
     self.activeEnemies = self.activeEnemies or {}
     self.activePlayers = self.activePlayers or {}
+    self.enemyEvents = self.enemyEvents or {}
 
     self.db = LibStub("AceDB-3.0"):New("TestAddonDB", defaults, true)
 
@@ -76,64 +84,107 @@ function TestAddon:OnEnable()
 end
 
 local function isEnemy(flags)
-    return bit.band(flags or 0, TestAddon.ENEMY_FLAGS) == TestAddon.ENEMY_FLAGS
+    return bit.band(flags or 0, TestAddon.ENEMY_FLAGS) > 0
 end
 
 local function isPlayer(flags)
-    return bit.band(flags or 0, TestAddon.PLAYER_FLAGS) == TestAddon.PLAYER_FLAGS
+    return flags == TestAddon.PLAYER_FLAGS
 end
 
-function TestAddon:trackCombatants(event)
+local LADY_KONTROL = 71289
 
-    if not event.destName then
+function TestAddon:trackCombatants(event)
+    if not event.destName or event.spellId == LADY_KONTROL then
         return
     end
 
-    TestAddon:Print("From", event.sourceName, event.sourceFlags, "To", event.destName, event.destFlags, eventData.event)
+    if self.activeEnemies[event.sourceGUID] == 0 or self.activeEnemies[event.destGUID] == 0 then
+        self:Debug("Enemy is alrady dead", event.timestamp, self.activeEnemies[event.sourceGUID])
+        return
+    end
 
     if isEnemy(event.sourceFlags) then
-        self:Print("ENEMY 1:", event.sourceGUID, event.destName)
+        self:Debug("ENEMY 1 From:", event.sourceName, "To", event.destName, event.sourceGUID,
+            self.activeEnemies[event.sourceGUID], event.event, event.timestamp)
         self.activeEnemies[event.sourceGUID] = true
+        self.enemyEvents[event.sourceGUID] = {
+            name = event.sourceName,
+            event = event.event,
+            spellId = event.spellId
+        }
         return
     end
     if isEnemy(event.destFlags) then
-        self:Print("ENEMY 2:", event.destName, event.destFlags)
+        self:Debug("ENEMY 2 From:", event.sourceName, "To", event.destName, event.destGUID,
+            self.activeEnemies[event.destGUID], event.event, event.timestamp)
         self.activeEnemies[event.destGUID] = true
+        self.enemyEvents[event.destGUID] = {
+            name = event.destName,
+            event = event.event,
+            spellId = event.spellId
+        }
         return
     end
     if isPlayer(event.sourceFlags) then
-        self:Print("PLAYER 1:", event.sourceGUID, event.destName, event.event)
+        self:Debug("PLAYER 1:", event.sourceName, event.event)
         self.activePlayers[event.sourceGUID] = self.activePlayers[event.sourceGUID] or false
         return
     end
     if isPlayer(event.destFlags) then
-        self:Print("PLAYER 2:", event.destName, event.destFlags)
+        self:Debug("PLAYER 2:", event.destName, event.destFlags)
         self.activePlayers[event.destGUID] = self.activePlayers[event.destGUID] or false
         return
     end
 end
 
+function TestAddon:printActiveEnemies()
+    local enemyNames = {}
+    local count = 0
+    for guid, v in pairs(self.activeEnemies) do
+        if self.enemyEvents[guid] and v ~= 0 then
+            table.insert(enemyNames,
+                self.enemyEvents[guid].name .. " [" .. guid .. "] > " .. self.enemyEvents[guid].event)
+            count = count + 1
+            if count >= 3 then
+                break
+            end
+        end
+    end
+
+    if count > 0 then
+        self:Print("Еще есть живые враги:", table.concat(enemyNames, ", "))
+    else
+        self:Print("Врагов нет")
+    end
+end
+
 function TestAddon:PLAYER_REGEN_ENABLED()
     -- Бой окончен
-    self:Print("Combat ended - Regen Enabled")
+    self:Print("Regen Enabled")
+    self:printActiveEnemies()
     -- TODO: workaround Lady Deathwhisper
 end
 
 function TestAddon:PLAYER_REGEN_DISABLED()
     self.inCombat = true
-
+    wipe(self.activeEnemies)
     self:DisplayCombat(self.currentCombat)
-    if self.db.profile.debug then
-        self:Print("Combat started - player entered combat")
-    end
+    self:Debug("Combat started - player entered combat")
 end
 
 function TestAddon:checkCombatEndConditions()
-    if not next(self.activeEnemies) then
+    -- Check if all enemies are dead (value is 0)
+    local allEnemiesDead = true
+    for _, value in pairs(self.activeEnemies) do
+        if value ~= 0 then
+            allEnemiesDead = false
+            break
+        end
+    end
+
+    if allEnemiesDead then
         self:EndCombat("all_enemies_dead")
         return true
-    else
-        self:Print("Еще есть живые враги")
     end
 
     local hasAlivePlayers = false
@@ -157,7 +208,7 @@ function TestAddon:checkCombatEndConditions()
         self:EndCombat("all_players_divine_intervention")
         return true
     end
-    self:Print("not a combat")
+    -- self:Print("not a combat")
     return false
 end
 
@@ -173,21 +224,25 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     local eventData = blizzardEvent(...)
 
     if not affectingGroup(eventData) then
-        self:Print("Event not affecting team")
         return
     end
 
-    self:trackCombatants(eventData)
+    if eventData.event == "UNIT_DIED" or eventData.event == "PARTY_KILL" then
 
-    if eventData.event == "UNIT_DIED" then
-        if self.activeEnemies[eventData.sourceGUID] then
-            self.activeEnemies[eventData.sourceGUID] = nil
+        self:Debug(eventData.event, eventData.destName, eventData.destGUID, self.activeEnemies[eventData.destGUID])
+
+        if self.activeEnemies[eventData.destGUID] then
+            self.activeEnemies[eventData.destGUID] = 0
         else
-            self.activePlayers[eventData.sourceGUID] = nil
+            self.activePlayers[eventData.destGUID] = 0
         end
+
+        self:Debug(eventData.event, self.activeEnemies[eventData.destGUID])
 
         return self.inCombat and self:checkCombatEndConditions()
     end
+
+    self:trackCombatants(eventData)
 
     -- Track Divine Intervention
     if eventData.event == "SPELL_AURA_APPLIED" and eventData.spellId == self.DIVINE_INTERVENTION then
@@ -205,7 +260,7 @@ function TestAddon:OnCombatLogEvent(message)
         self.currentCombat.startTime = time()
     end
 
-    self:Print("RL Быдло: ", message)
+    -- self:Print("RL Быдло: ", message)
 
     self.currentCombat.messages:push_back(message)
     self.mainFrame.logText:AddMessage(message)
@@ -214,7 +269,7 @@ end
 function TestAddon:EndCombat(reason)
     self.inCombat = false
 
-    self:Print("Should save combat?", self.currentCombat.startTime, self.currentCombat.messages:length())
+    self:Debug("Should save combat?", self.currentCombat.startTime, self.currentCombat.messages:length())
 
     -- Save current combat to history if it has messages
     if self.currentCombat.startTime and self.currentCombat.messages:length() > 0 then
@@ -231,7 +286,7 @@ function TestAddon:EndCombat(reason)
         }
 
         table.insert(self.combatHistory, combat)
-        self:Print("Combat Saved to history")
+        self:Debug("Combat Saved to history")
     end
 
     -- Reset current combat
@@ -240,9 +295,9 @@ function TestAddon:EndCombat(reason)
         messages = List.new()
     }
 
-    wipe(self.activeEnemies)
     wipe(self.activePlayers)
-    self:Print("Combat ended", reason)
+    wipe(self.enemyEvents) -- Clear enemy events when combat ends
+    self:Debug("Combat ended", reason)
     self:SendMessage("TestAddon_CombatEnded")
 end
 
@@ -488,6 +543,8 @@ function TestAddon:HandleSlashCommand(input)
         print("Режим отладки: " .. (self.db.profile.debug and "включен" or "выключен"))
     elseif input == "hist" then
         self:ShowCombatHistory()
+    elseif input == "combat" then
+        self:printActiveEnemies()
     elseif input == "clear" then
         self:ClearCombatHistory()
     elseif input:match("^b%s+(%d+)$") then

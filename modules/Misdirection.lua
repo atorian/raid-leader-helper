@@ -63,11 +63,11 @@ local activePulls = {}
 local pullDamage = {}
 
 function MisdirectionTracker:OnEnable()
-    TestAddon:Print("RL Быдло: MisdirectionTracker включен")
+    TestAddon:Debug("RL Быдло: MisdirectionTracker включен")
 end
 
 function MisdirectionTracker:OnInitialize()
-    TestAddon:Print("RL Быдло: MisdirectionTracker инициализируется")
+    TestAddon:Debug("RL Быдло: MisdirectionTracker инициализируется")
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self.log = function(...)
         -- TestAddon:Print("RL Быдло: MisdirectionTracker =>", ...)

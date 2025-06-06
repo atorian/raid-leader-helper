@@ -13,7 +13,7 @@ local shieldOffRu = "Довольно! Пришла пора взять все �
 local shieldOffEn = "Enough! I see I must take matters into my own hands!"
 
 function SpiritTracker:OnInitialize()
-    TestAddon:Print("SpiritTracker: Инициализация")
+    TestAddon:Debug("SpiritTracker: Инициализация")
     self.currentSpirits = {}
     self.report = {}
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
@@ -22,10 +22,11 @@ function SpiritTracker:OnInitialize()
 end
 
 function SpiritTracker:OnEnable()
-    TestAddon:Print("SpiritTracker: Включен")
+    TestAddon:Debug("SpiritTracker: Включен")
 end
 
 function SpiritTracker:CHAT_MSG_MONSTER_YELL(msg)
+    -- TODO: Debug
     if msg == shieldOffRu or msg == shieldOffEn then
         TestAddon:OnCombatLogEvent(string.format("%s Леди: Щит разбит",
             date("%H:%M:%S", eventData.timestamp)))

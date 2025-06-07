@@ -30,7 +30,8 @@ local defaults = {
 TestAddon.combatHistory = {} -- Array for combat history
 TestAddon.currentCombat = {
     startTime = nil,
-    messages = List.new() -- List for current combat messages
+    messages = List.new(), -- List for current combat messages
+    firstEnemy = nil -- Name of the first enemy in combat
 }
 TestAddon.viewingCurrentCombat = true -- Initialize to true by default
 
@@ -112,6 +113,10 @@ function TestAddon:trackCombatants(event)
             event = event.event,
             spellId = event.spellId
         }
+        -- Save first enemy name if not set yet
+        if not self.currentCombat.firstEnemy then
+            self.currentCombat.firstEnemy = event.sourceName
+        end
         return
     end
     if isEnemy(event.destFlags) then
@@ -123,6 +128,10 @@ function TestAddon:trackCombatants(event)
             event = event.event,
             spellId = event.spellId
         }
+        -- Save first enemy name if not set yet
+        if not self.currentCombat.firstEnemy then
+            self.currentCombat.firstEnemy = event.destName
+        end
         return
     end
     if isPlayer(event.sourceFlags) then
@@ -282,7 +291,8 @@ function TestAddon:EndCombat(reason)
         local combat = {
             startTime = self.currentCombat.startTime,
             endTime = time(),
-            messages = messages
+            messages = messages,
+            firstEnemy = self.currentCombat.firstEnemy
         }
 
         table.insert(self.combatHistory, combat)
@@ -292,7 +302,8 @@ function TestAddon:EndCombat(reason)
     -- Reset current combat
     self.currentCombat = {
         startTime = nil,
-        messages = List.new()
+        messages = List.new(),
+        firstEnemy = nil
     }
 
     wipe(self.activePlayers)
@@ -492,7 +503,8 @@ function TestAddon:ShowCombatHistory()
     for index, combat in ipairs(self.combatHistory) do
         local startTime = date("%H:%M:%S", combat.startTime)
         local endTime = date("%H:%M:%S", combat.endTime)
-        self:Print(string.format("%d. Бой (%s - %s)", index, startTime, endTime))
+        local enemyInfo = combat.firstEnemy or ""
+        self:Print(string.format("%d. Бой%s (%s - %s)", index, enemyInfo, startTime, endTime))
     end
 end
 

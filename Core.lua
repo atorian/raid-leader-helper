@@ -1,4 +1,5 @@
 local TestAddon = LibStub("AceAddon-3.0"):NewAddon("TestAddon", "AceConsole-3.0", "AceEvent-3.0")
+local AceGUI = LibStub("AceGUI-3.0")
 
 -- Utility functions
 local function wipe(t)
@@ -440,6 +441,90 @@ function TestAddon:CreateMainFrame()
         self:SendMessage("TestAddon_CombatEnded")
     end)
 
+    -- History button
+    local historyBtn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
+    historyBtn:SetSize(25, 25)
+    historyBtn:SetPoint("LEFT", resetBtn, "RIGHT", 5, 0)
+    historyBtn:SetText("1")
+
+    -- Create dropdown frame
+    local dropdownFrame = CreateFrame("Frame", nil, UIParent)
+    dropdownFrame:SetPoint("TOPLEFT", historyBtn, "BOTTOMLEFT", 0, -5)
+    dropdownFrame:SetSize(200, 20)
+    dropdownFrame:Hide()
+
+    -- Create AceGUI dropdown
+    local dropdown = AceGUI:Create("Dropdown")
+    dropdown:SetParent(dropdownFrame)
+    dropdown:SetPoint("TOPLEFT", dropdownFrame, "TOPLEFT")
+    dropdown:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT")
+    dropdown:SetLabel("История боев")
+    dropdown:SetCallback("OnValueChanged", function(_, _, key)
+        if key == "current" then
+            TestAddon:DisplayCombat(TestAddon.currentCombat)
+        else
+            TestAddon:ShowCombatByIndex(tonumber(key))
+        end
+        TestAddon.mainFrame:Show()
+    end)
+
+    -- Function to update dropdown list
+    function TestAddon:UpdateCombatDropdown()
+        self:Print("Updating dropdown list")
+
+        local list = {{
+            text = "Текущий бой",
+            value = "current",
+            disabled = not self.currentCombat.startTime
+        }, {
+            text = "Тестовый бой 1",
+            value = "test1"
+        }, {
+            text = "Тестовый бой 2",
+            value = "test2"
+        }}
+
+        for i, combat in ipairs(self.combatHistory) do
+            local startTime = date("%H:%M:%S", combat.startTime)
+            local endTime = date("%H:%M:%S", combat.endTime)
+            local enemyInfo = combat.firstEnemy or ""
+            table.insert(list, {
+                text = string.format("%d. %s (%s - %s)", i, enemyInfo, startTime, endTime),
+                value = tostring(i)
+            })
+        end
+
+        dropdown:SetList(list)
+        self:Print("Dropdown list updated with " .. #list .. " items")
+    end
+
+    historyBtn:SetScript("OnClick", function(self, button)
+        if button == "LeftButton" then
+            TestAddon:Print("Button clicked")
+            TestAddon:UpdateCombatDropdown()
+            if dropdownFrame:IsShown() then
+                dropdownFrame:Hide()
+                TestAddon:Print("Hiding dropdown")
+            else
+                dropdownFrame:Show()
+                TestAddon:Print("Showing dropdown")
+            end
+        end
+    end)
+
+    -- Hide dropdown when clicking outside
+    local function HideDropdown()
+        if dropdownFrame:IsShown() then
+            dropdownFrame:Hide()
+        end
+    end
+
+    UIParent:HookScript("OnMouseDown", function(self, button)
+        if button == "LeftButton" then
+            HideDropdown()
+        end
+    end)
+
     -- Resize button
     local resizeButton = CreateFrame("Button", nil, frame)
     resizeButton:SetSize(16, 16)
@@ -527,7 +612,6 @@ end
 
 function TestAddon:HandleSlashCommand(input)
     if input == "" then
-        -- Toggle main window
         if self.mainFrame:IsShown() then
             self.mainFrame:Hide()
         else
@@ -563,6 +647,49 @@ function TestAddon:HandleSlashCommand(input)
         local index = tonumber(input:match("^b%s+(%d+)$"))
         self:ShowCombatByIndex(index)
     end
+end
+
+function TestAddon:ShowHistoryMenu(anchor)
+    local menu = {{
+        text = "Текущий бой",
+        notCheckable = true,
+        func = function()
+            self:DisplayCombat(self.currentCombat)
+            self.mainFrame:Show()
+        end,
+        disabled = not self.currentCombat.startTime
+    }, {
+        text = "История боев",
+        notCheckable = true,
+        isTitle = true
+    }}
+
+    -- Add combat history items
+    for i, combat in ipairs(self.combatHistory) do
+        local startTime = date("%H:%M:%S", combat.startTime)
+        local endTime = date("%H:%M:%S", combat.endTime)
+        local enemyInfo = combat.firstEnemy or ""
+        table.insert(menu, {
+            text = string.format("%d. %s (%s - %s)", i, enemyInfo, startTime, endTime),
+            notCheckable = true,
+            func = function()
+                self:ShowCombatByIndex(i)
+            end
+        })
+    end
+
+    -- Add clear history option if there are saved combats
+    if #self.combatHistory > 0 then
+        table.insert(menu, {
+            text = "Очистить историю",
+            notCheckable = true,
+            func = function()
+                self:ClearCombatHistory()
+            end
+        })
+    end
+
+    EasyMenu(menu, anchor, "cursor", 0, 0, "MENU")
 end
 
 return TestAddon

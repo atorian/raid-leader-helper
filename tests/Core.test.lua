@@ -1,3 +1,4 @@
+local M = require('../lib/List')
 local M = require('tests.mocks')
 local blizzardEvent = require('../lib/blizzardEvent')
 local TestAddon = require("Core")
@@ -98,5 +99,103 @@ describe("TestAddon.blizzardEvent", function()
         assert.are.equal(args.spellName, spellName)
         assert.are.equal(args.spellSchool, spellSchool)
         assert.are.equal(args.auraType, auraType)
+    end)
+end)
+
+describe("TestAddon.affectingGroup", function()
+    it("should return true when source is player (0x511)", function()
+        local event = {
+            sourceFlags = 0x511,
+            destFlags = 0xa48
+        }
+        assert.is_true(affectingGroup(event))
+    end)
+
+    it("should return true when source is party member (0x512)", function()
+        local event = {
+            sourceFlags = 0x512,
+            destFlags = 0xa48
+        }
+        assert.is_true(affectingGroup(event))
+    end)
+
+    it("should return true when source is raid member (0x514)", function()
+        local event = {
+            sourceFlags = 0x514,
+            destFlags = 0xa48
+        }
+        assert.is_true(affectingGroup(event))
+    end)
+
+    it("should return true when destination is player (0x511)", function()
+        local event = {
+            sourceFlags = 0xa48,
+            destFlags = 0x511
+        }
+        assert.is_true(affectingGroup(event))
+    end)
+
+    it("should return true when destination is party member (0x512)", function()
+        local event = {
+            sourceFlags = 0xa48,
+            destFlags = 0x512
+        }
+        assert.is_true(affectingGroup(event))
+    end)
+
+    it("should return true when destination is raid member (0x514)", function()
+        local event = {
+            sourceFlags = 0xa48,
+            destFlags = 0x514
+        }
+        assert.is_true(affectingGroup(event))
+    end)
+
+    it("should return false when neither source nor destination is player/party/raid", function()
+        local event = {
+            sourceFlags = 0xa48,
+            destFlags = 0xa48
+        }
+        assert.is_false(affectingGroup(event))
+    end)
+
+    it("should handle nil flags", function()
+        local event = {
+            sourceFlags = nil,
+            destFlags = nil
+        }
+        assert.is_false(affectingGroup(event))
+    end)
+
+    it("should ignore events from other players (0x510)", function()
+        local event = {
+            sourceFlags = 0x510, -- Player but not in group/raid
+            destFlags = 0xa48
+        }
+        assert.is_false(affectingGroup(event))
+    end)
+
+    it("should ignore events to other players (0x510)", function()
+        local event = {
+            sourceFlags = 0xa48,
+            destFlags = 0x510 -- Player but not in group/raid
+        }
+        assert.is_false(affectingGroup(event))
+    end)
+
+    it("should ignore events from neutral NPCs (0x518)", function()
+        local event = {
+            sourceFlags = 0x518, -- NPC but not in group/raid
+            destFlags = 0xa48
+        }
+        assert.is_false(affectingGroup(event))
+    end)
+
+    it("should ignore events to neutral NPCs (0x518)", function()
+        local event = {
+            sourceFlags = 0xa48,
+            destFlags = 0x518 -- NPC but not in group/raid
+        }
+        assert.is_false(affectingGroup(event))
     end)
 end)

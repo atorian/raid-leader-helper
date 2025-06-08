@@ -89,7 +89,8 @@ local function isEnemy(flags)
 end
 
 local function isPlayer(flags)
-    return flags == TestAddon.PLAYER_FLAGS
+    -- Check if unit is player (MINE), party member (PARTY), or raid member (RAID)
+    return bit.band(flags or 0, 0x7) > 0 -- 0x7 = MINE | PARTY | RAID
 end
 
 local LADY_KONTROL = 71289
@@ -222,8 +223,7 @@ function TestAddon:checkCombatEndConditions()
 end
 
 function affectingGroup(event)
-    return bit.band(event.sourceFlags or 0, TestAddon.PLAYER_FLAGS) > 0 or
-               bit.band(event.destFlags or 0, TestAddon.PLAYER_FLAGS) > 0
+    return isPlayer(event.sourceFlags) or isPlayer(event.destFlags)
 end
 
 -- TODO: Case: после Халиона кто-то может сагрить Трэш и это ресетнет лог.

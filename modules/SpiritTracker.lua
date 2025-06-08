@@ -9,6 +9,8 @@ local TRACKED_SPELLS = {
     [72010] = "vengeful_blast" -- Вспышка мщения
 }
 
+local icon = "Interface\\Icons\\spell_shadow_deathsembrace"
+
 local shieldOffRu = "Довольно! Пришла пора взять все в свои руки!"
 local shieldOffEn = "Enough! I see I must take matters into my own hands!"
 
@@ -81,9 +83,8 @@ function SpiritTracker:handleEvent(eventData, log)
         self.report[eventData.destName] = self.report[eventData.destName] or 0
         self.report[eventData.destName] = self.report[eventData.destName] + 1
 
-        log(eventData.destName, string.format("%s |cFFFFFFFF%s|r взорвал духа",
-            date("%H:%M:%S", eventData.timestamp), eventData.destName))
-
+        log(string.format("%s |cFFFFFFFF%s|r %s взорвал духа", date("%H:%M:%S", eventData.timestamp),
+            eventData.destName), icon)
         return
     end
 
@@ -93,9 +94,8 @@ function SpiritTracker:handleEvent(eventData, log)
             return
         end
 
-        log(eventData.destName,
-            string.format("%s Дух автоатачил |cFFFFFFFF%s|r", date("%H:%M:%S", eventData.timestamp),
-                eventData.destName))
+        log(string.format("%s Дух автоатачил |cFFFFFFFF%s|r", date("%H:%M:%S", eventData.timestamp),
+            eventData.destName))
 
         return
     end

@@ -10,10 +10,23 @@ local function wipe(t)
 end
 
 -- Constants
-TestAddon.PLAYER_FLAGS = 0x511
-TestAddon.ENEMY_FLAGS = 0xa48
 TestAddon.MAX_RAID_SIZE = 25 -- Максимальный размер боевого рейда
 TestAddon.DIVINE_INTERVENTION = 19752 -- ID баффа Божественного вмешательства
+
+-- Group affiliation flags
+TestAddon.GROUP_AFFILIATION_PLAYER = 0x1 -- Игрок
+TestAddon.GROUP_AFFILIATION_PARTY = 0x2 -- Член группы
+TestAddon.GROUP_AFFILIATION_RAID = 0x4 -- Член рейда
+TestAddon.GROUP_AFFILIATION_ANY = 0x7 -- Принадлежность к любой группе (игрок/группа/рейд)
+
+-- Enemy flags
+TestAddon.ENEMY_FLAG_OUTSIDER = 0x8 -- Не игрок
+TestAddon.ENEMY_FLAG_HOSTILE = 0x40 -- Враждебный
+TestAddon.ENEMY_FLAG_NPC = 0x200 -- NPC
+TestAddon.ENEMY_FLAG_NPC_TYPE = 0x800 -- Тип NPC
+TestAddon.ENEMY_FLAG_CONTROLLED = 0x1000 -- Под контролем
+TestAddon.ENEMY_FLAGS = 0xa48 -- Маска для проверки враждебных NPC (OUTSIDER | HOSTILE | NPC | NPC_TYPE)
+TestAddon.CONTROLLED_FLAGS = 0x1248 -- Маска для проверки юнитов под контролем (OUTSIDER | CONTROLLED | NPC | NPC_TYPE)
 
 -- Default settings
 local defaults = {
@@ -44,6 +57,10 @@ function TestAddon:Debug(...)
     if self.db.profile.debug then
         self:Print(...)
     end
+end
+
+function TestAddon:isDebugging()
+    return self.db.profile.debug
 end
 
 function TestAddon:OnInitialize()
@@ -90,8 +107,8 @@ local function isEnemy(flags)
 end
 
 local function isPlayer(flags)
-    -- Check if unit is player (MINE), party member (PARTY), or raid member (RAID)
-    return bit.band(flags or 0, 0x7) > 0 -- 0x7 = MINE | PARTY | RAID
+    -- Check if unit is player, party member, or raid member
+    return bit.band(flags or 0, TestAddon.GROUP_AFFILIATION_ANY) > 0
 end
 
 local LADY_KONTROL = 71289
@@ -224,12 +241,18 @@ function TestAddon:checkCombatEndConditions()
 end
 
 function affectingGroup(event)
-    return isPlayer(event.sourceFlags) or isPlayer(event.destFlags)
+    local sourceFlags = event.sourceFlags
+    local destFlags = event.destFlags
+
+    -- Игнорируем события, где источник или цель под контролем
+    if bit.band(sourceFlags, TestAddon.CONTROLLED_FLAGS) == TestAddon.CONTROLLED_FLAGS or
+        bit.band(destFlags, TestAddon.CONTROLLED_FLAGS) == TestAddon.CONTROLLED_FLAGS then
+        return false
+    end
+
+    return isPlayer(sourceFlags) or isPlayer(destFlags)
 end
 
--- TODO: Case: после Халиона кто-то может сагрить Трэш и это ресетнет лог.
--- можно запоминать бои с боссами
---
 function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     local eventData = blizzardEvent(...)
 
@@ -346,8 +369,21 @@ function TestAddon:RestoreWindow()
 end
 
 function TestAddon:UpdateCombatDropdown()
-    local dropdown = self.mainFrame.combatDropdown
-    UIDropDownMenu_Initialize(dropdown, dropdown.initialize)
+    self:Print("Updating dropdown list")
+
+    local list = {
+        ["current"] = "Текущий бой"
+    }
+
+    for i, combat in ipairs(self.combatHistory) do
+        local startTime = date("%H:%M:%S", combat.startTime)
+        local endTime = date("%H:%M:%S", combat.endTime)
+        local enemyInfo = combat.firstEnemy or ""
+        list[tostring(i)] = string.format("%d. %s (%s - %s)", i, enemyInfo, startTime, endTime)
+    end
+
+    dropdown:SetList(list)
+    self:Print("Dropdown list updated with " .. #list .. " items")
 end
 
 function TestAddon:DisplayCombat(combat)
@@ -441,89 +477,46 @@ function TestAddon:CreateMainFrame()
         self:SendMessage("TestAddon_CombatEnded")
     end)
 
-    -- History button
-    local historyBtn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
-    historyBtn:SetSize(25, 25)
-    historyBtn:SetPoint("LEFT", resetBtn, "RIGHT", 5, 0)
-    historyBtn:SetText("1")
+    if TestAddon:isDebugging() then
+        -- Create dropdown
+        local dropdown = CreateFrame("Frame", "TestAddonCombatDropdown", buttonContainer, "UIDropDownMenuTemplate")
+        dropdown:SetPoint("LEFT", resetBtn, "RIGHT", 5, 0)
+        dropdown:SetPoint("RIGHT", buttonContainer, "RIGHT", -30, 0) -- Оставляем место для кнопки закрытия
+        dropdown:Show()
 
-    -- Create dropdown frame
-    local dropdownFrame = CreateFrame("Frame", nil, UIParent)
-    dropdownFrame:SetPoint("TOPLEFT", historyBtn, "BOTTOMLEFT", 0, -5)
-    dropdownFrame:SetSize(200, 20)
-    dropdownFrame:Hide()
+        -- Function to initialize dropdown
+        function dropdown.initialize(self, level)
+            local info = UIDropDownMenu_CreateInfo()
 
-    -- Create AceGUI dropdown
-    local dropdown = AceGUI:Create("Dropdown")
-    dropdown:SetParent(dropdownFrame)
-    dropdown:SetPoint("TOPLEFT", dropdownFrame, "TOPLEFT")
-    dropdown:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT")
-    dropdown:SetLabel("История боев")
-    dropdown:SetCallback("OnValueChanged", function(_, _, key)
-        if key == "current" then
-            TestAddon:DisplayCombat(TestAddon.currentCombat)
-        else
-            TestAddon:ShowCombatByIndex(tonumber(key))
-        end
-        TestAddon.mainFrame:Show()
-    end)
+            -- Current combat option
+            info.text = "Текущий бой"
+            info.value = "current"
+            info.disabled = not TestAddon.currentCombat.startTime
+            info.func = function()
+                TestAddon:DisplayCombat(TestAddon.currentCombat)
+                TestAddon.mainFrame:Show()
+            end
+            UIDropDownMenu_AddButton(info, level)
 
-    -- Function to update dropdown list
-    function TestAddon:UpdateCombatDropdown()
-        self:Print("Updating dropdown list")
-
-        local list = {{
-            text = "Текущий бой",
-            value = "current",
-            disabled = not self.currentCombat.startTime
-        }, {
-            text = "Тестовый бой 1",
-            value = "test1"
-        }, {
-            text = "Тестовый бой 2",
-            value = "test2"
-        }}
-
-        for i, combat in ipairs(self.combatHistory) do
-            local startTime = date("%H:%M:%S", combat.startTime)
-            local endTime = date("%H:%M:%S", combat.endTime)
-            local enemyInfo = combat.firstEnemy or ""
-            table.insert(list, {
-                text = string.format("%d. %s (%s - %s)", i, enemyInfo, startTime, endTime),
-                value = tostring(i)
-            })
-        end
-
-        dropdown:SetList(list)
-        self:Print("Dropdown list updated with " .. #list .. " items")
-    end
-
-    historyBtn:SetScript("OnClick", function(self, button)
-        if button == "LeftButton" then
-            TestAddon:Print("Button clicked")
-            TestAddon:UpdateCombatDropdown()
-            if dropdownFrame:IsShown() then
-                dropdownFrame:Hide()
-                TestAddon:Print("Hiding dropdown")
-            else
-                dropdownFrame:Show()
-                TestAddon:Print("Showing dropdown")
+            -- Add combat history items
+            for i, combat in ipairs(TestAddon.combatHistory) do
+                local startTime = date("%H:%M:%S", combat.startTime)
+                local endTime = date("%H:%M:%S", combat.endTime)
+                local enemyInfo = combat.firstEnemy or ""
+                info.text = string.format("%d. %s (%s - %s)", i, enemyInfo, startTime, endTime)
+                info.value = tostring(i)
+                info.disabled = nil
+                info.func = function()
+                    TestAddon:ShowCombatByIndex(i)
+                end
+                UIDropDownMenu_AddButton(info, level)
             end
         end
-    end)
 
-    -- Hide dropdown when clicking outside
-    local function HideDropdown()
-        if dropdownFrame:IsShown() then
-            dropdownFrame:Hide()
-        end
+        -- Set up dropdown
+        UIDropDownMenu_Initialize(dropdown, dropdown.initialize)
+        UIDropDownMenu_SetText(dropdown, "История боев")
     end
-
-    UIParent:HookScript("OnMouseDown", function(self, button)
-        if button == "LeftButton" then
-            HideDropdown()
-        end
-    end)
 
     -- Resize button
     local resizeButton = CreateFrame("Button", nil, frame)

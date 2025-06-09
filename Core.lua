@@ -124,8 +124,8 @@ function TestAddon:trackCombatants(event)
     end
 
     if isEnemy(event.sourceFlags) then
-        self:Debug("ENEMY 1 From:", event.sourceName, "To", event.destName, event.sourceGUID,
-            self.activeEnemies[event.sourceGUID], event.event, event.timestamp)
+        -- self:Debug("ENEMY 1 From:", event.sourceName, "To", event.destName, event.sourceGUID,
+        --     self.activeEnemies[event.sourceGUID], event.event, event.timestamp)
         self.activeEnemies[event.sourceGUID] = true
         self.enemyEvents[event.sourceGUID] = {
             name = event.sourceName,
@@ -136,10 +136,9 @@ function TestAddon:trackCombatants(event)
         if not self.currentCombat.firstEnemy then
             self.currentCombat.firstEnemy = event.sourceName
         end
-        return
     end
     if isEnemy(event.destFlags) then
-        self:Debug("ENEMY 2 From:", event.sourceName, "To", event.destName, event.destGUID,
+        self:Debug("ENEMY 2 From:", event.sourceName, event.spellName, event.destName,
             self.activeEnemies[event.destGUID], event.event, event.timestamp)
         self.activeEnemies[event.destGUID] = true
         self.enemyEvents[event.destGUID] = {
@@ -151,17 +150,14 @@ function TestAddon:trackCombatants(event)
         if not self.currentCombat.firstEnemy then
             self.currentCombat.firstEnemy = event.destName
         end
-        return
     end
     if isPlayer(event.sourceFlags) then
         self:Debug("PLAYER 1:", event.sourceName, event.event)
         self.activePlayers[event.sourceGUID] = self.activePlayers[event.sourceGUID] or false
-        return
     end
     if isPlayer(event.destFlags) then
         self:Debug("PLAYER 2:", event.destName, event.destFlags)
         self.activePlayers[event.destGUID] = self.activePlayers[event.destGUID] or false
-        return
     end
 end
 
@@ -195,22 +191,24 @@ end
 
 function TestAddon:PLAYER_REGEN_DISABLED()
     self.inCombat = true
-    wipe(self.activeEnemies)
+    -- wipe(self.activeEnemies)
     self:DisplayCombat(self.currentCombat)
     self:Debug("Combat started - player entered combat")
 end
 
 function TestAddon:checkCombatEndConditions()
     -- Check if all enemies are dead (value is 0)
-    local allEnemiesDead = true
+    -- local allEnemiesDead = true
+    local active = false
+
     for _, value in pairs(self.activeEnemies) do
-        if value ~= 0 then
-            allEnemiesDead = false
+        if value == true then
+            active = true
             break
         end
     end
 
-    if allEnemiesDead then
+    if not active then
         self:EndCombat("all_enemies_dead")
         return true
     end
@@ -261,17 +259,11 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     end
 
     if eventData.event == "UNIT_DIED" or eventData.event == "PARTY_KILL" then
-
-        self:Debug(eventData.event, eventData.destName, eventData.destGUID, self.activeEnemies[eventData.destGUID])
-
         if self.activeEnemies[eventData.destGUID] then
             self.activeEnemies[eventData.destGUID] = 0
         else
             self.activePlayers[eventData.destGUID] = 0
         end
-
-        self:Debug(eventData.event, self.activeEnemies[eventData.destGUID])
-
         return self.inCombat and self:checkCombatEndConditions()
     end
 
@@ -293,8 +285,6 @@ function TestAddon:OnCombatLogEvent(message)
         self.currentCombat.startTime = time()
     end
 
-    -- self:Print("RL Быдло: ", message)
-
     self.currentCombat.messages:push_back(message)
     self.mainFrame.logText:AddMessage(message)
 end
@@ -304,7 +294,6 @@ function TestAddon:EndCombat(reason)
 
     self:Debug("Should save combat?", self.currentCombat.startTime, self.currentCombat.messages:length())
 
-    -- Save current combat to history if it has messages
     if self.currentCombat.startTime and self.currentCombat.messages:length() > 0 then
         -- Convert List to array for storage
         local messages = {}

@@ -106,7 +106,7 @@ local function isEnemy(flags)
     return bit.band(flags or 0, TestAddon.ENEMY_FLAGS) > 0
 end
 
-local function isPlayer(flags)
+function TestAddon:isPlayer(flags)
     -- Check if unit is player, party member, or raid member
     return bit.band(flags or 0, TestAddon.GROUP_AFFILIATION_ANY) > 0
 end
@@ -151,11 +151,11 @@ function TestAddon:trackCombatants(event)
             self.currentCombat.firstEnemy = event.destName
         end
     end
-    if isPlayer(event.sourceFlags) then
+    if self:isPlayer(event.sourceFlags) then
         self:Debug("PLAYER 1:", event.sourceName, event.event)
         self.activePlayers[event.sourceGUID] = self.activePlayers[event.sourceGUID] or false
     end
-    if isPlayer(event.destFlags) then
+    if self:isPlayer(event.destFlags) then
         self:Debug("PLAYER 2:", event.destName, event.destFlags)
         self.activePlayers[event.destGUID] = self.activePlayers[event.destGUID] or false
     end
@@ -248,7 +248,7 @@ function affectingGroup(event)
         return false
     end
 
-    return isPlayer(sourceFlags) or isPlayer(destFlags)
+    return TestAddon:isPlayer(sourceFlags) or TestAddon:isPlayer(destFlags)
 end
 
 function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
@@ -427,8 +427,8 @@ function TestAddon:CreateMainFrame()
 
     -- Button container
     local buttonContainer = CreateFrame("Frame", nil, frame)
-    buttonContainer:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -5)
-    buttonContainer:SetPoint("TOPRIGHT", -15, -16)
+    buttonContainer:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -10)
+    buttonContainer:SetPoint("TOPRIGHT", -10, -10)
     buttonContainer:SetHeight(25)
 
     -- Buttons
@@ -444,7 +444,7 @@ function TestAddon:CreateMainFrame()
 
     local pull75Btn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
     pull75Btn:SetSize(60, 25)
-    pull75Btn:SetPoint("LEFT", pull15Btn, "RIGHT", 5, 0)
+    pull75Btn:SetPoint("LEFT", pull15Btn, "RIGHT", 4, 0)
     pull75Btn:SetText("Пул 70")
     pull75Btn:SetScript("OnClick", function()
         DBM:CreatePizzaTimer(70, "Pull", true)
@@ -453,9 +453,9 @@ function TestAddon:CreateMainFrame()
     end)
 
     local resetBtn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
-    resetBtn:SetSize(60, 25)
-    resetBtn:SetPoint("LEFT", pull75Btn, "RIGHT", 5, 0)
-    resetBtn:SetText("Ресет")
+    resetBtn:SetSize(25, 25)
+    resetBtn:SetPoint("LEFT", pull75Btn, "RIGHT", 4, 0)
+    resetBtn:SetText("C")
     resetBtn:SetScript("OnClick", function()
         TestAddon.activeEnemies = {}
         TestAddon.currentCombat = {
@@ -469,8 +469,8 @@ function TestAddon:CreateMainFrame()
     if TestAddon:isDebugging() then
         -- Create dropdown
         local dropdown = CreateFrame("Frame", "TestAddonCombatDropdown", buttonContainer, "UIDropDownMenuTemplate")
-        dropdown:SetPoint("LEFT", resetBtn, "RIGHT", 5, 0)
-        dropdown:SetPoint("RIGHT", buttonContainer, "RIGHT", -30, 0) -- Оставляем место для кнопки закрытия
+        dropdown:SetPoint("LEFT", resetBtn, "RIGHT", -2, -2)
+        UIDropDownMenu_SetWidth(dropdown, 80)
         dropdown:Show()
 
         -- Function to initialize dropdown
@@ -504,7 +504,7 @@ function TestAddon:CreateMainFrame()
 
         -- Set up dropdown
         UIDropDownMenu_Initialize(dropdown, dropdown.initialize)
-        UIDropDownMenu_SetText(dropdown, "История боев")
+        UIDropDownMenu_SetText(dropdown, "Бои")
     end
 
     -- Resize button

@@ -6,11 +6,9 @@ function DeathTracker:OnInitialize()
     self.dmgEvents = {}
     self.healEvents = {}
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-    -- TestAddon:withHandler(DeathTracker)
 end
 
 -- 67662 Ледной Рев
--- 75879,"Падение метеора"
 -- Список отслеживаемых способностей
 
 local METEORIT = 75879
@@ -18,14 +16,22 @@ local LUZHA = 75949
 local LEZVIA25OB = 77844
 local LEZVIA10HM = 77845
 local LEZVIA25HM = 77846
+local pelena10 = 75483
+local pelena25 = 75484
+local pelena10hm = 75485
+local pelena25hm = 75486
 -- 74792 - metka
 
+local meteor_icon = "Interface\\Icons\\spell_fire_meteorstorm"
+local meteor_burn_icon = "Interface\\Icons\\spell_fire_fire"
+local lezvia_icon = "Interface\\Icons\\spell_shadow_shadowmend"
+
 local spells = {
-    [METEORIT] = " от метеорита",
-    [LUZHA] = " в луже",
-    [LEZVIA10HM] = " в лезвиях",
-    [LEZVIA25HM] = " в лезвиях",
-    [LEZVIA25OB] = " в лезвиях"
+    [METEORIT] = " от метеорита " .. meteor_icon,
+    [LUZHA] = " в луже " .. meteor_burn_icon,
+    [LEZVIA10HM] = " в лезвиях " .. lezvia_icon,
+    [LEZVIA25HM] = " в лезвиях " .. lezvia_icon,
+    [LEZVIA25OB] = " в лезвиях " .. lezvia_icon
 }
 
 function DeathTracker:OnEnable()
@@ -51,9 +57,18 @@ function DeathTracker:logHeal(playerName, event)
     self.healEvents[playerName] = event
 end
 
--- COMBATLOG_OBJECT_TYPE_PLAYER
+local firstEntered = false
+
+local function isFirstInDarkness(event, log)
+    if not firstEntered and event.spellId >= pelena10 and event.spellId <= pelena25hm then
+        firstEntered = true
+        log(string.format("%s |cFFFFFFFF%s|r зашел во тьму первый", date("%H:%M:%S", event.timestamp),
+            event.destName))
+    end
+end
+
 function DeathTracker:handleEvent(eventData, log)
-    if bit.band(eventData.destFlags, COMBATLOG_OBJECT_AFFILIATION_RAID) > 0 then
+    if TestAddon:isPlayer(eventData.destFlags) then
         if eventData.event == "SPELL_DAMAGE" then
             self:logDmg(eventData.destName, {
                 source = eventData.sourceName,
@@ -61,6 +76,7 @@ function DeathTracker:handleEvent(eventData, log)
                 spellId = eventData.spellId,
                 spellName = eventData.spellName
             })
+            isFirstInDarkness(eventData, log)
         elseif eventData.event == "SWING_DAMAGE" then
             self:logDmg(eventData.destName, {
                 source = eventData.sourceName,
@@ -73,25 +89,15 @@ function DeathTracker:handleEvent(eventData, log)
     end
 end
 
--- function DeathTracker:OnCombatEnd()
---     -- очищаем данные при выходе из боя
---     table.wipe(self.lastHealTime)
--- end
-
 function DeathTracker:ProcessPlayerDeath(log, playerName, timestamp)
-    -- TestAddon:Print("DeathTracker: Обработка смерти", playerName)
     local msg = string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t", date("%H:%M:%S", timestamp), playerName,
         "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8")
 
     local lastDamage = self.dmgEvents[playerName]
 
     if lastDamage then
-        -- TestAddon:Print("DeathTracker: Последний урон", lastDamage.source, lastDamage.spellName,
-        --     lastDamage.amount)
-
         if spells[lastDamage.spellId] then
             msg = msg .. spells[lastDamage.spellId]
-            -- TestAddon:Print("DeathTracker: Отправка сообщения в лог:", msg)
             log(msg)
         end
     end

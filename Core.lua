@@ -396,7 +396,7 @@ function TestAddon:CreateMainFrame()
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:SetResizable(true)
-    frame:SetMinResize(240, 100)
+    frame:SetMinResize(300, 100)
     frame:SetMaxResize(800, 1000)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
@@ -424,6 +424,24 @@ function TestAddon:CreateMainFrame()
     -- Close button
     local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeButton:SetPoint("TOPRIGHT", -5, -5)
+
+    -- Minimize button
+    local minimizeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    minimizeButton:SetSize(20, 25)
+    minimizeButton:SetPoint("TOPRIGHT", closeButton, "TOPLEFT", 0, -4)
+    minimizeButton:SetText("_")
+    minimizeButton:GetFontString():SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    minimizeButton:GetFontString():SetPoint("TOP", 0, -2)
+
+    -- Remove button textures
+    minimizeButton:SetNormalTexture("")
+    minimizeButton:SetPushedTexture("")
+    minimizeButton:SetHighlightTexture("")
+    minimizeButton:SetDisabledTexture("")
+
+    minimizeButton:SetScript("OnClick", function()
+        TestAddon:MinimizeWindow()
+    end)
 
     -- Button container
     local buttonContainer = CreateFrame("Frame", nil, frame)
@@ -469,8 +487,8 @@ function TestAddon:CreateMainFrame()
     if TestAddon:isDebugging() then
         -- Create dropdown
         local dropdown = CreateFrame("Frame", "TestAddonCombatDropdown", buttonContainer, "UIDropDownMenuTemplate")
-        dropdown:SetPoint("LEFT", resetBtn, "RIGHT", -2, -2)
-        UIDropDownMenu_SetWidth(dropdown, 80)
+        dropdown:SetPoint("LEFT", resetBtn, "RIGHT", -8, -2)
+        UIDropDownMenu_SetWidth(dropdown, 50)
         dropdown:Show()
 
         -- Function to initialize dropdown
@@ -487,7 +505,6 @@ function TestAddon:CreateMainFrame()
             end
             UIDropDownMenu_AddButton(info, level)
 
-            -- Add combat history items
             for i, combat in ipairs(TestAddon.combatHistory) do
                 local startTime = date("%H:%M:%S", combat.startTime)
                 local endTime = date("%H:%M:%S", combat.endTime)
@@ -502,7 +519,6 @@ function TestAddon:CreateMainFrame()
             end
         end
 
-        -- Set up dropdown
         UIDropDownMenu_Initialize(dropdown, dropdown.initialize)
         UIDropDownMenu_SetText(dropdown, "Бои")
     end

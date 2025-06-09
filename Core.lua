@@ -36,7 +36,8 @@ local defaults = {
         minimap = {
             hide = false
         },
-        combatHistory = {} -- Add combat history storage
+        combatHistory = {}, -- Add combat history storage
+        savedPosition = nil -- Add saved position storage
     }
 }
 
@@ -348,13 +349,29 @@ function TestAddon:MinimizeWindow()
         }
     end
 
-    self.mainFrame:SetSize(240, 150)
+    self.mainFrame:SetSize(300, 100)
     self.isMinimized = true
+
+    -- Move to saved position if exists
+    if self.db.profile.savedPosition then
+        self.mainFrame:ClearAllPoints()
+        self.mainFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", self.db.profile.savedPosition.x,
+            -self.db.profile.savedPosition.y)
+    end
 end
 
 function TestAddon:RestoreWindow()
     self.mainFrame:SetSize(self.savedSize.width, self.savedSize.height)
     self.isMinimized = false
+end
+
+function TestAddon:SaveAnchorPosition()
+    local point, _, _, x, y = self.mainFrame:GetPoint()
+    self.db.profile.savedPosition = {
+        x = x,
+        y = -y -- Invert Y coordinate since we're using TOPLEFT
+    }
+    self:Print("Позиция сохранена")
 end
 
 function TestAddon:UpdateCombatDropdown()
@@ -422,13 +439,13 @@ function TestAddon:CreateMainFrame()
     title:SetText("RL Быдло")
 
     -- Close button
-    local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    closeButton:SetPoint("TOPRIGHT", -5, -5)
+    -- local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    -- closeButton:SetPoint("TOPRIGHT", -5, -5)
 
     -- Minimize button
     local minimizeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     minimizeButton:SetSize(20, 25)
-    minimizeButton:SetPoint("TOPRIGHT", closeButton, "TOPLEFT", 0, -4)
+    minimizeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -14)
     minimizeButton:SetText("_")
     minimizeButton:GetFontString():SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
     minimizeButton:GetFontString():SetPoint("TOP", 0, -2)
@@ -441,6 +458,24 @@ function TestAddon:CreateMainFrame()
 
     minimizeButton:SetScript("OnClick", function()
         TestAddon:MinimizeWindow()
+    end)
+
+    -- Anchor button
+    local anchorButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    anchorButton:SetSize(20, 25)
+    anchorButton:SetPoint("TOPRIGHT", minimizeButton, "TOPLEFT", 0, 0)
+    anchorButton:SetText("A")
+    anchorButton:GetFontString():SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    anchorButton:GetFontString():SetPoint("TOP", 0, -2)
+
+    -- Remove button textures
+    anchorButton:SetNormalTexture("")
+    anchorButton:SetPushedTexture("")
+    anchorButton:SetHighlightTexture("")
+    anchorButton:SetDisabledTexture("")
+
+    anchorButton:SetScript("OnClick", function()
+        TestAddon:SaveAnchorPosition()
     end)
 
     -- Button container

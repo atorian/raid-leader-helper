@@ -341,37 +341,33 @@ local function sendSync(prefix, msg)
     end
 end
 
-function TestAddon:MinimizeWindow()
-    if not self.isMinimized then
-        self.savedSize = {
-            width = self.mainFrame:GetWidth(),
-            height = self.mainFrame:GetHeight()
-        }
-    end
-
-    self.mainFrame:SetSize(300, 100)
-    self.isMinimized = true
-
-    -- Move to saved position if exists
-    if self.db.profile.savedPosition then
-        self.mainFrame:ClearAllPoints()
-        self.mainFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", self.db.profile.savedPosition.x,
-            -self.db.profile.savedPosition.y)
-    end
-end
-
-function TestAddon:RestoreWindow()
-    self.mainFrame:SetSize(self.savedSize.width, self.savedSize.height)
-    self.isMinimized = false
-end
-
 function TestAddon:SaveAnchorPosition()
     local point, _, _, x, y = self.mainFrame:GetPoint()
+    local width = self.mainFrame:GetWidth()
+    local height = self.mainFrame:GetHeight()
     self.db.profile.savedPosition = {
         x = x,
-        y = -y -- Invert Y coordinate since we're using TOPLEFT
+        y = y, -- Сохраняем Y как есть
+        width = width,
+        height = height
     }
-    self:Print("Позиция сохранена")
+    self:Print("Позиция и размер сохранены")
+end
+
+function TestAddon:MinimizeWindow()
+    self.mainFrame:ClearAllPoints()
+    if self.db.profile.savedPosition then
+        self.mainFrame:SetSize(self.db.profile.savedPosition.width, self.db.profile.savedPosition.height)
+
+        self.mainFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", self.db.profile.savedPosition.x,
+            self.db.profile.savedPosition.y)
+    else
+
+        self.mainFrame:SetSize(400, 150)
+        local screenWidth = GetScreenWidth()
+        local screenHeight = GetScreenHeight()
+        self.mainFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", screenWidth - 420, -20)
+    end
 end
 
 function TestAddon:UpdateCombatDropdown()
@@ -527,12 +523,8 @@ function TestAddon:CreateMainFrame()
     frame.cancelBtn:SetText("Отмена")
     frame.cancelBtn:Hide() -- Initially hidden
     frame.cancelBtn:SetScript("OnClick", function()
-        -- Stop the DBM timers
-        -- Cancel Pizza Timer first
         DBM:CreatePizzaTimer(0, "Pull", true)
-        -- Then cancel Bar Timer
         DBM.Bars:CancelBar("Pull")
-        -- Show pull buttons and hide cancel button
         for _, btn in ipairs(frame.pullButtons) do
             btn:Show()
         end
@@ -553,44 +545,42 @@ function TestAddon:CreateMainFrame()
         self:SendMessage("TestAddon_CombatEnded")
     end)
 
-    if TestAddon:isDebugging() then
-        -- Create dropdown
-        local dropdown = CreateFrame("Frame", "TestAddonCombatDropdown", buttonContainer, "UIDropDownMenuTemplate")
-        dropdown:SetPoint("LEFT", resetBtn, "RIGHT", -8, -2)
-        UIDropDownMenu_SetWidth(dropdown, 50)
-        dropdown:Show()
+    -- Create dropdown
+    local dropdown = CreateFrame("Frame", "TestAddonCombatDropdown", buttonContainer, "UIDropDownMenuTemplate")
+    dropdown:SetPoint("LEFT", resetBtn, "RIGHT", -8, -2)
+    UIDropDownMenu_SetWidth(dropdown, 50)
+    dropdown:Show()
 
-        -- Function to initialize dropdown
-        function dropdown.initialize(self, level)
-            local info = UIDropDownMenu_CreateInfo()
+    -- Function to initialize dropdown
+    function dropdown.initialize(self, level)
+        local info = UIDropDownMenu_CreateInfo()
 
-            -- Current combat option
-            info.text = "Текущий бой"
-            info.value = "current"
-            info.disabled = not TestAddon.currentCombat.startTime
+        -- Current combat option
+        info.text = "Текущий бой"
+        info.value = "current"
+        info.disabled = not TestAddon.currentCombat.startTime
+        info.func = function()
+            TestAddon:DisplayCombat(TestAddon.currentCombat)
+            TestAddon.mainFrame:Show()
+        end
+        UIDropDownMenu_AddButton(info, level)
+
+        for i, combat in ipairs(TestAddon.combatHistory) do
+            local startTime = date("%H:%M:%S", combat.startTime)
+            local endTime = date("%H:%M:%S", combat.endTime)
+            local enemyInfo = combat.firstEnemy or ""
+            info.text = string.format("%d. %s (%s - %s)", i, enemyInfo, startTime, endTime)
+            info.value = tostring(i)
+            info.disabled = nil
             info.func = function()
-                TestAddon:DisplayCombat(TestAddon.currentCombat)
-                TestAddon.mainFrame:Show()
+                TestAddon:ShowCombatByIndex(i)
             end
             UIDropDownMenu_AddButton(info, level)
-
-            for i, combat in ipairs(TestAddon.combatHistory) do
-                local startTime = date("%H:%M:%S", combat.startTime)
-                local endTime = date("%H:%M:%S", combat.endTime)
-                local enemyInfo = combat.firstEnemy or ""
-                info.text = string.format("%d. %s (%s - %s)", i, enemyInfo, startTime, endTime)
-                info.value = tostring(i)
-                info.disabled = nil
-                info.func = function()
-                    TestAddon:ShowCombatByIndex(i)
-                end
-                UIDropDownMenu_AddButton(info, level)
-            end
         end
-
-        UIDropDownMenu_Initialize(dropdown, dropdown.initialize)
-        UIDropDownMenu_SetText(dropdown, "Бои")
     end
+
+    UIDropDownMenu_Initialize(dropdown, dropdown.initialize)
+    UIDropDownMenu_SetText(dropdown, "Бои")
 
     -- Resize button
     local resizeButton = CreateFrame("Button", nil, frame)

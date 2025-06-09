@@ -484,25 +484,59 @@ function TestAddon:CreateMainFrame()
     buttonContainer:SetPoint("TOPRIGHT", -10, -10)
     buttonContainer:SetHeight(25)
 
+    -- Store buttons in frame for access
+    frame.pullButtons = {}
+
     -- Buttons
     local pull15Btn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
     pull15Btn:SetSize(60, 25)
     pull15Btn:SetPoint("LEFT", buttonContainer, "LEFT", 0, 0)
     pull15Btn:SetText("Пул 15")
+    frame.pullButtons[1] = pull15Btn
     pull15Btn:SetScript("OnClick", function()
         DBM:CreatePizzaTimer(15, "Pull", true)
         TestAddon:MinimizeWindow()
         TestAddon.mainFrame.logText:Clear()
+        -- Hide pull buttons and show cancel button
+        for _, btn in ipairs(frame.pullButtons) do
+            btn:Hide()
+        end
+        frame.cancelBtn:Show()
     end)
 
     local pull75Btn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
     pull75Btn:SetSize(60, 25)
     pull75Btn:SetPoint("LEFT", pull15Btn, "RIGHT", 4, 0)
     pull75Btn:SetText("Пул 70")
+    frame.pullButtons[2] = pull75Btn
     pull75Btn:SetScript("OnClick", function()
         DBM:CreatePizzaTimer(70, "Pull", true)
         TestAddon:MinimizeWindow()
         TestAddon.mainFrame.logText:Clear()
+        -- Hide pull buttons and show cancel button
+        for _, btn in ipairs(frame.pullButtons) do
+            btn:Hide()
+        end
+        frame.cancelBtn:Show()
+    end)
+
+    -- Cancel button
+    frame.cancelBtn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
+    frame.cancelBtn:SetSize(60, 25)
+    frame.cancelBtn:SetPoint("LEFT", buttonContainer, "LEFT", 0, 0)
+    frame.cancelBtn:SetText("Отмена")
+    frame.cancelBtn:Hide() -- Initially hidden
+    frame.cancelBtn:SetScript("OnClick", function()
+        -- Stop the DBM timers
+        -- Cancel Pizza Timer first
+        DBM:CreatePizzaTimer(0, "Pull", true)
+        -- Then cancel Bar Timer
+        DBM.Bars:CancelBar("Pull")
+        -- Show pull buttons and hide cancel button
+        for _, btn in ipairs(frame.pullButtons) do
+            btn:Show()
+        end
+        frame.cancelBtn:Hide()
     end)
 
     local resetBtn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")

@@ -1,4 +1,4 @@
-local M = require('../lib/List')
+require('../lib/List')
 local M = require('tests.mocks')
 local blizzardEvent = require('../lib/blizzardEvent')
 local TestAddon = require("Core")
@@ -197,5 +197,31 @@ describe("TestAddon.affectingGroup", function()
             destFlags = 0x518 -- NPC but not in group/raid
         }
         assert.is_false(affectingGroup(event))
+    end)
+end)
+
+describe("TestAddon.isPlayer", function()
+    it("should return true for player flags (0x511)", function()
+        assert.is_true(TestAddon:isPlayer(0x511))
+    end)
+
+    it("should return true for party member flags (0x512)", function()
+        assert.is_true(TestAddon:isPlayer(0x512))
+    end)
+
+    it("should return true for raid member flags (0x514)", function()
+        assert.is_true(TestAddon:isPlayer(0x514))
+    end)
+
+    it("should return false for enemy flags (0xa48)", function()
+        assert.is_false(TestAddon:isPlayer(0xa48))
+    end)
+
+    it("should return false for nil flags", function()
+        assert.is_false(TestAddon:isPlayer(nil))
+    end)
+
+    it("should return false for 0 flags", function()
+        assert.is_false(TestAddon:isPlayer(0))
     end)
 end)

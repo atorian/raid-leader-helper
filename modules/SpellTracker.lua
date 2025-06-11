@@ -28,14 +28,15 @@ local TRACKED_SPELLS = {
 
 function SppellTracker:OnInitialize()
     TestAddon:Debug("RL Быдло: SppellTracker инициализируется")
+    self.log = function(...)
+        TestAddon:OnCombatLogEvent(...)
+    end
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
 end
 
 function SppellTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
-    self:handleEvent(blizzardEvent(...), function(...)
-        TestAddon:OnCombatLogEvent(...)
-    end)
+    self:handleEvent(blizzardEvent(...), self.log)
 end
 
 function SppellTracker:reset()
@@ -43,11 +44,11 @@ function SppellTracker:reset()
     firstDamageDone = false
 end
 
-local PLAYER_FLAGS = 0x511
+local PLAYER_FLAGS = 0x7
 local ENEMY_FLAGS = 0xa48
--- 0x10a48
+
 local function isPlayer(flags)
-    return flags == PLAYER_FLAGS
+    return bit.band(flags or 0, PLAYER_FLAGS) > 0
 end
 
 local function isEnemy(flags)

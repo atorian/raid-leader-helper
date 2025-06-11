@@ -1,92 +1,55 @@
 require('tests.mocks')
+require("../lib/blizzardEvent")
 local SpellTracker = require("../modules/SpellTracker")
+local Builder = require("../utils/CombatEventBuilder")
 
 describe('SpellTracker', function()
-    describe('handleEvent', function()
+    describe('COMBAT_LOG_EVENT_UNFILTERED', function()
         local log
 
         before_each(function()
             log = spy.new(function()
             end)
+            SpellTracker.log = log
+            SpellTracker:reset()
+        end)
+
+        it('logs first damage to enemy', function()
+            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestPlayer"):ToEnemy("TestTarget")
+                :SpellDamage(12345, "Test Spell", 100):Build())
+
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r Первый урон по |cFFFFFFFF%s|r",
+                date("%H:%M:%S", GetTime()), "TestPlayer", "TestTarget"))
         end)
 
         it('logs taunt spell cast', function()
-            local spellEvent = {
-                event = "SPELL_AURA_APPLIED",
-                spellId = 355, -- Warrior Taunt
-                spellName = "Taunt",
-                timestamp = time(),
-                sourceName = "TestWarrior",
-                destName = "TestTarget"
-            }
+            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestWarrior"):ToEnemy("TestTarget")
+                :ApplyAura(355, "Taunt"):Build())
 
-            SpellTracker:handleEvent(spellEvent, log)
-
-            assert.spy(log).was_called_with("TestWarrior",
-                string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", spellEvent.timestamp),
-                    spellEvent.sourceName, "Interface\\Icons\\spell_nature_reincarnation", spellEvent.destName))
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "TestWarrior", "Interface\\Icons\\spell_nature_reincarnation", "TestTarget"))
         end)
 
         it('logs death grip spell cast', function()
-            local spellEvent = {
-                event = "SPELL_AURA_APPLIED",
-                spellId = 49560, -- Death Knight Death Grip
-                spellName = "Death Grip",
-                timestamp = time(),
-                sourceName = "TestDK",
-                destName = "TestTarget"
-            }
+            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestDK"):ToEnemy("TestTarget"):ApplyAura(
+                49560, "Death Grip"):Build())
 
-            SpellTracker:handleEvent(spellEvent, log)
-
-            assert.spy(log).was_called_with("TestDK",
-                string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", spellEvent.timestamp),
-                    spellEvent.sourceName, "Interface\\Icons\\Spell_DeathKnight_Strangulate", spellEvent.destName))
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "TestDK", "Interface\\Icons\\Spell_DeathKnight_Strangulate", "TestTarget"))
         end)
 
         it('logs Корона', function()
-            local spellEvent = {
-                event = "SPELL_AURA_APPLIED",
-                spellId = 10278, -- Hand of Protection
-                spellName = "Seal of Protection",
-                timestamp = time(),
-                sourceName = "TestPaladin",
-                destName = "TestTarget"
-            }
+            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget")
+                :ApplyAura(10278, "Seal of Protection"):Build())
 
-            SpellTracker:handleEvent(spellEvent, log)
-
-            assert.spy(log).was_called_with("TestPaladin",
-                string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", spellEvent.timestamp),
-                    spellEvent.sourceName, "Interface\\Icons\\Spell_Holy_SealOfProtection", spellEvent.destName))
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "TestPaladin", "Interface\\Icons\\Spell_Holy_SealOfProtection",
+                "TestTarget"))
         end)
 
         it('ignores non-tracked spells', function()
-            local spellEvent = {
-                event = "SPELL_AURA_APPLIED",
-                spellId = 12345, -- Some random spell
-                spellName = "Random Spell",
-                timestamp = time(),
-                sourceName = "TestCaster",
-                destName = "TestTarget"
-            }
-
-            SpellTracker:handleEvent(spellEvent, log)
-
-            assert.spy(log).was_not_called()
-        end)
-
-        it('ignores non-SPELL_AURA_APPLIED events', function()
-            local spellEvent = {
-                event = "ANY_OTHER_EVENT",
-                spellId = 355, -- Warrior Taunt
-                spellName = "Taunt",
-                timestamp = time(),
-                sourceName = "TestWarrior",
-                destName = "TestTarget"
-            }
-
-            SpellTracker:handleEvent(spellEvent, log)
+            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestCaster"):ToEnemy("TestTarget")
+                :ApplyAura(12345, "Random Spell"):Build())
 
             assert.spy(log).was_not_called()
         end)

@@ -108,13 +108,15 @@ local function isEnemy(flags)
     return bit.band(flags or 0, TestAddon.ENEMY_FLAGS) > 0
 end
 
-function TestAddon:isPlayer(flags)
+local function isPlayer(flags)
     return bit.band(flags or 0, TestAddon.GROUP_AFFILIATION_ANY) > 0
 end
 
 local LADY_KONTROL = 71289
 
 function TestAddon:trackCombatants(event)
+    -- todo: Бафы которые были наложены другими игроками, в прошлом рейде, например,
+    -- спадая участвуют в эвентах с именами тех игроков.
     if not event.destName or event.spellId == LADY_KONTROL then
         return
     end
@@ -152,11 +154,11 @@ function TestAddon:trackCombatants(event)
             self.currentCombat.firstEnemy = event.destName
         end
     end
-    if self:isPlayer(event.sourceFlags) then
+    if isPlayer(event.sourceFlags) then
         self:Debug("PLAYER 1:", event.sourceName, event.event)
         self.activePlayers[event.sourceGUID] = self.activePlayers[event.sourceGUID] or false
     end
-    if self:isPlayer(event.destFlags) then
+    if isPlayer(event.destFlags) then
         self:Debug("PLAYER 2:", event.destName, event.destFlags)
         self.activePlayers[event.destGUID] = self.activePlayers[event.destGUID] or false
     end
@@ -188,6 +190,38 @@ function TestAddon:PLAYER_REGEN_ENABLED()
     self:Print("Regen Enabled")
     self:printActiveEnemies()
     -- TODO: workaround Lady Deathwhisper
+    self.inCombat = false
+
+    self:Debug("Should save combat?", self.currentCombat.startTime, self.currentCombat.messages:length())
+
+    if self.currentCombat.startTime and self.currentCombat.messages:length() > 0 then
+        -- Convert List to array for storage
+        local messages = {}
+        for msg in self.currentCombat.messages:iter() do
+            table.insert(messages, msg)
+        end
+
+        local combat = {
+            startTime = self.currentCombat.startTime,
+            endTime = time(),
+            messages = messages,
+            firstEnemy = self.currentCombat.firstEnemy
+        }
+
+        self:SaveCombatToProfile(combat, self.db.profile)
+        self:Debug("Combat Saved to history")
+    end
+
+    -- Reset current combat
+    self.currentCombat = {
+        startTime = nil,
+        messages = List.new(),
+        firstEnemy = nil
+    }
+
+    wipe(self.activePlayers)
+    wipe(self.enemyEvents)
+    self:SendMessage("TestAddon_CombatEnded")
 end
 
 function TestAddon:PLAYER_REGEN_DISABLED()
@@ -249,7 +283,7 @@ function affectingGroup(event)
         return false
     end
 
-    return TestAddon:isPlayer(sourceFlags) or TestAddon:isPlayer(destFlags)
+    return isPlayer(sourceFlags) or isPlayer(destFlags)
 end
 
 function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
@@ -307,39 +341,7 @@ function TestAddon:SaveCombatToProfile(combat, profile)
 end
 
 function TestAddon:EndCombat(reason)
-    self.inCombat = false
-
-    self:Debug("Should save combat?", self.currentCombat.startTime, self.currentCombat.messages:length())
-
-    if self.currentCombat.startTime and self.currentCombat.messages:length() > 0 then
-        -- Convert List to array for storage
-        local messages = {}
-        for msg in self.currentCombat.messages:iter() do
-            table.insert(messages, msg)
-        end
-
-        local combat = {
-            startTime = self.currentCombat.startTime,
-            endTime = time(),
-            messages = messages,
-            firstEnemy = self.currentCombat.firstEnemy
-        }
-
-        self:SaveCombatToProfile(combat, self.db.profile)
-        self:Debug("Combat Saved to history")
-    end
-
-    -- Reset current combat
-    self.currentCombat = {
-        startTime = nil,
-        messages = List.new(),
-        firstEnemy = nil
-    }
-
-    wipe(self.activePlayers)
-    wipe(self.enemyEvents) -- Clear enemy events when combat ends
     self:Debug("Combat ended", reason)
-    self:SendMessage("TestAddon_CombatEnded")
 end
 
 local function sendSync(prefix, msg)

@@ -77,7 +77,10 @@ GetNumPartyMembers = function()
 end
 
 function M:GetAddon(name)
-    local addon = {}
+    local addon = {
+        Debug = function()
+        end
+    }
     function addon:NewModule(moduleName, mixins)
         return {
             name = moduleName,
@@ -113,7 +116,10 @@ function M:NewModule(name)
                 str = str .. tostring(v)
             end
             print(str)
+        end,
+        Debug = function()
         end
+
     }
 
     return module
@@ -136,6 +142,8 @@ function M:NewAddon(name)
                 str = str .. tostring(v)
             end
             print(str)
+        end,
+        Debug = function()
         end
     }
 

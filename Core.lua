@@ -45,7 +45,7 @@ local defaults = {
 TestAddon.combatHistory = {} -- Array for combat history
 TestAddon.currentCombat = {
     startTime = nil,
-    messages = List.new(), -- List for current combat messages
+    messages = {},
     firstEnemy = nil -- Name of the first enemy in combat
 }
 TestAddon.viewingCurrentCombat = true -- Initialize to true by default
@@ -76,15 +76,11 @@ function TestAddon:OnInitialize()
     -- Load combat history from DB
     if self.db.profile.combatHistory then
         for _, combat in ipairs(self.db.profile.combatHistory) do
-            local messages = List.new()
-            for _, msg in ipairs(combat.messages) do
-                messages:push_back(msg)
-            end
             table.insert(self.combatHistory, {
                 startTime = combat.startTime,
                 endTime = combat.endTime,
-                messages = messages,
-                firstEnemy = combat.firstEnemy -- Сохраняем имя первого врага
+                messages = combat.messages,
+                firstEnemy = combat.firstEnemy
             })
         end
     end
@@ -192,19 +188,13 @@ function TestAddon:PLAYER_REGEN_ENABLED()
     -- TODO: workaround Lady Deathwhisper
     self.inCombat = false
 
-    self:Debug("Should save combat?", self.currentCombat.startTime, self.currentCombat.messages:length())
+    self:Debug("Should save combat?", self.currentCombat.startTime, #self.currentCombat.messages)
 
-    if self.currentCombat.startTime and self.currentCombat.messages:length() > 0 then
-        -- Convert List to array for storage
-        local messages = {}
-        for msg in self.currentCombat.messages:iter() do
-            table.insert(messages, msg)
-        end
-
+    if self.currentCombat.startTime and #self.currentCombat.messages > 0 then
         local combat = {
             startTime = self.currentCombat.startTime,
             endTime = time(),
-            messages = messages,
+            messages = self.currentCombat.messages,
             firstEnemy = self.currentCombat.firstEnemy
         }
 
@@ -215,7 +205,7 @@ function TestAddon:PLAYER_REGEN_ENABLED()
     -- Reset current combat
     self.currentCombat = {
         startTime = nil,
-        messages = List.new(),
+        messages = {},
         firstEnemy = nil
     }
 
@@ -320,7 +310,7 @@ function TestAddon:OnCombatLogEvent(message)
         self.currentCombat.startTime = time()
     end
 
-    self.currentCombat.messages:push_back(message)
+    table.insert(self.currentCombat.messages, message)
     self.mainFrame.logText:AddMessage(message)
 end
 
@@ -408,14 +398,8 @@ end
 function TestAddon:DisplayCombat(combat)
     self.mainFrame.logText:Clear()
     if combat and combat.messages then
-        if type(combat.messages) == "table" and combat.messages.iter then
-            for message in combat.messages:iter() do
-                self.mainFrame.logText:AddMessage(message)
-            end
-        else
-            for _, message in ipairs(combat.messages) do
-                self.mainFrame.logText:AddMessage(message)
-            end
+        for _, message in ipairs(combat.messages) do
+            self.mainFrame.logText:AddMessage(message)
         end
     end
 end
@@ -556,7 +540,7 @@ function TestAddon:CreateMainFrame()
         TestAddon.activeEnemies = {}
         TestAddon.currentCombat = {
             startTime = nil,
-            messages = List.new()
+            messages = {}
         }
         TestAddon.mainFrame.logText:Clear()
         self:SendMessage("TestAddon_CombatEnded")
@@ -652,21 +636,6 @@ function TestAddon:CreateMainFrame()
     frame:Hide()
 end
 
-function TestAddon:ShowCombatHistory()
-    if #self.combatHistory == 0 then
-        self:Print("История боев пуста")
-        return
-    end
-
-    self:Print("История боев:")
-    for index, combat in ipairs(self.combatHistory) do
-        local startTime = date("%H:%M:%S", combat.startTime)
-        local endTime = date("%H:%M:%S", combat.endTime)
-        local enemyInfo = combat.firstEnemy or ""
-        self:Print(string.format("%d. Бой%s (%s - %s)", index, enemyInfo, startTime, endTime))
-    end
-end
-
 function TestAddon:ClearCombatHistory()
     self.combatHistory = {}
     self:Print("История боев очищена")
@@ -711,10 +680,6 @@ function TestAddon:HandleSlashCommand(input)
     elseif input == "debug" then
         self.db.profile.debug = not self.db.profile.debug
         print("Режим отладки: " .. (self.db.profile.debug and "включен" or "выключен"))
-    elseif input == "hist" then
-        self:ShowCombatHistory()
-    elseif input == "combat" then
-        self:printActiveEnemies()
     elseif input == "clear" then
         self:ClearCombatHistory()
     elseif input:match("^b%s+(%d+)$") then
@@ -738,7 +703,6 @@ function TestAddon:ShowHistoryMenu(anchor)
         isTitle = true
     }}
 
-    -- Add combat history items
     for i, combat in ipairs(self.combatHistory) do
         local startTime = date("%H:%M:%S", combat.startTime)
         local endTime = date("%H:%M:%S", combat.endTime)

@@ -1,4 +1,3 @@
-require('../lib/List')
 local M = require('tests.mocks')
 local blizzardEvent = require('../lib/blizzardEvent')
 local TestAddon = require("Core")

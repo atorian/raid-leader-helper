@@ -1,8 +1,6 @@
 local TestAddon = LibStub("AceAddon-3.0"):GetAddon("TestAddon")
 local MisdirectionTracker = TestAddon:NewModule("MisdirectionTracker", "AceEvent-3.0")
 
-local List = List
-
 -- hunt
 local MISDIRECTION_START_SPELL_ID = 34477
 local MISDIRECTION_SPELL_ID = 35079

@@ -22,7 +22,6 @@ Libs\AceDB-3.0\AceDB-3.0.xml
 Libs\AceGUI-3.0\AceGUI-3.0.xml
 
 lib\blizzardEvent.lua
-lib\List.lua
 lib\RingBuffer.lua
 
 # Core files

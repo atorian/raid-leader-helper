@@ -15,6 +15,9 @@ local AceEvent = {
 -- Mock bit functions used by the addon
 bit = {
     band = function(a, b)
+        if a == nil then
+            return 0
+        end
         -- Implementation of bitwise AND for older Lua versions
         local result = 0
         local bitval = 1

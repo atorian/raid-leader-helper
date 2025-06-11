@@ -6,12 +6,15 @@ function DeathTracker:OnInitialize()
     self.dmgEvents = {}
     self.healEvents = {}
     self.firstEntered = false
+    self.log = function(...)
+        TestAddon:OnCombatLogEvent(...)
+    end
+
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 end
 
 -- 67662 Ледной Рев
 -- Список отслеживаемых способностей
-
 local METEORIT = 75879
 local LUZHA = 75949
 local LEZVIA25OB = 77844
@@ -40,9 +43,7 @@ function DeathTracker:OnEnable()
 end
 
 function DeathTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
-    self:handleEvent(blizzardEvent(...), function(...)
-        TestAddon:OnCombatLogEvent(...)
-    end)
+    self:handleEvent(blizzardEvent(...), self.log)
 end
 
 function DeathTracker:reset()
@@ -59,7 +60,7 @@ function DeathTracker:logHeal(playerName, event)
     self.healEvents[playerName] = event
 end
 
-local function isFirstInDarkness(event, log)
+function DeathTracker:isFirstInDarkness(event, log)
     if not self.firstEntered and event.spellId >= pelena10 and event.spellId <= pelena25hm then
         self.firstEntered = true
         log(string.format("%s |cFFFFFFFF%s|r зашел во тьму первый", date("%H:%M:%S", event.timestamp),
@@ -67,10 +68,22 @@ local function isFirstInDarkness(event, log)
     end
 end
 
+local function isPlayer(flags)
+    return bit.band(flags or 0, 0x7) > 0
+end
+
+-- todo: rename this method
+local function isTwilightCutter(spellId)
+    if not spellId then
+        return false
+    end
+    return spellId >= pelena10 and spellId <= pelena25hm
+end
+
 function DeathTracker:handleEvent(event, log)
-    if TestAddon:isPlayer(event.destFlags) then
-        if event.spellId == event.spellId >= pelena10 and event.spellId <= pelena25hm then
-            isFirstInDarkness(event, log)
+    if isPlayer(event.destFlags) then
+        if isTwilightCutter(event.spellId) then
+            self:isFirstInDarkness(event, log)
         elseif event.event == "SPELL_DAMAGE" then
             self:logDmg(event.destName, {
                 source = event.sourceName,
@@ -98,8 +111,9 @@ function DeathTracker:ProcessPlayerDeath(log, playerName, timestamp)
 
     if lastDamage then
         if spells[lastDamage.spellId] then
-            msg = msg .. spells[lastDamage.spellId]
-            log(msg)
+            log(msg .. spells[lastDamage.spellId])
         end
     end
 end
+
+return DeathTracker

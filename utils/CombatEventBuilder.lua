@@ -177,6 +177,22 @@ function CombatEventBuilder:RemoveAura(spellId, spellName)
     return self
 end
 
+function CombatEventBuilder:SpellMissed(spellId, spellName, missType)
+    self.event = "SPELL_MISSED"
+    self.spell.id = spellId
+    self.spell.name = spellName
+    self.missType = missType
+    return self
+end
+
+function CombatEventBuilder:DamageShieldMissed(spellId, spellName, missType)
+    self.event = "DAMAGE_SHIELD_MISSED"
+    self.spell.id = spellId
+    self.spell.name = spellName
+    self.missType = missType
+    return self
+end
+
 -- Построить и вернуть событие в формате COMBAT_LOG_EVENT_UNFILTERED
 function CombatEventBuilder:Build()
     if self.event == "SWING_DAMAGE" then
@@ -212,6 +228,10 @@ function CombatEventBuilder:Build()
             self.source.flags, self.target.guid, self.target.name, self.target.flags, self.spell.id, self.spell.name,
             self.spell.school, self.type, -- auraType (BUFF/DEBUFF)
             1 -- amount (используется для стаков баффа)
+    elseif self.event == "SPELL_MISSED" or self.event == "DAMAGE_SHIELD_MISSED" then
+        return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event, self.source.guid, self.source.name,
+            self.source.flags, self.target.guid, self.target.name, self.target.flags, self.spell.id, self.spell.name,
+            self.spell.school, self.missType -- missType
     end
 end
 

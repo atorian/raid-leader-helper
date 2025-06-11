@@ -109,7 +109,6 @@ local function isEnemy(flags)
 end
 
 function TestAddon:isPlayer(flags)
-    -- Check if unit is player, party member, or raid member
     return bit.band(flags or 0, TestAddon.GROUP_AFFILIATION_ANY) > 0
 end
 

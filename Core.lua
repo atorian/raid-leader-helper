@@ -83,7 +83,8 @@ function TestAddon:OnInitialize()
             table.insert(self.combatHistory, {
                 startTime = combat.startTime,
                 endTime = combat.endTime,
-                messages = messages
+                messages = messages,
+                firstEnemy = combat.firstEnemy -- Сохраняем имя первого врага
             })
         end
     end
@@ -290,6 +291,22 @@ function TestAddon:OnCombatLogEvent(message)
     self.mainFrame.logText:AddMessage(message)
 end
 
+function TestAddon:SaveCombatToProfile(combat, profile)
+    -- Добавляем бой в начало массива
+    table.insert(self.combatHistory, 1, combat)
+
+    -- Ограничиваем количество сохраненных боев до 10
+    while #self.combatHistory > 10 do
+        table.remove(self.combatHistory)
+    end
+
+    -- Сохраняем историю боев в профиль
+    profile.combatHistory = {}
+    for _, savedCombat in ipairs(self.combatHistory) do
+        table.insert(profile.combatHistory, savedCombat)
+    end
+end
+
 function TestAddon:EndCombat(reason)
     self.inCombat = false
 
@@ -309,7 +326,7 @@ function TestAddon:EndCombat(reason)
             firstEnemy = self.currentCombat.firstEnemy
         }
 
-        table.insert(self.combatHistory, combat)
+        self:SaveCombatToProfile(combat, self.db.profile)
         self:Debug("Combat Saved to history")
     end
 
@@ -362,7 +379,6 @@ function TestAddon:MinimizeWindow()
         self.mainFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", self.db.profile.savedPosition.x,
             self.db.profile.savedPosition.y)
     else
-
         self.mainFrame:SetSize(400, 150)
         local screenWidth = GetScreenWidth()
         local screenHeight = GetScreenHeight()

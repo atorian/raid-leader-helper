@@ -28,6 +28,12 @@
 ### Сброс скады на бурсте у МТ
 
 
+### Filter events by source
+    - all
+    - tounts
+    - spells
+    - death
+    - 
 
 
 Todo:

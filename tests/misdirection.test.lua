@@ -36,10 +36,9 @@ describe("Misdirection Tracker", function()
             :RemoveAura(35079, "Перенаправление"):Build())
 
         -- Проверяем что был сгенерирован отчет
-        assert.spy(MisdirectionTracker.log).was_called_with("Охотник",
-            string.format(
-                "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк |TInterface\\Icons\\INV_Spear_07:24:24:0:-2|t",
-                date("%H:%M:%S", GetTime()), misdirect))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк |TInterface\\Icons\\INV_Spear_07:24:24:0:-2|t",
+            date("%H:%M:%S", GetTime()), misdirect))
     end)
 
     -- it("генерирует отчет при спадении ауры", function()

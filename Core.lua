@@ -1,5 +1,4 @@
 local TestAddon = LibStub("AceAddon-3.0"):NewAddon("TestAddon", "AceConsole-3.0", "AceEvent-3.0")
-local AceGUI = LibStub("AceGUI-3.0")
 
 -- Utility functions
 local function wipe(t)
@@ -638,6 +637,7 @@ end
 
 function TestAddon:ClearCombatHistory()
     self.combatHistory = {}
+    self.db.profile.combatHistory = {}
     self:Print("История боев очищена")
 end
 
@@ -686,48 +686,6 @@ function TestAddon:HandleSlashCommand(input)
         local index = tonumber(input:match("^b%s+(%d+)$"))
         self:ShowCombatByIndex(index)
     end
-end
-
-function TestAddon:ShowHistoryMenu(anchor)
-    local menu = {{
-        text = "Текущий бой",
-        notCheckable = true,
-        func = function()
-            self:DisplayCombat(self.currentCombat)
-            self.mainFrame:Show()
-        end,
-        disabled = not self.currentCombat.startTime
-    }, {
-        text = "История боев",
-        notCheckable = true,
-        isTitle = true
-    }}
-
-    for i, combat in ipairs(self.combatHistory) do
-        local startTime = date("%H:%M:%S", combat.startTime)
-        local endTime = date("%H:%M:%S", combat.endTime)
-        local enemyInfo = combat.firstEnemy or ""
-        table.insert(menu, {
-            text = string.format("%d. %s (%s - %s)", i, enemyInfo, startTime, endTime),
-            notCheckable = true,
-            func = function()
-                self:ShowCombatByIndex(i)
-            end
-        })
-    end
-
-    -- Add clear history option if there are saved combats
-    if #self.combatHistory > 0 then
-        table.insert(menu, {
-            text = "Очистить историю",
-            notCheckable = true,
-            func = function()
-                self:ClearCombatHistory()
-            end
-        })
-    end
-
-    EasyMenu(menu, anchor, "cursor", 0, 0, "MENU")
 end
 
 return TestAddon

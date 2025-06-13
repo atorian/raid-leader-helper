@@ -40,6 +40,7 @@ local spells = {
 
 function DeathTracker:OnEnable()
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
+    self:RegisterMessage("TestAddon_Demo", "demo")
 end
 
 function DeathTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
@@ -60,11 +61,14 @@ function DeathTracker:logHeal(playerName, event)
     self.healEvents[playerName] = event
 end
 
+local function formatFirstInTwilight(ts, name)
+    return string.format("%s |cFFFFFFFF%s|r зашел во тьму первый", date("%H:%M:%S", ts), name)
+end
+
 function DeathTracker:isFirstInDarkness(event, log)
     if not self.firstEntered and event.spellId >= pelena10 and event.spellId <= pelena25hm then
         self.firstEntered = true
-        log(string.format("%s |cFFFFFFFF%s|r зашел во тьму первый", date("%H:%M:%S", event.timestamp),
-            event.destName))
+        log(formatFirstInTwilight(event.timestamp, event.destName))
     end
 end
 
@@ -103,10 +107,13 @@ function DeathTracker:handleEvent(event, log)
     end
 end
 
-function DeathTracker:ProcessPlayerDeath(log, playerName, timestamp)
-    local msg = string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t", date("%H:%M:%S", timestamp), playerName,
+local function formatDiedFrom(ts, name)
+    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t", date("%H:%M:%S", ts), name,
         "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8")
+end
 
+function DeathTracker:ProcessPlayerDeath(log, playerName, timestamp)
+    local msg = formatDiedFrom(timestamp, playerName)
     local lastDamage = self.dmgEvents[playerName]
 
     if lastDamage then
@@ -114,6 +121,13 @@ function DeathTracker:ProcessPlayerDeath(log, playerName, timestamp)
             log(msg .. spells[lastDamage.spellId])
         end
     end
+end
+
+function DeathTracker:demo()
+    self.log(formatFirstInTwilight(time(), "PlayerName"))
+    self.log(formatDiedFrom(time(), "PlayerName") .. spells[METEORIT])
+    self.log(formatDiedFrom(time(), "PlayerName") .. spells[LUZHA])
+    self.log(formatDiedFrom(time(), "PlayerName") .. spells[LEZVIA25HM])
 end
 
 return DeathTracker

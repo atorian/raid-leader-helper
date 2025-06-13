@@ -17,19 +17,26 @@ function SpiritTracker:OnInitialize()
     TestAddon:Debug("SpiritTracker: Инициализация")
     self.currentSpirits = {}
     self.report = {}
+    self.log = function(...)
+        TestAddon:OnCombatLogEvent(...)
+    end
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterEvent("CHAT_MSG_RAID_BOSS_EMOTE")
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
+    self:RegisterMessage("TestAddon_Demo", "demo")
 end
 
 function SpiritTracker:OnEnable()
     TestAddon:Debug("SpiritTracker: Включен")
 end
 
+local function formatShieldBroken(ts)
+    return string.format("%s Леди: Щит разбит", date("%H:%M:%S", ts))
+end
+
 function SpiritTracker:CHAT_MSG_RAID_BOSS_EMOTE(msg)
     if msg == shieldOffRu or msg == shieldOffEn then
-        TestAddon:OnCombatLogEvent(string.format("%s Леди: Щит разбит",
-            date("%H:%M:%S", eventData.timestamp)))
+        self.log(formatShieldBroken(time()))
     end
 end
 
@@ -43,9 +50,7 @@ end
 -- end
 
 function SpiritTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
-    self:handleEvent(blizzardEvent(...), function(...)
-        TestAddon:OnCombatLogEvent(...)
-    end)
+    self:handleEvent(blizzardEvent(...))
 end
 
 function SpiritTracker:reset()
@@ -75,7 +80,15 @@ function SpiritTracker:reset()
     self.report = {}
 end
 
-function SpiritTracker:handleEvent(eventData, log)
+local function formatSpiritHit(ts, dest)
+    return string.format("%s |cFFFFFFFF%s|r взорвал духа |T%s:24:24:0:0|t", date("%H:%M:%S", ts), dest, icon)
+end
+
+local function formatSpiritMiss(ts, dest)
+    return string.format("%s Дух автоатачил |cFFFFFFFF%s|r", date("%H:%M:%S", ts), dest)
+end
+
+function SpiritTracker:handleEvent(eventData)
     if eventData.event == "SPELL_SUMMON" and eventData.spellId == 71426 then
         self.currentSpirits[eventData.destGUID] = {
             name = eventData.destName,
@@ -93,8 +106,7 @@ function SpiritTracker:handleEvent(eventData, log)
         self.report[eventData.destName] = self.report[eventData.destName] or 0
         self.report[eventData.destName] = self.report[eventData.destName] + 1
 
-        log(string.format("%s |cFFFFFFFF%s|r взорвал духа |T%s:24:24:0:0|t",
-            date("%H:%M:%S", eventData.timestamp), eventData.destName, icon))
+        self.log(formatSpiritHit(eventData.timestamp, eventData.destName))
         return
     end
 
@@ -104,11 +116,15 @@ function SpiritTracker:handleEvent(eventData, log)
             return
         end
 
-        log(string.format("%s Дух автоатачил |cFFFFFFFF%s|r", date("%H:%M:%S", eventData.timestamp),
-            eventData.destName))
-
+        self.log(formatSpiritMiss(eventData.timestamp, eventData.destName))
         return
     end
+end
+
+function SpiritTracker:demo()
+    self.log(formatShieldBroken(time()))
+    self.log(formatSpiritHit(time(), "Player"))
+    self.log(formatSpiritMiss(time(), "Lucky"))
 end
 
 return SpiritTracker

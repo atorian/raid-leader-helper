@@ -18,10 +18,12 @@ local TRACKED_SPELLS = {
     [51399] = "Interface\\Icons\\Spell_DeathKnight_Strangulate", -- Death Knight: Death Grip Taunt Effect
     [56222] = "Interface\\Icons\\Spell_Nature_ShamanRage", -- Death Knight: Dark Command
     [62124] = "Interface\\Icons\\Spell_Holy_UnyieldingFaith", -- Paladin: Hand of Reckoning
+    [31789] = "Interface\\Icons\\inv_shoulder_37",
     [5209] = "Interface\\Icons\\Ability_Druid_ChallangingRoar", -- Druid: Growl
+
     [10278] = "Interface\\Icons\\Spell_Holy_SealOfProtection", -- Paladin: Корона
-    [31789] = "Interface\\Icons\\inv_shoulder_37", -- Paladin: Праведна защита
     [19752] = "Interface\\Icons\\Spell_Nature_TimeStop", -- Paladin: Hand of Protection (BoP)
+
     [26994] = "Interface\\Icons\\spell_nature_reincarnation", -- Друид БР
     [48477] = "Interface\\Icons\\spell_nature_reincarnation" -- Друид БР
 }
@@ -33,6 +35,7 @@ function SppellTracker:OnInitialize()
     end
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
+    self:RegisterMessage("TestAddon_Demo", "demo")
 end
 
 function SppellTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
@@ -55,21 +58,40 @@ local function isEnemy(flags)
     return bit.band(flags or 0, ENEMY_FLAGS) > 0
 end
 
-function SppellTracker:handleEvent(eventData, log)
+local function formatFirstHit(ts, source, dest)
+    return string.format("%s |cFFFFFFFF%s|r Первый урон по |cFFFFFFFF%s|r", date("%H:%M:%S", ts), source,
+        dest)
+end
+
+local function formatSpellCast(ts, source, spellIcon, dest)
+    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", ts), source, spellIcon, dest)
+end
+
+function SppellTracker:handleEvent(eventData)
     if not firstDamageDone and (eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE") then
         if isPlayer(eventData.sourceFlags) and isEnemy(eventData.destFlags) then
-            TestAddon:Debug("First damage", eventData.sourceName, eventData.destName)
             firstDamageDone = true
-            log(string.format("%s |cFFFFFFFF%s|r Первый урон по |cFFFFFFFF%s|r",
-                date("%H:%M:%S", eventData.timestamp), eventData.sourceName, eventData.destName))
+            self.log(formatFirstHit(eventData.timestamp, eventData.sourceName, eventData.destName))
         end
     end
 
     if (eventData.event == "SPELL_AURA_APPLIED") then
         if TRACKED_SPELLS[eventData.spellId] then
-            log(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", eventData.timestamp),
-                eventData.sourceName, TRACKED_SPELLS[eventData.spellId], eventData.destName))
+            self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
+                eventData.destName))
         end
+    end
+end
+
+function SppellTracker:demo()
+    self.log(formatFirstHit(time(), "CrazyDkPet", "Halion"))
+
+    for _, v in pairs({355, 694, 1161, 51399, 56222, 62124, 5209, 31789}) do
+        self.log(formatSpellCast(time(), "NotTank", TRACKED_SPELLS[v], "Halion"))
+    end
+
+    for _, v in pairs({10278, 19752}) do
+        self.log(formatSpellCast(time(), "Paladin", TRACKED_SPELLS[v], "OtherPlayer"))
     end
 end
 

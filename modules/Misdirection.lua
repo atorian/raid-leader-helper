@@ -25,7 +25,7 @@ local TRACKED_SPELLS = {
     [53352] = "Interface\\Icons\\ability_hunter_explosiveshot",
     [48996] = "Interface\\Icons\\ability_meleedamage", -- удар ящера
     [61006] = "Interface\\Icons\\ability_hunter_assassinate2", -- Килшот
-    [53339] = "Interface\\Icons\\ability_hunter_swiftstrike", -- Килшот
+    [53339] = "Interface\\Icons\\ability_hunter_swiftstrike",
     [75] = "Interface\\Icons\\inv_weapon_bow_55",
     -- Рога
     [57934] = "Interface\\Icons\\ability_rogue_tricksofthetrade",
@@ -33,7 +33,6 @@ local TRACKED_SPELLS = {
     [48638] = "Interface\\Icons\\Spell_shadow_ritualofsacrifice",
     [2098] = "Interface\\Icons\\ability_rogue_eviscerate",
     [5171] = "Interface\\Icons\\ability_rogue_slicedice", -- 
-    [57842] = "Interface\\Icons\\ability_rogue_murderspree",
     [13750] = "Interface\\Icons\\spell_shadow_shadowworddominate",
     [13877] = "Interface\\Icons\\ability_warrior_punishingblow",
     [11273] = "Interface\\Icons\\ability_rogue_rupture",
@@ -42,8 +41,9 @@ local TRACKED_SPELLS = {
     [57970] = "Interface\\Icons\\ability_rogue_dualweild",
     [57965] = "Interface\\Icons\\ability_poisons",
     [57841] = "Interface\\Icons\\ability_rogue_murderspree",
+    [57842] = "Interface\\Icons\\ability_rogue_murderspree",
     [51723] = "Interface\\Icons\\ability_rogue_fanofknives", -- веер клинков
-    [22482] = "Interface\\Icons\\ability_rogue_slicedice", -- шквал клинков - todo: группировать, выводить иконку + счетчик целей
+    [22482] = "Interface\\Icons\\ability_rogue_slicedice", -- шквал клинков
     [52874] = "Interface\\Icons\\ability_rogue_fanofknives",
     [48668] = "Interface\\Icons\\ability_rogue_eviscerate"
 }
@@ -71,6 +71,8 @@ function MisdirectionTracker:OnInitialize()
         -- TestAddon:Print("RL Быдло: MisdirectionTracker =>", ...)
         TestAddon:OnCombatLogEvent(...)
     end
+    self:RegisterMessage("TestAddon_CombatEnded", "reset")
+    self:RegisterMessage("TestAddon_Demo", "demo")
 end
 
 function MisdirectionTracker:reset()
@@ -79,10 +81,10 @@ function MisdirectionTracker:reset()
 end
 
 function MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
-    self:handleEvent(blizzardEvent(...), self.log)
+    self:handleEvent(blizzardEvent(...))
 end
 
-function MisdirectionTracker:handleEvent(eventData, log)
+function MisdirectionTracker:handleEvent(eventData)
     if eventData.event == "SPELL_CAST_SUCCESS" and
         (eventData.spellId == MISDIRECTION_START_SPELL_ID or eventData.spellId == SMALL_TRICKS_START_SPELL_ID) then
         self:OnMisdirection(eventData)
@@ -90,7 +92,7 @@ function MisdirectionTracker:handleEvent(eventData, log)
 
     if eventData.event == "SPELL_AURA_REMOVED" and
         (eventData.spellId == MISDIRECTION_SPELL_ID or eventData.spellId == SMALL_TRICKS_SPELL_ID) then
-        self:OnMisdirectionRemoved(eventData, log)
+        self:OnMisdirectionRemoved(eventData)
     end
 
     if activePulls[eventData.sourceName] then
@@ -109,8 +111,8 @@ function MisdirectionTracker:OnMisdirection(eventData)
     pullDamage[eventData.sourceName] = {}
 end
 
-function MisdirectionTracker:OnMisdirectionRemoved(eventData, log)
-    self:GenerateReport(eventData.sourceName, log)
+function MisdirectionTracker:OnMisdirectionRemoved(eventData)
+    self:GenerateReport(eventData.sourceName)
     activePulls[eventData.sourceName] = nil
     pullDamage[eventData.sourceName] = nil
 end
@@ -130,13 +132,9 @@ function MisdirectionTracker:OnDamage(eventData)
     end
 end
 
-function MisdirectionTracker:GenerateReport(hunterName, log)
-
-    local allHits = pullDamage[hunterName]
-
-    local report = string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:-2|t %s",
-        date("%H:%M:%S", activePulls[hunterName].time), hunterName, TRACKED_SPELLS[activePulls[hunterName].spellId],
-        activePulls[hunterName].target)
+local function formatMissdirect(ts, source, missdirectSpellId, dest, allHits)
+    local report = string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:-2|t %s", date("%H:%M:%S", ts), source,
+        TRACKED_SPELLS[missdirectSpellId], dest)
 
     for ts, bucket in pairs(allHits) do
         for spellId, hits in pairs(bucket) do
@@ -154,7 +152,75 @@ function MisdirectionTracker:GenerateReport(hunterName, log)
         end
     end
 
-    log(report)
+    return report
+end
+
+function MisdirectionTracker:demo()
+    local ts = time()
+    local hunterHits1 = {
+        [10] = {
+            [49050] = 1
+        },
+        [20] = {
+            [53353] = 1
+        },
+        [30] = {
+            [53353] = 1
+        }
+    }
+    self.log(formatMissdirect(time(), "HunterName", MISDIRECTION_SPELL_ID, "Tank", hunterHits1))
+    local hunterHits2 = {
+        [1] = {
+            [49052] = 1
+        },
+        [2] = {
+            [49052] = 1
+        }
+    }
+    self.log(formatMissdirect(time(), "HunterName", MISDIRECTION_SPELL_ID, "Tank", hunterHits2))
+    local rogeHits1 = {
+        [1] = {
+            [48638] = 1
+        },
+        [2] = {
+            [57841] = 1,
+            [57842] = 1
+        },
+        [3] = {
+            [48638] = 1
+        },
+        [4] = {
+            [57841] = 1,
+            [57842] = 1
+        }
+    }
+    self.log(formatMissdirect(time(), "KRoga", SMALL_TRICKS_SPELL_ID, "Tank", rogeHits1))
+    local rogeHits2 = {
+        [1] = {
+            [51723] = 3,
+            [22482] = 2
+        },
+        [2] = {
+            [51723] = 3,
+            [22482] = 2
+        },
+        [3] = {
+            [51723] = 3,
+            [22482] = 2
+        }
+    }
+    self.log(formatMissdirect(time(), "KRoga", SMALL_TRICKS_SPELL_ID, "Tank", rogeHits2))
+
+end
+
+function MisdirectionTracker:GenerateReport(hunterName)
+
+    local allHits = pullDamage[hunterName]
+
+    local report = formatMissdirect(time(), hunterName, TRACKED_SPELLS[activePulls[hunterName].spellId],
+        activePulls[hunterName].target, allHits)
+
+    self.log(report)
 end
 
 return MisdirectionTracker

@@ -668,6 +668,7 @@ function TestAddon:HandleSlashCommand(input)
         print("/rlh fill - включить/выключить режим отладки")
         print("/rlh hist - показать историю боев")
         print("/rlh clear - очистить историю боев")
+        print("/rlh demo - show all messages")
         print("/rlh b # - показать бой по номеру")
     elseif input == "fill" then
         for i = 1, 50 do
@@ -682,6 +683,8 @@ function TestAddon:HandleSlashCommand(input)
         print("Режим отладки: " .. (self.db.profile.debug and "включен" or "выключен"))
     elseif input == "clear" then
         self:ClearCombatHistory()
+    elseif input == "demo" then
+        self:SendMessage("TestAddon_Demo")
     elseif input:match("^b%s+(%d+)$") then
         local index = tonumber(input:match("^b%s+(%d+)$"))
         self:ShowCombatByIndex(index)

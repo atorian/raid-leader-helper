@@ -35,6 +35,9 @@
     - death
     - 
 
+### Spirits: show report on boss dead
+
+### Enable addons only when in the raid
 
 Todo:
 - sort by timestamp?

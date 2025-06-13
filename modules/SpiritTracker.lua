@@ -1,5 +1,4 @@
 -- TODO: enable only when entering ICC
--- TODO: report on spirits when battle ended
 local TestAddon = LibStub("AceAddon-3.0"):GetAddon("TestAddon")
 local SpiritTracker = TestAddon:NewModule("SpiritTracker", "AceEvent-3.0")
 

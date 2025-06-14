@@ -117,7 +117,6 @@ function TestAddon:trackCombatants(event)
     end
 
     if self.activeEnemies[event.sourceGUID] == 0 or self.activeEnemies[event.destGUID] == 0 then
-        self:Debug("Enemy is alrady dead", event.timestamp, self.activeEnemies[event.sourceGUID])
         return
     end
 
@@ -136,8 +135,8 @@ function TestAddon:trackCombatants(event)
         end
     end
     if isEnemy(event.destFlags) then
-        self:Debug("ENEMY 2 From:", event.sourceName, event.spellName, event.destName,
-            self.activeEnemies[event.destGUID], event.event, event.timestamp)
+        -- self:Debug("ENEMY 2 From:", event.sourceName, event.spellName, event.destName,
+        --     self.activeEnemies[event.destGUID], event.event, event.timestamp)
         self.activeEnemies[event.destGUID] = true
         self.enemyEvents[event.destGUID] = {
             name = event.destName,
@@ -150,11 +149,11 @@ function TestAddon:trackCombatants(event)
         end
     end
     if isPlayer(event.sourceFlags) then
-        self:Debug("PLAYER 1:", event.sourceName, event.event)
+        -- self:Debug("PLAYER 1:", event.sourceName, event.event)
         self.activePlayers[event.sourceGUID] = self.activePlayers[event.sourceGUID] or false
     end
     if isPlayer(event.destFlags) then
-        self:Debug("PLAYER 2:", event.destName, event.destFlags)
+        -- self:Debug("PLAYER 2:", event.destName, event.destFlags)
         self.activePlayers[event.destGUID] = self.activePlayers[event.destGUID] or false
     end
 end
@@ -182,12 +181,12 @@ end
 
 function TestAddon:PLAYER_REGEN_ENABLED()
     -- Бой окончен
-    self:Print("Regen Enabled")
+    self:Debug("Regen Enabled")
     self:printActiveEnemies()
     -- TODO: workaround Lady Deathwhisper
     self.inCombat = false
 
-    self:Debug("Should save combat?", self.currentCombat.startTime, #self.currentCombat.messages)
+    -- self:Debug("Should save combat?", self.currentCombat.startTime, #self.currentCombat.messages)
 
     if self.currentCombat.startTime and #self.currentCombat.messages > 0 then
         local combat = {

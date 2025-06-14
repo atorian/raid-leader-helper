@@ -65,14 +65,12 @@ function MisdirectionTracker:OnEnable()
 end
 
 function MisdirectionTracker:OnInitialize()
-    TestAddon:Debug("RL Быдло: MisdirectionTracker инициализируется")
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-    self.log = function(...)
-        -- TestAddon:Print("RL Быдло: MisdirectionTracker =>", ...)
-        TestAddon:OnCombatLogEvent(...)
-    end
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
     self:RegisterMessage("TestAddon_Demo", "demo")
+    self.log = function(...)
+        TestAddon:OnCombatLogEvent(...)
+    end
 end
 
 function MisdirectionTracker:reset()

@@ -29,13 +29,12 @@ local TRACKED_SPELLS = {
 }
 
 function SppellTracker:OnInitialize()
-    TestAddon:Debug("RL Быдло: SppellTracker инициализируется")
-    self.log = function(...)
-        TestAddon:OnCombatLogEvent(...)
-    end
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
     self:RegisterMessage("TestAddon_Demo", "demo")
+    self.log = function(...)
+        TestAddon:OnCombatLogEvent(...)
+    end
 end
 
 function SppellTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
@@ -43,7 +42,6 @@ function SppellTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 end
 
 function SppellTracker:reset()
-    TestAddon:Debug("SppellTracker Got Reset")
     firstDamageDone = false
 end
 

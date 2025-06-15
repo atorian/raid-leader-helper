@@ -42,19 +42,18 @@ jobs:
         run: |
           mkdir -p release
           # Copy only necessary files
-          cp TestAddon.toc release/
-          cp TestAddon.xml release/
+          cp RLHelper.toc release/
+          cp RLHelper.xml release/
           cp Core.lua release/
           cp -r modules release/
           cp -r lib release/
           
           # Create zip archive
-          cd release
-          zip -r ../TestAddon.zip *
+          zip -r RLHelper.zip ./release
           
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: TestAddon.zip
+          files: RLHelper.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

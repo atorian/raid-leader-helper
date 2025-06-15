@@ -90,7 +90,7 @@ function MisdirectionTracker:handleEvent(eventData)
 
     if eventData.event == "SPELL_AURA_REMOVED" and
         (eventData.spellId == MISDIRECTION_SPELL_ID or eventData.spellId == SMALL_TRICKS_SPELL_ID) then
-        self:OnMisdirectionRemoved(eventData)
+        self:GenerateReport(eventData.sourceName)
     end
 
     if activePulls[eventData.sourceName] then
@@ -109,12 +109,6 @@ function MisdirectionTracker:OnMisdirection(eventData)
     pullDamage[eventData.sourceName] = {}
 end
 
-function MisdirectionTracker:OnMisdirectionRemoved(eventData)
-    self:GenerateReport(eventData.sourceName)
-    activePulls[eventData.sourceName] = nil
-    pullDamage[eventData.sourceName] = nil
-end
-
 function MisdirectionTracker:OnDamage(eventData)
     if not SKIP_SPELLS[eventData.spellId] then
         if not pullDamage[eventData.sourceName][eventData.timestamp] then
@@ -131,6 +125,7 @@ function MisdirectionTracker:OnDamage(eventData)
 end
 
 local function formatMissdirect(ts, source, missdirectSpellId, dest, allHits)
+
     local report = string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:-2|t %s", date("%H:%M:%S", ts), source,
         TRACKED_SPELLS[missdirectSpellId], dest)
 
@@ -215,7 +210,7 @@ function MisdirectionTracker:GenerateReport(hunterName)
 
     local allHits = pullDamage[hunterName]
 
-    local report = formatMissdirect(time(), hunterName, TRACKED_SPELLS[activePulls[hunterName].spellId],
+    local report = formatMissdirect(activePulls[hunterName].time, hunterName, activePulls[hunterName].spellId,
         activePulls[hunterName].target, allHits)
 
     self.log(report)

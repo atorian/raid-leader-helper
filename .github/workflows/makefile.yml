@@ -42,16 +42,7 @@ jobs:
       
       - name: Create release archive
         run: |
-          mkdir -p release
-          # Copy only necessary files
-          cp RLHelper.toc release/
-          cp RLHelper.xml release/
-          cp Core.lua release/
-          cp -r modules release/
-          cp -r lib release/
-          
-          # Create zip archive
-          zip -j -r RLHelper.zip ./release/
+          make release
           
       - name: Create Release
         id: create_release

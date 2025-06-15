@@ -1,0 +1,58 @@
+name: TestAddon CI/CD
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Lua
+        uses: leafo/gh-actions-lua@v8.0.0
+        with:
+          luaVersion: '5.1'
+          
+      - name: Install dependencies
+        run: |
+          luarocks install busted
+          luarocks install luacov
+          
+      - name: Run tests
+        run: |
+          busted tests/*.test.lua
+
+  release:
+    name: Create Release
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create release archive
+        run: |
+          mkdir -p release
+          # Copy only necessary files
+          cp TestAddon.toc release/
+          cp TestAddon.xml release/
+          cp Core.lua release/
+          cp -r modules release/
+          cp -r lib release/
+          
+          # Create zip archive
+          cd release
+          zip -r ../TestAddon.zip *
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: TestAddon.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -49,7 +49,7 @@ jobs:
           cp -r lib release/
           
           # Create zip archive
-          zip -r RLHelper.zip ./release
+          zip -j -r RLHelper.zip ./release/
           
       - name: Create Release
         id: create_release
@@ -60,7 +60,7 @@ jobs:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
           draft: true
-          prerelease: false
+          prerelease: true
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1

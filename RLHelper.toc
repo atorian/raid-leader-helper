@@ -1,5 +1,5 @@
 ## Interface: 30300
-## Title: RL Быдло
+## Title: RL Helper
 ## Notes: Quick access to RL controls
 ## Author: Atorian
 ## Version: 0.0.1

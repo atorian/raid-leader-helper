@@ -28,6 +28,7 @@ describe('SpiritTracker', function()
         before_each(function()
             log = spy.new(function()
             end)
+            SpiritTracker.log = log
         end)
 
         it('logs explode on SWING_DAMAGE', function()
@@ -49,8 +50,8 @@ describe('SpiritTracker', function()
                 destName = "TestTarget"
             }
 
-            SpiritTracker:handleEvent(summonEvent, log)
-            SpiritTracker:handleEvent(swingEvent, log)
+            SpiritTracker:handleEvent(summonEvent)
+            SpiritTracker:handleEvent(swingEvent)
 
             assert.spy(log).was_called_with(
                 "SOME DATE |cFFFFFFFFTestTarget|r взорвал духа |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t")
@@ -75,8 +76,8 @@ describe('SpiritTracker', function()
                 destName = "TestTarget"
             }
 
-            SpiritTracker:handleEvent(summonEvent, log)
-            SpiritTracker:handleEvent(missEvent, log)
+            SpiritTracker:handleEvent(summonEvent)
+            SpiritTracker:handleEvent(missEvent)
 
             assert.spy(log).was_called_with("SOME DATE Дух автоатачил |cFFFFFFFFTestTarget|r")
         end)

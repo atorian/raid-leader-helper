@@ -59,9 +59,9 @@ end
 local CombatEventBuilder = {}
 CombatEventBuilder.__index = CombatEventBuilder
 
-function CombatEventBuilder:New()
+function CombatEventBuilder:New(time)
     local instance = {
-        timestamp = GetTime(),
+        timestamp = time or GetTime(),
         event = nil,
         source = {
             guid = "0x0000000000000000",

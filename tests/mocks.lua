@@ -167,6 +167,7 @@ end
 GetTime = function()
     return 1234567890
 end
+
 GetSpellTexture = function(spellName)
     return "texture_path"
 end

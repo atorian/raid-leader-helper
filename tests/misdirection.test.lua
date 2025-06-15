@@ -15,7 +15,7 @@ describe("Misdirection Tracker", function()
     local log
 
     before_each(function()
-        -- MisdirectionTracker:reset()
+        MisdirectionTracker:reset()
         MisdirectionTracker.log = spy.new(function()
         end)
     end)
@@ -41,43 +41,38 @@ describe("Misdirection Tracker", function()
             date("%H:%M:%S", GetTime()), misdirect))
     end)
 
-    -- it("генерирует отчет при спадении ауры", function()
-    --     -- Начинаем напул
-    --     MisdirectionTracker:handleEvent(
-    --         Builder:New():FromPlayer("Охотник"):ToPlayer("Танк"):ApplyAura(34477,
-    --             "Перенаправление"):Build(), log)
+    it("отслеживает урон во время активного напула Роги", function()
+        local tricks = "Interface\\Icons\\ability_rogue_tricksofthetrade"
+        local eviscerate = "Interface\\Icons\\Spell_shadow_ritualofsacrifice"
+        local fan = "Interface\\Icons\\ability_rogue_fanofknives"
+        local murder = "Interface\\Icons\\ability_rogue_murderspree"
 
-    --     -- Охотник наносит урон
-    --     MisdirectionTracker:handleEvent(Builder:New():FromPlayer("Охотник"):ToEnemy("Враг"):Damage(1000)
-    --         :Build(), log)
+        -- Начинаем напул
+        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Рога"):ToPlayer("Танк")
+            :CastSuccess(57934, "Маленькие хитрости"):Build())
 
-    --     -- Аура спадает
-    --     MisdirectionTracker:handleEvent(Builder:New():FromPlayer("Охотник"):ToPlayer("Танк"):RemoveAura(
-    --         34477, "Перенаправление"):Build(), log)
+        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Рога"):ToPlayer("Рога")
+            :ApplyAura(59628, "Маленькие хитрости"):Build())
 
-    --     -- Проверяем что был сгенерирован отчет
-    --     assert.spy(log).was_called_with("Охотник",
-    --         string.format("%s |cFFFFFFFF%s|r Pull Report:\n  Auto Attack: 1 hits, 1000 total damage",
-    --             date("%H:%M:%S", GetTime()), "Охотник"))
-    -- end)
+        -- Рога использует разные способности
+        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New(GetTime() + 1):FromPlayer("Рога"):ToEnemy(
+            "Враг"):SpellDamage(48638, "Эвисцерация", 1000):Build())
 
-    -- it("не отслеживает урон после спадения ауры", function()
-    --     -- Начинаем напул
-    --     MisdirectionTracker:handleEvent(
-    --         Builder:New():FromPlayer("Охотник"):ToPlayer("Танк"):ApplyAura(34477,
-    --             "Перенаправление"):Build(), log)
+        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New(GetTime() + 2):FromPlayer("Рога"):ToEnemy(
+            "Враг"):SpellDamage(51723, "Веер клинков", 500):Build())
 
-    --     -- Аура спадает
-    --     MisdirectionTracker:handleEvent(Builder:New():FromPlayer("Охотник"):ToPlayer("Танк"):RemoveAura(
-    --         34477, "Перенаправление"):Build(), log)
+        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New(GetTime() + 4):FromPlayer("Рога"):ToEnemy(
+            "Враг"):SpellDamage(57841, "Убийственный разгул", 800):Build())
 
-    --     -- Охотник наносит урон после спадения ауры
-    --     MisdirectionTracker:handleEvent(Builder:New():FromPlayer("Охотник"):ToEnemy("Враг"):Damage(1000)
-    --         :Build(), log)
+        -- Аура спадает
+        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New(GetTime() + 6):FromPlayer("Рога"):ToPlayer(
+            "Танк"):RemoveAura(59628, "Маленькие хитрости"):Build())
 
-    --     -- Проверяем что не было дополнительных вызовов логирования
-    --     assert.spy(log).was_called(2) -- Только для применения и спадения ауры
-    -- end)
+        -- Проверяем что был сгенерирован отчет
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFРога|r |T%s:24:24:0:-2|t Танк |T%s:24:24:0:-2|t |T%s:24:24:0:-2|t |T%s:24:24:0:-2|t",
+            date("%H:%M:%S", GetTime()), tricks, eviscerate, fan, murder))
+    end)
 
     -- it("отслеживает несколько способностей во время напула", function()
     --     -- Начинаем напул
@@ -103,3 +98,10 @@ describe("Misdirection Tracker", function()
     --         date("%H:%M:%S", GetTime()), "Охотник"))
     -- end)
 end)
+
+-- Misdirection Tracker отслеживает урон во время активного напула Роги
+-- ./tests/misdirection.test.lua:72: Function was never called with matching arguments.
+-- Called with (last call if any):
+-- (values list) ((string) 'SOME DATE |cFFFFFFFFРога|r |TInterface\Icons\ability_rogue_tricksofthetrade:24:24:0:-2|t Танк |TInterface\Icons\Spell_shadow_ritualofsacrifice:24:24:0:-2|t |TInterface\Icons\ability_rogue_murderspree:24:24:0:-2|t |TInterface\Icons\ability_rogue_fanofknives:24:24:0:-2|t')
+-- Expected:
+-- (values list) ((string) 'SOME DATE |cFFFFFFFFРога|r |TInterface\Icons\ability_rogue_tricksofthetrade:24:24:0:-2|t Танк |TInterface\Icons\Spell_shadow_ritualofsacrifice:24:24:0:-2|t |TInterface\Icons\ability_rogue_fanofknives:24:24:0:-2|t |TInterface\Icons\ability_rogue_murderspree:24:24:0:-2|t')

@@ -45,6 +45,8 @@ local TRACKED_SPELLS = {
     [51723] = "Interface\\Icons\\ability_rogue_fanofknives", -- веер клинков
     [22482] = "Interface\\Icons\\ability_rogue_slicedice", -- шквал клинков
     [52874] = "Interface\\Icons\\ability_rogue_fanofknives",
+    [57993] = "Interface\\Icons\\ability_rogue_disembowel",
+    [48665] = "Interface\\Icons\\ability_dualwield",
     [48668] = "Interface\\Icons\\ability_rogue_eviscerate"
 }
 

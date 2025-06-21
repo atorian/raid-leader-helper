@@ -27,6 +27,7 @@ local TRACKED_SPELLS = {
     [61006] = "Interface\\Icons\\ability_hunter_assassinate2", -- Килшот
     [53339] = "Interface\\Icons\\ability_hunter_swiftstrike",
     [75] = "Interface\\Icons\\inv_weapon_bow_55",
+    [72817] = "Interface\\Icons\\spell_nature_earthbind",
     -- Рога
     [57934] = "Interface\\Icons\\ability_rogue_tricksofthetrade",
     [59628] = "Interface\\Icons\\ability_rogue_tricksofthetrade",

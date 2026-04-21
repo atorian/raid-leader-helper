@@ -1,8 +1,10 @@
-local TestAddon = LibStub("AceAddon-3.0"):GetAddon("TestAddon")
+local TestAddon = LibStub("AceAddon-3.0"):GetAddon("RlHelper")
 local SppellTracker = TestAddon:NewModule("SppellTracker", "AceEvent-3.0")
 
 -- Флаг для отслеживания первого урона
 local firstDamageDone = false
+local HAND_OF_RECKONING = 62124
+local GLYPH_OF_RECKONING = 405004
 
 function SppellTracker:OnEnable()
     TestAddon:Print("RL Быдло: TauntTracker включен")
@@ -65,6 +67,40 @@ local function formatSpellCast(ts, source, spellIcon, dest)
     return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", ts), source, spellIcon, dest)
 end
 
+local function playerHasGlyph(glyphSpellId)
+    if type(GetNumGlyphSockets) ~= "function" or type(GetGlyphSocketInfo) ~= "function" then
+        return false
+    end
+
+    for socketIndex = 1, GetNumGlyphSockets() do
+        local _, _, socketedGlyphSpellId = GetGlyphSocketInfo(socketIndex)
+        if socketedGlyphSpellId == glyphSpellId then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function shouldTrackSpell(eventData)
+    if not TRACKED_SPELLS[eventData.spellId] then
+        return false
+    end
+
+    if eventData.spellId ~= HAND_OF_RECKONING or type(TestAddon.GetUnitIdFromGUID) ~= "function" then
+        return true
+    end
+
+    local sourceUnit = TestAddon.GetUnitIdFromGUID(eventData.sourceGUID, "group") or
+        TestAddon.GetUnitIdFromGUID(eventData.sourceGUID, "player")
+
+    if sourceUnit == "player" and playerHasGlyph(GLYPH_OF_RECKONING) then
+        return false
+    end
+
+    return true
+end
+
 function SppellTracker:handleEvent(eventData)
     if not firstDamageDone and (eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE") then
         if isPlayer(eventData.sourceFlags) and isEnemy(eventData.destFlags) then
@@ -74,7 +110,7 @@ function SppellTracker:handleEvent(eventData)
     end
 
     if (eventData.event == "SPELL_AURA_APPLIED") then
-        if TRACKED_SPELLS[eventData.spellId] then
+        if shouldTrackSpell(eventData) then
             self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
                 eventData.destName))
         end

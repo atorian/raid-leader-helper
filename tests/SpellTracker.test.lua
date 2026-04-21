@@ -2,6 +2,7 @@ require('tests.mocks')
 require("../lib/blizzardEvent")
 local SpellTracker = require("../modules/SpellTracker")
 local Builder = require("../utils/CombatEventBuilder")
+local mocks = require('tests.mocks')
 
 describe('SpellTracker', function()
     describe('COMBAT_LOG_EVENT_UNFILTERED', function()
@@ -12,6 +13,8 @@ describe('SpellTracker', function()
             end)
             SpellTracker.log = log
             SpellTracker:reset()
+            mocks:ClearUnitGUIDs()
+            mocks:ClearGlyphs()
         end)
 
         it('logs first damage to enemy', function()
@@ -50,6 +53,18 @@ describe('SpellTracker', function()
         it('ignores non-tracked spells', function()
             SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestCaster"):ToEnemy("TestTarget")
                 :ApplyAura(12345, "Random Spell"):Build())
+
+            assert.spy(log).was_not_called()
+        end)
+
+        it('does not log hand of reckoning for player paladin with glyph of reckoning', function()
+            local event = {Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget"):ApplyAura(62124,
+                "Hand of Reckoning"):Build()}
+
+            mocks:SetUnitGUID("player", event[4])
+            mocks:SetGlyph(1, 405004)
+
+            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(unpack(event))
 
             assert.spy(log).was_not_called()
         end)

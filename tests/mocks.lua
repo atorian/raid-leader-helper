@@ -47,6 +47,7 @@ end
 
 -- Таблица для хранения GUID'ов юнитов
 local unitGuids = {}
+local glyphSockets = {}
 
 -- Функция для установки GUID'а определенному юниту
 function M:SetUnitGUID(unitId, guid)
@@ -58,9 +59,25 @@ function M:ClearUnitGUIDs()
     wipe(unitGuids)
 end
 
+function M:SetGlyph(socketId, glyphSpellId)
+    glyphSockets[socketId] = glyphSpellId
+end
+
+function M:ClearGlyphs()
+    wipe(glyphSockets)
+end
+
 -- Мокк функции UnitGUID
 UnitGUID = function(unitId)
     return unitGuids[unitId] or "0x0000000000000000"
+end
+
+GetNumGlyphSockets = function()
+    return 6
+end
+
+GetGlyphSocketInfo = function(socketId)
+    return true, 1, glyphSockets[socketId], "glyph_icon"
 end
 
 -- Мокки для проверки состава группы/рейда
@@ -81,6 +98,15 @@ function M:GetAddon(name)
         Debug = function()
         end
     }
+    function addon.GetUnitIdFromGUID(guid, filter)
+        for unitId, unitGuid in pairs(unitGuids) do
+            if unitGuid == guid then
+                if filter ~= "player" or unitId == "player" then
+                    return unitId
+                end
+            end
+        end
+    end
     function addon:NewModule(moduleName, mixins)
         return {
             name = moduleName,

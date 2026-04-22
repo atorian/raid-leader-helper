@@ -1,68 +1,106 @@
-require('tests.mocks')
-local blizzardEvent = require('../lib/blizzardEvent')
+local M = require('tests.mocks')
+require('../lib/blizzardEvent')
 local TestAddon = require('../Core')
 local Builder = require('../utils/CombatEventBuilder')
 
--- Вспомогательная функция для подсчета элементов в таблице
 local function count(tbl)
-    local count = 0
-    for _, v in pairs(tbl) do
-        count = count + 1
+    local total = 0
+    for _ in pairs(tbl) do
+        total = total + 1
     end
-    return count
+    return total
 end
 
 describe("Боевая система", function()
-    local timestamp = GetTime()
-
     before_each(function()
+        TestAddon:StopCombatTicker()
         TestAddon.inCombat = false
-        wipe(TestAddon.activeEnemies)
-        wipe(TestAddon.activePlayers)
+        TestAddon.lastCombatActivityAt = nil
+        TestAddon.combatEndRequestedAt = nil
+        TestAddon.currentCombat = {
+            startTime = nil,
+            messages = {},
+            firstEnemy = nil
+        }
+        TestAddon.combatHistory = {}
         TestAddon.DisplayCombat = function()
         end
+        TestAddon.mainFrame = {
+            logText = {
+                AddMessage = function()
+                end,
+                Clear = function()
+                end
+            }
+        }
+
+        wipe(TestAddon.activeEnemies)
+        wipe(TestAddon.activePlayers)
+        wipe(TestAddon.enemyEvents)
 
         TestAddon.db = {
             profile = {
-                debug = false
+                debug = false,
+                combatHistory = {}
             }
         }
+
+        M.partySize = 0
+        M.raidSize = 0
+        M.UnitAffectingCombat1 = true
+        M.UnitAffectingCombat2 = false
+        M.UnitAffectingCombat3 = false
     end)
 
     it("начинает бой когда игрок входит в бой", function()
         TestAddon:PLAYER_REGEN_DISABLED()
+
         assert.is_true(TestAddon.inCombat)
     end)
 
-    it("отслеживает врагов, наносящих урон игрокам", function()
-        -- Начинаем бой
-        TestAddon:PLAYER_REGEN_DISABLED()
+    it("начинает бой от боевого лога и отслеживает участников", function()
+        M.UnitAffectingCombat1 = false
 
-        -- Враг бьет игрока
-        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Враг1"):ToPlayer("Игрок1"):Damage(100)
-            :Build())
+        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Враг1"):ToPlayer("Игрок1"):Damage(100):Build())
 
+        assert.is_true(TestAddon.inCombat)
         assert.are.equal(1, count(TestAddon.activeEnemies))
         assert.are.equal(1, count(TestAddon.activePlayers))
-        assert.is_true(TestAddon.inCombat)
+        assert.are.equal("Враг1", TestAddon.currentCombat.firstEnemy)
     end)
 
-    it("не завершает бой если есть игроки без Divine Intervention", function()
-        -- Начинаем бой
+    it("не завершает бой сразу по PLAYER_REGEN_ENABLED", function()
         TestAddon:PLAYER_REGEN_DISABLED()
-
-        -- Добавляем врага и двух игроков
-        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Враг1"):ToPlayer("Игрок1"):Damage(100)
-            :Build())
-
-        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Враг1"):ToPlayer("Игрок2"):Damage(100)
-            :Build())
-
-        -- Накладываем Divine Intervention только на одного игрока
-        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Паладин"):ToPlayer("Игрок1")
-            :ApplyAura(19752, "Божественное вмешательство"):Build())
+        TestAddon:PLAYER_REGEN_ENABLED()
 
         assert.is_true(TestAddon.inCombat)
     end)
 
+    it("не завершает бой пока группа еще в бою", function()
+        TestAddon:PLAYER_REGEN_DISABLED()
+        TestAddon:OnCombatLogEvent("test message")
+
+        M.partySize = 1
+        M.UnitAffectingCombat1 = false
+        M.UnitAffectingCombat2 = true
+        TestAddon.lastCombatActivityAt = TestAddon:GetCombatNow() - 10
+        TestAddon.combatEndRequestedAt = TestAddon:GetCombatNow() - 5
+
+        assert.is_false(TestAddon:EvaluateCombatEnd("test"))
+        assert.is_true(TestAddon.inCombat)
+        assert.are.equal(0, #TestAddon.combatHistory)
+    end)
+
+    it("завершает бой после тихого периода вне боя", function()
+        TestAddon:PLAYER_REGEN_DISABLED()
+        TestAddon:OnCombatLogEvent("test message")
+
+        M.UnitAffectingCombat1 = false
+        TestAddon.lastCombatActivityAt = TestAddon:GetCombatNow() - 10
+        TestAddon.combatEndRequestedAt = TestAddon:GetCombatNow() - 5
+
+        assert.is_true(TestAddon:EvaluateCombatEnd("test"))
+        assert.is_false(TestAddon.inCombat)
+        assert.are.equal(1, #TestAddon.combatHistory)
+    end)
 end)

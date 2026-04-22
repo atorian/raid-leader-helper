@@ -93,6 +93,41 @@ GetNumPartyMembers = function()
     return M.partySize or 0
 end
 
+local function isGroupInCombat()
+    if UnitAffectingCombat("player") then
+        return true
+    end
+
+    for i = 1, (M.partySize or 0) do
+        if UnitAffectingCombat("party" .. i) then
+            return true
+        end
+    end
+
+    for i = 1, (M.raidSize or 0) do
+        if UnitAffectingCombat("raid" .. i) then
+            return true
+        end
+    end
+
+    return false
+end
+
+C_Timer = {
+    NewTicker = function(_, callback)
+        local ticker = {
+            callback = callback,
+            cancelled = false
+        }
+
+        function ticker:Cancel()
+            self.cancelled = true
+        end
+
+        return ticker
+    end
+}
+
 function M:GetAddon(name)
     local addon = {
         Debug = function()
@@ -107,6 +142,8 @@ function M:GetAddon(name)
             end
         end
     end
+    addon.IsGroupInCombat = isGroupInCombat
+    addon.C_Timer = C_Timer
     function addon:NewModule(moduleName, mixins)
         return {
             name = moduleName,
@@ -151,6 +188,10 @@ function M:NewModule(name)
     return module
 end
 
+function M:New(target)
+    return {}
+end
+
 function M:NewAddon(name)
     local module = {
         name = name,
@@ -172,6 +213,9 @@ function M:NewAddon(name)
         Debug = function()
         end
     }
+
+    module.IsGroupInCombat = isGroupInCombat
+    module.C_Timer = C_Timer
 
     return module
 end
@@ -219,6 +263,10 @@ UnitAffectingCombat = function(unitId)
     end
 
     return true -- По умолчанию считаем что в бою
+end
+
+InCombatLockdown = function()
+    return UnitAffectingCombat("player")
 end
 
 -- Мок для wipe - очистка таблицы

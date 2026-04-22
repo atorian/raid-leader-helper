@@ -1,4 +1,11 @@
-local TestAddon = LibStub("AceAddon-3.0"):NewAddon("TestAddon", "AceConsole-3.0", "AceEvent-3.0")
+local TestAddon = LibStub("AceAddon-3.0"):NewAddon("RlHelper", "AceConsole-3.0", "AceEvent-3.0", "LibCompat-1.0")
+local callbacks = LibStub("CallbackHandler-1.0"):New(TestAddon)
+local IsGroupInCombat, InCombatLockdown = TestAddon.IsGroupInCombat, InCombatLockdown
+local GetUnitIdFromGUID = TestAddon.GetUnitIdFromGUID
+
+local COMBAT_END_CHECK_INTERVAL = 1
+local COMBAT_END_GRACE = 3
+local ENEMY_ACTIVITY_TIMEOUT = 6
 
 -- Utility functions
 local function wipe(t)
@@ -8,10 +15,6 @@ local function wipe(t)
     return t
 end
 
--- Constants
-TestAddon.MAX_RAID_SIZE = 25 -- Максимальный размер боевого рейда
-TestAddon.DIVINE_INTERVENTION = 19752 -- ID баффа Божественного вмешательства
-
 -- Group affiliation flags
 TestAddon.GROUP_AFFILIATION_PLAYER = 0x1 -- Игрок
 TestAddon.GROUP_AFFILIATION_PARTY = 0x2 -- Член группы
@@ -19,11 +22,6 @@ TestAddon.GROUP_AFFILIATION_RAID = 0x4 -- Член рейда
 TestAddon.GROUP_AFFILIATION_ANY = 0x7 -- Принадлежность к любой группе (игрок/группа/рейд)
 
 -- Enemy flags
-TestAddon.ENEMY_FLAG_OUTSIDER = 0x8 -- Не игрок
-TestAddon.ENEMY_FLAG_HOSTILE = 0x40 -- Враждебный
-TestAddon.ENEMY_FLAG_NPC = 0x200 -- NPC
-TestAddon.ENEMY_FLAG_NPC_TYPE = 0x800 -- Тип NPC
-TestAddon.ENEMY_FLAG_CONTROLLED = 0x1000 -- Под контролем
 TestAddon.ENEMY_FLAGS = 0xa48 -- Маска для проверки враждебных NPC (OUTSIDER | HOSTILE | NPC | NPC_TYPE)
 TestAddon.CONTROLLED_FLAGS = 0x1248 -- Маска для проверки юнитов под контролем (OUTSIDER | CONTROLLED | NPC | NPC_TYPE)
 
@@ -52,6 +50,9 @@ TestAddon.viewingCurrentCombat = true -- Initialize to true by default
 TestAddon.activeEnemies = {}
 TestAddon.activePlayers = {}
 TestAddon.enemyEvents = {} -- Structure to track enemies and their events
+TestAddon.lastCombatActivityAt = nil
+TestAddon.combatEndRequestedAt = nil
+TestAddon.combatTicker = nil
 
 function TestAddon:Debug(...)
     if self.db.profile.debug then
@@ -94,6 +95,7 @@ function TestAddon:OnInitialize()
 end
 
 function TestAddon:OnEnable()
+    self:MinimizeWindow()
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterEvent("PLAYER_REGEN_DISABLED")
     self:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -109,53 +111,178 @@ end
 
 local LADY_KONTROL = 71289
 
-function TestAddon:trackCombatants(event)
-    -- todo: Бафы которые были наложены другими игроками, в прошлом рейде, например,
-    -- спадая участвуют в эвентах с именами тех игроков.
-    if not event.destName or event.spellId == LADY_KONTROL then
+function TestAddon:GetCombatNow()
+    if type(GetTime) == "function" then
+        return GetTime()
+    end
+
+    return time()
+end
+
+function TestAddon:StopCombatTicker()
+    if self.combatTicker and type(self.combatTicker.Cancel) == "function" then
+        self.combatTicker:Cancel()
+    end
+
+    self.combatTicker = nil
+end
+
+function TestAddon:EnsureCombatTicker()
+    if self.combatTicker then
         return
     end
 
-    if self.activeEnemies[event.sourceGUID] == 0 or self.activeEnemies[event.destGUID] == 0 then
+    local timer = self.C_Timer or C_Timer
+    if not timer or type(timer.NewTicker) ~= "function" then
         return
+    end
+
+    self.combatTicker = timer.NewTicker(COMBAT_END_CHECK_INTERVAL, function()
+        self:EvaluateCombatEnd("ticker")
+    end)
+end
+
+local function involvesEnemy(event)
+    return isEnemy(event.sourceFlags) or isEnemy(event.destFlags)
+end
+
+function TestAddon:MarkEnemyInactive(guid)
+    if not guid then
+        return
+    end
+
+    self.activeEnemies[guid] = 0
+end
+
+function TestAddon:MarkEnemyActivity(guid, name, eventName, now)
+    if not guid then
+        return
+    end
+
+    self.activeEnemies[guid] = now
+    self.enemyEvents[guid] = {
+        name = name or "Unknown",
+        event = eventName,
+        seenAt = now
+    }
+end
+
+function TestAddon:HasRecentEnemyActivity(now)
+    for guid, seenAt in pairs(self.activeEnemies) do
+        if seenAt ~= 0 then
+            if now - seenAt <= ENEMY_ACTIVITY_TIMEOUT then
+                return true
+            end
+
+            self.activeEnemies[guid] = 0
+        end
+    end
+
+    return false
+end
+
+function TestAddon:IsCombatOngoing(now)
+    if InCombatLockdown and InCombatLockdown() then
+        return true
+    end
+
+    if IsGroupInCombat and IsGroupInCombat() then
+        return true
+    end
+
+    return self:HasRecentEnemyActivity(now)
+end
+
+function TestAddon:StartCombat(reason)
+    local now = self:GetCombatNow()
+    self.lastCombatActivityAt = now
+    self.combatEndRequestedAt = nil
+
+    if self.inCombat then
+        return
+    end
+
+    self.inCombat = true
+    if not self.currentCombat.startTime then
+        self.currentCombat.startTime = time()
+    end
+
+    self:EnsureCombatTicker()
+    self:DisplayCombat(self.currentCombat)
+    self:Debug("Combat started", reason)
+end
+
+function TestAddon:ResetCombatState()
+    self:StopCombatTicker()
+    self.inCombat = false
+    self.lastCombatActivityAt = nil
+    self.combatEndRequestedAt = nil
+
+    self.currentCombat = {
+        startTime = nil,
+        messages = {},
+        firstEnemy = nil
+    }
+
+    wipe(self.activeEnemies)
+    wipe(self.activePlayers)
+    wipe(self.enemyEvents)
+end
+
+function TestAddon:FinishCombat(reason)
+    self:Debug("Combat ended", reason)
+
+    local combat = nil
+    if self.currentCombat.startTime and #self.currentCombat.messages > 0 then
+        combat = {
+            startTime = self.currentCombat.startTime,
+            endTime = time(),
+            messages = self.currentCombat.messages,
+            firstEnemy = self.currentCombat.firstEnemy
+        }
+    end
+
+    self:ResetCombatState()
+
+    if combat then
+        self:SaveCombatToProfile(combat, self.db.profile)
+        self:Debug("Combat Saved to history")
+    end
+
+    self:SendMessage("TestAddon_CombatEnded")
+end
+
+function TestAddon:trackCombatants(event)
+    if event.spellId == LADY_KONTROL or not affectingGroup(event) or not involvesEnemy(event) then
+        return false
+    end
+
+    local now = self:GetCombatNow()
+    self.lastCombatActivityAt = now
+    self.combatEndRequestedAt = nil
+
+    if isPlayer(event.sourceFlags) and event.sourceGUID then
+        self.activePlayers[event.sourceGUID] = true
+    end
+    if isPlayer(event.destFlags) and event.destGUID then
+        self.activePlayers[event.destGUID] = true
     end
 
     if isEnemy(event.sourceFlags) then
-        -- self:Debug("ENEMY 1 From:", event.sourceName, "To", event.destName, event.sourceGUID,
-        --     self.activeEnemies[event.sourceGUID], event.event, event.timestamp)
-        self.activeEnemies[event.sourceGUID] = true
-        self.enemyEvents[event.sourceGUID] = {
-            name = event.sourceName,
-            event = event.event,
-            spellId = event.spellId
-        }
-        -- Save first enemy name if not set yet
-        if not self.currentCombat.firstEnemy then
-            self.currentCombat.firstEnemy = event.sourceName
-        end
+        self:MarkEnemyActivity(event.sourceGUID, event.sourceName, event.event, now)
     end
     if isEnemy(event.destFlags) then
-        -- self:Debug("ENEMY 2 From:", event.sourceName, event.spellName, event.destName,
-        --     self.activeEnemies[event.destGUID], event.event, event.timestamp)
-        self.activeEnemies[event.destGUID] = true
-        self.enemyEvents[event.destGUID] = {
-            name = event.destName,
-            event = event.event,
-            spellId = event.spellId
-        }
-        -- Save first enemy name if not set yet
-        if not self.currentCombat.firstEnemy then
-            self.currentCombat.firstEnemy = event.destName
+        self:MarkEnemyActivity(event.destGUID, event.destName, event.event, now)
+    end
+
+    if event.event == "UNIT_DIED" or event.event == "UNIT_DESTROYED" or event.event == "PARTY_KILL" then
+        if isEnemy(event.destFlags) then
+            self:MarkEnemyInactive(event.destGUID)
         end
     end
-    if isPlayer(event.sourceFlags) then
-        -- self:Debug("PLAYER 1:", event.sourceName, event.event)
-        self.activePlayers[event.sourceGUID] = self.activePlayers[event.sourceGUID] or false
-    end
-    if isPlayer(event.destFlags) then
-        -- self:Debug("PLAYER 2:", event.destName, event.destFlags)
-        self.activePlayers[event.destGUID] = self.activePlayers[event.destGUID] or false
-    end
+
+    self:StartCombat("combat_log")
+    return true
 end
 
 function TestAddon:printActiveEnemies()
@@ -180,85 +307,19 @@ function TestAddon:printActiveEnemies()
 end
 
 function TestAddon:PLAYER_REGEN_ENABLED()
-    -- Бой окончен
     self:Debug("Regen Enabled")
     self:printActiveEnemies()
-    -- TODO: workaround Lady Deathwhisper
-    self.inCombat = false
-
-    -- self:Debug("Should save combat?", self.currentCombat.startTime, #self.currentCombat.messages)
-
-    if self.currentCombat.startTime and #self.currentCombat.messages > 0 then
-        local combat = {
-            startTime = self.currentCombat.startTime,
-            endTime = time(),
-            messages = self.currentCombat.messages,
-            firstEnemy = self.currentCombat.firstEnemy
-        }
-
-        self:SaveCombatToProfile(combat, self.db.profile)
-        self:Debug("Combat Saved to history")
+    if not self.inCombat then
+        return
     end
 
-    -- Reset current combat
-    self.currentCombat = {
-        startTime = nil,
-        messages = {},
-        firstEnemy = nil
-    }
-
-    wipe(self.activePlayers)
-    wipe(self.enemyEvents)
-    self:SendMessage("TestAddon_CombatEnded")
+    self.combatEndRequestedAt = self:GetCombatNow()
+    self:EnsureCombatTicker()
+    self:EvaluateCombatEnd("PLAYER_REGEN_ENABLED")
 end
 
 function TestAddon:PLAYER_REGEN_DISABLED()
-    self.inCombat = true
-    -- wipe(self.activeEnemies)
-    self:DisplayCombat(self.currentCombat)
-    self:Debug("Combat started - player entered combat")
-end
-
-function TestAddon:checkCombatEndConditions()
-    -- Check if all enemies are dead (value is 0)
-    -- local allEnemiesDead = true
-    local active = false
-
-    for _, value in pairs(self.activeEnemies) do
-        if value == true then
-            active = true
-            break
-        end
-    end
-
-    if not active then
-        self:EndCombat("all_enemies_dead")
-        return true
-    end
-
-    local hasAlivePlayers = false
-    local hasPlayersWithoutDI = false
-
-    for guid, hasDI in pairs(self.activePlayers) do
-        hasAlivePlayers = true
-        if not hasDI then
-            hasPlayersWithoutDI = true
-            break
-        end
-    end
-
-    if not hasAlivePlayers then
-        self:EndCombat("all_players_dead")
-        return true
-    end
-
-    -- All remaining players have Divine Intervention
-    if not hasPlayersWithoutDI then
-        self:EndCombat("all_players_divine_intervention")
-        return true
-    end
-    -- self:Print("not a combat")
-    return false
+    self:StartCombat("PLAYER_REGEN_DISABLED")
 end
 
 function affectingGroup(event)
@@ -276,40 +337,39 @@ end
 
 function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     local eventData = blizzardEvent(...)
+    self:trackCombatants(eventData)
 
-    if not affectingGroup(eventData) then
+    if self.currentCombat.firstEnemy or not affectingGroup(eventData) then
         return
     end
 
-    if eventData.event == "UNIT_DIED" or eventData.event == "PARTY_KILL" then
-        if self.activeEnemies[eventData.destGUID] then
-            self.activeEnemies[eventData.destGUID] = 0
-        else
-            self.activePlayers[eventData.destGUID] = 0
+    -- Save first enemy name if not set yet
+    if isEnemy(eventData.sourceFlags) then
+        if not self.currentCombat.firstEnemy then
+            self.currentCombat.firstEnemy = eventData.sourceName
         end
-        return self.inCombat and self:checkCombatEndConditions()
     end
+    if isEnemy(eventData.destFlags) then
 
-    self:trackCombatants(eventData)
-
-    -- Track Divine Intervention
-    if eventData.event == "SPELL_AURA_APPLIED" and eventData.spellId == self.DIVINE_INTERVENTION then
-        self.activePlayers[eventData.destGUID] = true
-    elseif eventData.event == "SPELL_AURA_REMOVED" and eventData.spellId == self.DIVINE_INTERVENTION then
-        self.activePlayers[eventData.destGUID] = false
+        if not self.currentCombat.firstEnemy then
+            self.currentCombat.firstEnemy = eventData.destName
+        end
     end
-
-    -- TODO: inCombat логику проверить, чтобы правильно отключить бой
-    return self.inCombat and self:checkCombatEndConditions()
 end
 
 function TestAddon:OnCombatLogEvent(message)
+    if not self.inCombat then
+        self:StartCombat("message")
+    end
+
     if not self.currentCombat.startTime then
         self.currentCombat.startTime = time()
     end
 
     table.insert(self.currentCombat.messages, message)
-    self.mainFrame.logText:AddMessage(message)
+    if self.mainFrame and self.mainFrame.logText then
+        self.mainFrame.logText:AddMessage(message)
+    end
 end
 
 function TestAddon:SaveCombatToProfile(combat, profile)
@@ -329,7 +389,34 @@ function TestAddon:SaveCombatToProfile(combat, profile)
 end
 
 function TestAddon:EndCombat(reason)
-    self:Debug("Combat ended", reason)
+    self:FinishCombat(reason)
+end
+
+function TestAddon:EvaluateCombatEnd(reason)
+    if not self.inCombat then
+        return false
+    end
+
+    local now = self:GetCombatNow()
+    if self:IsCombatOngoing(now) then
+        return false
+    end
+
+    if not self.combatEndRequestedAt then
+        self.combatEndRequestedAt = now
+    end
+
+    local quietSince = self.combatEndRequestedAt
+    if self.lastCombatActivityAt and self.lastCombatActivityAt > quietSince then
+        quietSince = self.lastCombatActivityAt
+    end
+
+    if now - quietSince < COMBAT_END_GRACE then
+        return false
+    end
+
+    self:FinishCombat(reason)
+    return true
 end
 
 local function sendSync(prefix, msg)
@@ -394,6 +481,10 @@ function TestAddon:UpdateCombatDropdown()
 end
 
 function TestAddon:DisplayCombat(combat)
+    if not self.mainFrame or not self.mainFrame.logText then
+        return
+    end
+
     self.mainFrame.logText:Clear()
     if combat and combat.messages then
         for _, message in ipairs(combat.messages) do
@@ -535,11 +626,7 @@ function TestAddon:CreateMainFrame()
     resetBtn:SetPoint("LEFT", pull75Btn, "RIGHT", 4, 0)
     resetBtn:SetText("C")
     resetBtn:SetScript("OnClick", function()
-        TestAddon.activeEnemies = {}
-        TestAddon.currentCombat = {
-            startTime = nil,
-            messages = {}
-        }
+        TestAddon:ResetCombatState()
         TestAddon.mainFrame.logText:Clear()
         self:SendMessage("TestAddon_CombatEnded")
     end)

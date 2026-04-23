@@ -130,6 +130,12 @@ function SppellTracker:handleEvent(eventData)
         self:clearPendingHandOfReckoningBySource(eventData.sourceGUID)
     end
 
+    if eventData.event == "SPELL_RESURRECT" and TRACKED_SPELLS[eventData.spellId] then
+        self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
+            eventData.destName))
+        return
+    end
+
     if eventData.event == "SPELL_AURA_APPLIED" and TRACKED_SPELLS[eventData.spellId] then
         if eventData.spellId == HAND_OF_RECKONING then
             self:trackHandOfReckoningTarget(eventData)

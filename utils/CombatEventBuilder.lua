@@ -170,6 +170,13 @@ function CombatEventBuilder:CastSuccess(spellId, spellName, auraType)
     return self
 end
 
+function CombatEventBuilder:Resurrect(spellId, spellName)
+    self.event = "SPELL_RESURRECT"
+    self.spell.id = spellId
+    self.spell.name = spellName
+    return self
+end
+
 function CombatEventBuilder:RemoveAura(spellId, spellName)
     self.event = "SPELL_AURA_REMOVED"
     self.spell.id = spellId
@@ -228,6 +235,10 @@ function CombatEventBuilder:Build()
             self.source.flags, self.target.guid, self.target.name, self.target.flags, self.spell.id, self.spell.name,
             self.spell.school, self.type, -- auraType (BUFF/DEBUFF)
             1 -- amount (используется для стаков баффа)
+    elseif self.event == "SPELL_RESURRECT" then
+        return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event, self.source.guid, self.source.name,
+            self.source.flags, self.target.guid, self.target.name, self.target.flags, self.spell.id, self.spell.name,
+            self.spell.school
     elseif self.event == "SPELL_MISSED" or self.event == "DAMAGE_SHIELD_MISSED" then
         return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event, self.source.guid, self.source.name,
             self.source.flags, self.target.guid, self.target.name, self.target.flags, self.spell.id, self.spell.name,

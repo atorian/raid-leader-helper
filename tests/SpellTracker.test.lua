@@ -81,6 +81,15 @@ describe('SpellTracker', function()
                 "TestTarget"))
         end)
 
+        it('logs druid battle resurrection on spell resurrect', function()
+            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestDruid"):ToPlayer("DeadPlayer")
+                :Resurrect(48477, "Rebirth"):Build())
+
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "TestDruid", "Interface\\Icons\\spell_nature_reincarnation",
+                "DeadPlayer"))
+        end)
+
         it('clears pending hand of reckoning on the next paladin spell', function()
             local eventName, timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags,
                 spellId, spellName, spellSchool, auraType =

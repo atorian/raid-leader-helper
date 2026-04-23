@@ -48,6 +48,7 @@ end
 -- Таблица для хранения GUID'ов юнитов
 local unitGuids = {}
 local glyphSockets = {}
+local threatStates = {}
 
 -- Функция для установки GUID'а определенному юниту
 function M:SetUnitGUID(unitId, guid)
@@ -67,9 +68,24 @@ function M:ClearGlyphs()
     wipe(glyphSockets)
 end
 
+function M:SetThreatState(sourceUnit, mobUnit, isTanking, status)
+    threatStates[sourceUnit .. "->" .. mobUnit] = {
+        isTanking = isTanking,
+        status = status
+    }
+end
+
+function M:ClearThreatStates()
+    wipe(threatStates)
+end
+
 -- Мокк функции UnitGUID
 UnitGUID = function(unitId)
     return unitGuids[unitId] or "0x0000000000000000"
+end
+
+UnitExists = function(unitId)
+    return unitGuids[unitId] ~= nil
 end
 
 GetNumGlyphSockets = function()
@@ -78,6 +94,20 @@ end
 
 GetGlyphSocketInfo = function(socketId)
     return true, 1, glyphSockets[socketId], "glyph_icon"
+end
+
+UnitDetailedThreatSituation = function(sourceUnit, mobUnit)
+    local threat = threatStates[sourceUnit .. "->" .. mobUnit]
+    if not threat then
+        return nil
+    end
+
+    return threat.isTanking, threat.status
+end
+
+UnitThreatSituation = function(sourceUnit, mobUnit)
+    local threat = threatStates[sourceUnit .. "->" .. mobUnit]
+    return threat and threat.status or nil
 end
 
 -- Мокки для проверки состава группы/рейда

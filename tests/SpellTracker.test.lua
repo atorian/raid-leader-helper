@@ -14,7 +14,6 @@ describe('SpellTracker', function()
             SpellTracker.log = log
             SpellTracker:reset()
             mocks:ClearUnitGUIDs()
-            mocks:ClearGlyphs()
         end)
 
         it('logs first damage to enemy', function()
@@ -57,14 +56,46 @@ describe('SpellTracker', function()
             assert.spy(log).was_not_called()
         end)
 
-        it('does not log hand of reckoning for player paladin with glyph of reckoning', function()
-            local event = {Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget"):ApplyAura(62124,
-                "Hand of Reckoning"):Build()}
+        it('does not log hand of reckoning on aura applied alone', function()
+            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget")
+                :ApplyAura(62124, "Hand of Reckoning"):Build())
 
-            mocks:SetUnitGUID("player", event[4])
-            mocks:SetGlyph(1, 405004)
+            assert.spy(log).was_not_called()
+        end)
 
-            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(unpack(event))
+        it('logs hand of reckoning once when target changes to paladin', function()
+            local eventName, timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags,
+                spellId, spellName, spellSchool, auraType =
+                Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget"):ApplyAura(62124, "Hand of Reckoning")
+                    :Build()
+
+            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(eventName, timestamp, event, sourceGUID, sourceName, sourceFlags,
+                destGUID, destName, destFlags, spellId, spellName, spellSchool, auraType)
+            mocks:SetUnitGUID("target", destGUID)
+            mocks:SetUnitGUID("targettarget", sourceGUID)
+            SpellTracker:UNIT_TARGET("UNIT_TARGET", "target")
+
+            assert.spy(log).was_called(1)
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "TestPaladin", "Interface\\Icons\\Spell_Holy_UnyieldingFaith",
+                "TestTarget"))
+        end)
+
+        it('clears pending hand of reckoning on the next paladin spell', function()
+            local eventName, timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags,
+                spellId, spellName, spellSchool, auraType =
+                Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget"):ApplyAura(62124, "Hand of Reckoning")
+                    :Build()
+
+            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(eventName, timestamp, event, sourceGUID, sourceName, sourceFlags,
+                destGUID, destName, destFlags, spellId, spellName, spellSchool, auraType)
+
+            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestPaladin"):ToEnemy("AnotherTarget")
+                :ApplyAura(12345, "Random Spell"):Build())
+
+            mocks:SetUnitGUID("target", destGUID)
+            mocks:SetUnitGUID("targettarget", sourceGUID)
+            SpellTracker:UNIT_TARGET("UNIT_TARGET", "target")
 
             assert.spy(log).was_not_called()
         end)

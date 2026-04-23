@@ -4,8 +4,6 @@ local SppellTracker = TestAddon:NewModule("SppellTracker", "AceEvent-3.0")
 -- Флаг для отслеживания первого урона
 local firstDamageDone = false
 local HAND_OF_RECKONING = 62124
-local GLYPH_OF_RECKONING = 405004
-
 function SppellTracker:OnEnable()
     TestAddon:Print("RL Быдло: TauntTracker включен")
     firstDamageDone = false
@@ -32,8 +30,10 @@ local TRACKED_SPELLS = {
 
 function SppellTracker:OnInitialize()
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    self:RegisterEvent("UNIT_TARGET")
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
     self:RegisterMessage("TestAddon_Demo", "demo")
+    self.pendingHandOfReckonings = {}
     self.log = function(...)
         TestAddon:OnCombatLogEvent(...)
     end
@@ -45,6 +45,7 @@ end
 
 function SppellTracker:reset()
     firstDamageDone = false
+    self.pendingHandOfReckonings = {}
 end
 
 local PLAYER_FLAGS = 0x7
@@ -67,38 +68,54 @@ local function formatSpellCast(ts, source, spellIcon, dest)
     return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", ts), source, spellIcon, dest)
 end
 
-local function playerHasGlyph(glyphSpellId)
-    if type(GetNumGlyphSockets) ~= "function" or type(GetGlyphSocketInfo) ~= "function" then
+function SppellTracker:clearPendingHandOfReckoning(destGUID)
+    self.pendingHandOfReckonings[destGUID] = nil
+end
+
+function SppellTracker:clearPendingHandOfReckoningBySource(sourceGUID)
+    if not sourceGUID then
+        return
+    end
+
+    for destGUID, pending in pairs(self.pendingHandOfReckonings) do
+        if pending.sourceGUID == sourceGUID then
+            self.pendingHandOfReckonings[destGUID] = nil
+        end
+    end
+end
+
+function SppellTracker:trackHandOfReckoningTarget(eventData)
+    self.pendingHandOfReckonings[eventData.destGUID] = {
+        timestamp = eventData.timestamp,
+        spellIcon = TRACKED_SPELLS[eventData.spellId],
+        sourceGUID = eventData.sourceGUID,
+        sourceName = eventData.sourceName,
+        destName = eventData.destName
+    }
+end
+
+function SppellTracker:tryLogHandOfReckoningTarget(unitId)
+    if not unitId then
         return false
     end
 
-    for socketIndex = 1, GetNumGlyphSockets() do
-        local _, _, socketedGlyphSpellId = GetGlyphSocketInfo(socketIndex)
-        if socketedGlyphSpellId == glyphSpellId then
-            return true
-        end
+    local pending = self.pendingHandOfReckonings[UnitGUID(unitId)]
+    if not pending then
+        return false
+    end
+
+    local targetUnit = unitId .. "target"
+    if UnitExists(targetUnit) and UnitGUID(targetUnit) == pending.sourceGUID then
+        self:clearPendingHandOfReckoning(UnitGUID(unitId))
+        self.log(formatSpellCast(pending.timestamp, pending.sourceName, pending.spellIcon, pending.destName))
+        return true
     end
 
     return false
 end
 
-local function shouldTrackSpell(eventData)
-    if not TRACKED_SPELLS[eventData.spellId] then
-        return false
-    end
-
-    if eventData.spellId ~= HAND_OF_RECKONING or type(TestAddon.GetUnitIdFromGUID) ~= "function" then
-        return true
-    end
-
-    local sourceUnit = TestAddon.GetUnitIdFromGUID(eventData.sourceGUID, "group") or
-        TestAddon.GetUnitIdFromGUID(eventData.sourceGUID, "player")
-
-    if sourceUnit == "player" and playerHasGlyph(GLYPH_OF_RECKONING) then
-        return false
-    end
-
-    return true
+function SppellTracker:UNIT_TARGET(_, unitId)
+    self:tryLogHandOfReckoningTarget(unitId)
 end
 
 function SppellTracker:handleEvent(eventData)
@@ -109,10 +126,24 @@ function SppellTracker:handleEvent(eventData)
         end
     end
 
-    if (eventData.event == "SPELL_AURA_APPLIED") then
-        if shouldTrackSpell(eventData) then
+    if eventData.event and eventData.event:sub(1, 5) == "SPELL" and eventData.spellId ~= HAND_OF_RECKONING then
+        self:clearPendingHandOfReckoningBySource(eventData.sourceGUID)
+    end
+
+    if eventData.event == "SPELL_AURA_APPLIED" and TRACKED_SPELLS[eventData.spellId] then
+        if eventData.spellId == HAND_OF_RECKONING then
+            self:trackHandOfReckoningTarget(eventData)
+        else
             self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
                 eventData.destName))
+        end
+        return
+    end
+
+    if eventData.spellId == HAND_OF_RECKONING and eventData.destGUID then
+        if eventData.event == "SPELL_AURA_REMOVED" or eventData.event == "UNIT_DIED" or eventData.event == "UNIT_DESTROYED" or
+            eventData.event == "PARTY_KILL" then
+            self:clearPendingHandOfReckoning(eventData.destGUID)
         end
     end
 end

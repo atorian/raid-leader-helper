@@ -5,9 +5,7 @@ DeathwhisperTracker.receivesCombatEvents = true
 DeathwhisperTracker.zoneGateInstanceId = 631 -- Icecrown Citadel
 
 local TRACKED_SPELLS = {
-    [71809] = "spirit_attack", -- Spirit Attack (Атака духа)
-    [71426] = "spirit_summon", -- Призыв духа
-    [72010] = "vengeful_blast" -- Вспышка мщения
+    [71426] = "spirit_summon" -- Призыв духа
 }
 local LADY_DEATHWHISPER_MANA_BARRIER = 70842
 
@@ -110,6 +108,16 @@ local function formatSpiritMiss(ts, dest)
     return string.format("%s Дух автоатачил |cFFFFFFFF%s|r", date("%H:%M:%S", ts), dest)
 end
 
+local function consumeTrackedSpirit(self, guid)
+    local spiritInfo = self.currentSpirits[guid]
+    if not spiritInfo then
+        return nil
+    end
+
+    self.currentSpirits[guid] = nil
+    return spiritInfo
+end
+
 function DeathwhisperTracker:handleEvent(eventData)
     if eventData.event == "SPELL_AURA_REMOVED" and eventData.spellId == LADY_DEATHWHISPER_MANA_BARRIER then
         self.log(formatShieldBroken(eventData.timestamp))
@@ -125,7 +133,7 @@ function DeathwhisperTracker:handleEvent(eventData)
     end
 
     if eventData.event == "SWING_DAMAGE" then
-        local spiritInfo = self.currentSpirits[eventData.sourceGUID]
+        local spiritInfo = consumeTrackedSpirit(self, eventData.sourceGUID)
         if not spiritInfo then
             return
         end
@@ -138,7 +146,7 @@ function DeathwhisperTracker:handleEvent(eventData)
     end
 
     if eventData.event == "SWING_MISSED" then
-        local spiritInfo = self.currentSpirits[eventData.sourceGUID]
+        local spiritInfo = consumeTrackedSpirit(self, eventData.sourceGUID)
         if not spiritInfo then
             return
         end

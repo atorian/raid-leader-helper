@@ -68,7 +68,7 @@ describe('DeathwhisperTracker', function()
                 "SOME DATE |cFFFFFFFFTestTarget|r взорвал духа |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t")
         end)
 
-        it('logs explode on SWING_DAMAGE', function()
+        it('logs miss on SWING_MISSED', function()
             local summonEvent = {
                 event = "SPELL_SUMMON",
                 spellId = 71426,
@@ -91,6 +91,39 @@ describe('DeathwhisperTracker', function()
             DeathwhisperTracker:handleEvent(missEvent)
 
             assert.spy(log).was_called_with("SOME DATE Дух автоатачил |cFFFFFFFFTestTarget|r")
+        end)
+
+        it('does not double log when swing damage is followed by vengeful blast', function()
+            local summonEvent = {
+                event = "SPELL_SUMMON",
+                spellId = 71426,
+                timestamp = time(),
+                sourceGUID = "Summoner-123",
+                destGUID = "Spirit-123"
+            }
+
+            local swingEvent = {
+                event = "SWING_DAMAGE",
+                timestamp = time(),
+                sourceGUID = "Spirit-123",
+                destName = "TestTarget"
+            }
+
+            local blastEvent = {
+                event = "SPELL_DAMAGE",
+                timestamp = time(),
+                sourceGUID = "Spirit-123",
+                destName = "TestTarget",
+                spellId = 72010
+            }
+
+            DeathwhisperTracker:handleEvent(summonEvent)
+            DeathwhisperTracker:handleEvent(swingEvent)
+            DeathwhisperTracker:handleEvent(blastEvent)
+
+            assert.spy(log).was_called(1)
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFTestTarget|r взорвал духа |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t")
         end)
 
         it('does not add misses to spirit explosion report', function()

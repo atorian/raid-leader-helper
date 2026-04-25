@@ -78,6 +78,13 @@ describe("Misdirection Tracker", function()
             date("%H:%M:%S", GetTime()), tricks, eviscerate, fan, murder))
     end)
 
+    it("не падает на снятии ауры без активного напула", function()
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Охотник")
+            :RemoveAura(35079, "Перенаправление"):Build())
+
+        assert.spy(MisdirectionTracker.log).was_not_called()
+    end)
+
     -- it("отслеживает несколько способностей во время напула", function()
     --     -- Начинаем напул
     --     MisdirectionTracker:handleEvent(

@@ -129,6 +129,11 @@ function MisdirectionTracker:OnDamage(eventData)
     end
 end
 
+local function clearPullState(sourceName)
+    activePulls[sourceName] = nil
+    pullDamage[sourceName] = nil
+end
+
 local function formatMissdirect(ts, source, missdirectSpellId, dest, allHits)
 
     local report = string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:-2|t %s", date("%H:%M:%S", ts), source,
@@ -212,12 +217,16 @@ function MisdirectionTracker:demo()
 end
 
 function MisdirectionTracker:GenerateReport(hunterName)
-
+    local activePull = activePulls[hunterName]
     local allHits = pullDamage[hunterName]
 
-    local report = formatMissdirect(activePulls[hunterName].time, hunterName, activePulls[hunterName].spellId,
-        activePulls[hunterName].target, allHits)
+    if not activePull or not allHits then
+        clearPullState(hunterName)
+        return
+    end
 
+    local report = formatMissdirect(activePull.time, hunterName, activePull.spellId, activePull.target, allHits)
+    clearPullState(hunterName)
     self.log(report)
 end
 

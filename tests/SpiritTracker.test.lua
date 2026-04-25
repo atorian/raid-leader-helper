@@ -31,6 +31,16 @@ describe('SpiritTracker', function()
             SpiritTracker.log = log
         end)
 
+        it('logs shield broken on mana barrier removed', function()
+            SpiritTracker:handleEvent({
+                event = "SPELL_AURA_REMOVED",
+                spellId = 70842,
+                timestamp = time()
+            })
+
+            assert.spy(log).was_called_with("SOME DATE Леди: Щит разбит")
+        end)
+
         it('logs explode on SWING_DAMAGE', function()
             local summonEvent = {
                 event = "SPELL_SUMMON",

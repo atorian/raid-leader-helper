@@ -38,6 +38,37 @@ describe('DeathTracker', function()
             "Interface\\Icons\\Spell_Shadow_ShadowMend"))
     end)
 
+    it('checks up to the last 10 damage events on player death', function()
+        DeathTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Босс"):ToPlayer("Игрок1")
+            :SpellDamage(75879, "Метеорит", 1000):Build())
+
+        for i = 1, 9 do
+            DeathTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Босс"):ToPlayer("Игрок1")
+                :SpellDamage(12345 + i, "Обычный урон", 1000):Build())
+        end
+
+        DeathTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():ToPlayer("Игрок1"):Death():Build())
+
+        assert.spy(log).was_called_with(string.format(
+            "%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t от метеорита |T%s:24:24:0:0|t",
+            date("%H:%M:%S", deathTimestamp), "Игрок1", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8",
+            "Interface\\Icons\\spell_fire_meteorstorm"))
+    end)
+
+    it('drops damage events older than the last 10', function()
+        DeathTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Босс"):ToPlayer("Игрок1")
+            :SpellDamage(75879, "Метеорит", 1000):Build())
+
+        for i = 1, 10 do
+            DeathTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Босс"):ToPlayer("Игрок1")
+                :SpellDamage(12345 + i, "Обычный урон", 1000):Build())
+        end
+
+        DeathTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():ToPlayer("Игрок1"):Death():Build())
+
+        assert.spy(log).was_not_called()
+    end)
+
     it('ignores non-player death', function()
         DeathTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():ToEnemy("Моб"):Death():Build())
 

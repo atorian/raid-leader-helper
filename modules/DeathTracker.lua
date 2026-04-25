@@ -1,4 +1,4 @@
-local TestAddon = LibStub("AceAddon-3.0"):GetAddon("TestAddon")
+local TestAddon = LibStub("AceAddon-3.0"):GetAddon("RlHelper")
 local DeathTracker = TestAddon:NewModule("DeathTracker", "AceEvent-3.0")
 
 function DeathTracker:OnInitialize()
@@ -24,6 +24,7 @@ local pelena10 = 75483
 local pelena25 = 75484
 local pelena10hm = 75485
 local pelena25hm = 75486
+local MAX_DMG_EVENTS_PER_PLAYER = 10
 -- 74792 - metka
 
 local meteor_icon = "Interface\\Icons\\spell_fire_meteorstorm"
@@ -54,7 +55,15 @@ function DeathTracker:reset()
 end
 
 function DeathTracker:logDmg(playerName, event)
-    self.dmgEvents[playerName] = event
+    if not self.dmgEvents[playerName] then
+        self.dmgEvents[playerName] = {}
+    end
+
+    table.insert(self.dmgEvents[playerName], event)
+
+    while #self.dmgEvents[playerName] > MAX_DMG_EVENTS_PER_PLAYER do
+        table.remove(self.dmgEvents[playerName], 1)
+    end
 end
 
 function DeathTracker:logHeal(playerName, event)
@@ -114,13 +123,19 @@ end
 
 function DeathTracker:ProcessPlayerDeath(log, playerName, timestamp)
     local msg = formatDiedFrom(timestamp, playerName)
-    local lastDamage = self.dmgEvents[playerName]
+    local damageEvents = self.dmgEvents[playerName]
 
-    if lastDamage then
-        if spells[lastDamage.spellId] then
-            log(msg .. spells[lastDamage.spellId])
+    if damageEvents then
+        for i = #damageEvents, 1, -1 do
+            local lastDamage = damageEvents[i]
+            if spells[lastDamage.spellId] then
+                log(msg .. spells[lastDamage.spellId])
+                break
+            end
         end
     end
+
+    self.dmgEvents[playerName] = nil
 end
 
 function DeathTracker:demo()

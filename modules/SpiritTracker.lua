@@ -1,5 +1,5 @@
 -- TODO: enable only when entering ICC
-local TestAddon = LibStub("AceAddon-3.0"):GetAddon("TestAddon")
+local TestAddon = LibStub("AceAddon-3.0"):GetAddon("RlHelper")
 local SpiritTracker = TestAddon:NewModule("SpiritTracker", "AceEvent-3.0")
 
 local TRACKED_SPELLS = {
@@ -7,11 +7,9 @@ local TRACKED_SPELLS = {
     [71426] = "spirit_summon", -- Призыв духа
     [72010] = "vengeful_blast" -- Вспышка мщения
 }
+local LADY_DEATHWHISPER_MANA_BARRIER = 70842
 
 local icon = "Interface\\Icons\\spell_shadow_deathsembrace"
-
-local shieldOffRu = "Довольно! Пришла пора взять все в свои руки!"
-local shieldOffEn = "Enough! I see I must take matters into my own hands!"
 
 function SpiritTracker:OnInitialize()
     TestAddon:Debug("SpiritTracker: Инициализация")
@@ -21,7 +19,6 @@ function SpiritTracker:OnInitialize()
         TestAddon:OnCombatLogEvent(...)
     end
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-    self:RegisterEvent("CHAT_MSG_RAID_BOSS_EMOTE")
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
     self:RegisterMessage("TestAddon_Demo", "demo")
 end
@@ -32,12 +29,6 @@ end
 
 local function formatShieldBroken(ts)
     return string.format("%s Леди: Щит разбит", date("%H:%M:%S", ts))
-end
-
-function SpiritTracker:CHAT_MSG_RAID_BOSS_EMOTE(msg)
-    if msg == shieldOffRu or msg == shieldOffEn then
-        self.log(formatShieldBroken(time()))
-    end
 end
 
 -- function SpiritTracker:ZONE_CHANGED_NEW_AREA()
@@ -89,6 +80,11 @@ local function formatSpiritMiss(ts, dest)
 end
 
 function SpiritTracker:handleEvent(eventData)
+    if eventData.event == "SPELL_AURA_REMOVED" and eventData.spellId == LADY_DEATHWHISPER_MANA_BARRIER then
+        self.log(formatShieldBroken(eventData.timestamp))
+        return
+    end
+
     if eventData.event == "SPELL_SUMMON" and eventData.spellId == 71426 then
         self.currentSpirits[eventData.destGUID] = {
             name = eventData.destName,

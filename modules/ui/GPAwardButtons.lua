@@ -45,20 +45,18 @@ function GPAwardButtons:refreshVisibility()
     end
 
     if self:CanAwardGP() then
-        self.footerFrame:SetHeight(22)
         self.footerFrame:Show()
         for _, button in ipairs(self.buttons or {}) do
             button:Show()
         end
+        TestAddon:SetMainFrameBottomPanel(self.footerFrame)
     else
-        self.footerFrame:SetHeight(0)
         for _, button in ipairs(self.buttons or {}) do
             button:Hide()
         end
         self.footerFrame:Hide()
+        TestAddon:SetMainFrameBottomPanel(nil)
     end
-
-    TestAddon:LayoutMainFrame()
 end
 
 function GPAwardButtons:AwardTargetGP(label, amount)

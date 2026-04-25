@@ -8,6 +8,10 @@ local COMBAT_END_GRACE = 3
 local ENEMY_ACTIVITY_TIMEOUT = 6
 local MODULE_ZONE_ANY = 0
 
+local IGNORED_COMBAT_ENEMIES = {
+    ["World Invisible Trigger"] = true
+}
+
 -- Utility functions
 local function wipe(t)
     for k in pairs(t) do
@@ -112,6 +116,10 @@ end
 
 local function isPlayer(flags)
     return bit.band(flags or 0, TestAddon.GROUP_AFFILIATION_ANY) > 0
+end
+
+local function shouldIgnoreCombatEnemy(name)
+    return IGNORED_COMBAT_ENEMIES[name] == true
 end
 
 local LADY_KONTROL = 71289
@@ -395,12 +403,12 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     end
 
     -- Save first enemy name if not set yet
-    if isEnemy(eventData.sourceFlags) then
+    if isEnemy(eventData.sourceFlags) and not shouldIgnoreCombatEnemy(eventData.sourceName) then
         if not self.currentCombat.firstEnemy then
             self.currentCombat.firstEnemy = eventData.sourceName
         end
     end
-    if isEnemy(eventData.destFlags) then
+    if isEnemy(eventData.destFlags) and not shouldIgnoreCombatEnemy(eventData.destName) then
 
         if not self.currentCombat.firstEnemy then
             self.currentCombat.firstEnemy = eventData.destName

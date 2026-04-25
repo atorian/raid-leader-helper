@@ -69,6 +69,17 @@ describe("Боевая система", function()
         assert.are.equal("Враг1", TestAddon.currentCombat.firstEnemy)
     end)
 
+    it("игнорирует World Invisible Trigger как название боя", function()
+        M.UnitAffectingCombat1 = false
+
+        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("World Invisible Trigger"):ToPlayer("Игрок1")
+            :Damage(100):Build())
+        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Ануб'арак"):ToPlayer("Игрок1")
+            :Damage(100):Build())
+
+        assert.are.equal("Ануб'арак", TestAddon.currentCombat.firstEnemy)
+    end)
+
     it("не завершает бой сразу по PLAYER_REGEN_ENABLED", function()
         TestAddon:PLAYER_REGEN_DISABLED()
         TestAddon:PLAYER_REGEN_ENABLED()

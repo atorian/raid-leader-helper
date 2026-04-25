@@ -1,6 +1,8 @@
 -- TODO: enable only when entering ICC
 local TestAddon = LibStub("AceAddon-3.0"):GetAddon("RlHelper")
-local SpiritTracker = TestAddon:NewModule("SpiritTracker", "AceEvent-3.0")
+local DeathwhisperTracker = TestAddon:NewModule("DeathwhisperTracker", "AceEvent-3.0")
+DeathwhisperTracker.receivesCombatEvents = true
+DeathwhisperTracker.zoneGateInstanceId = 631 -- Icecrown Citadel
 
 local TRACKED_SPELLS = {
     [71809] = "spirit_attack", -- Spirit Attack (Атака духа)
@@ -11,40 +13,35 @@ local LADY_DEATHWHISPER_MANA_BARRIER = 70842
 
 local icon = "Interface\\Icons\\spell_shadow_deathsembrace"
 
-function SpiritTracker:OnInitialize()
-    TestAddon:Debug("SpiritTracker: Инициализация")
+function DeathwhisperTracker:OnInitialize()
+    TestAddon:Debug("DeathwhisperTracker: Инициализация")
     self.currentSpirits = {}
     self.report = {}
     self.log = function(...)
         TestAddon:OnCombatLogEvent(...)
     end
-    self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
     self:RegisterMessage("TestAddon_Demo", "demo")
 end
 
-function SpiritTracker:OnEnable()
-    TestAddon:Debug("SpiritTracker: Включен")
+function DeathwhisperTracker:OnEnable()
+    TestAddon:Debug("DeathwhisperTracker: Включен")
 end
 
 local function formatShieldBroken(ts)
     return string.format("%s Леди: Щит разбит", date("%H:%M:%S", ts))
 end
 
--- function SpiritTracker:ZONE_CHANGED_NEW_AREA()
+-- function DeathwhisperTracker:ZONE_CHANGED_NEW_AREA()
 -- local 
 -- if 
 -- end
 
--- function SpiritTracker:PLAYER_ENTERING_WORLD()
+-- function DeathwhisperTracker:PLAYER_ENTERING_WORLD()
 --
 -- end
 
-function SpiritTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
-    self:handleEvent(blizzardEvent(...))
-end
-
-function SpiritTracker:reset()
+function DeathwhisperTracker:reset()
     self.currentSpirits = {}
 
     if not self.report then
@@ -79,7 +76,7 @@ local function formatSpiritMiss(ts, dest)
     return string.format("%s Дух автоатачил |cFFFFFFFF%s|r", date("%H:%M:%S", ts), dest)
 end
 
-function SpiritTracker:handleEvent(eventData)
+function DeathwhisperTracker:handleEvent(eventData)
     if eventData.event == "SPELL_AURA_REMOVED" and eventData.spellId == LADY_DEATHWHISPER_MANA_BARRIER then
         self.log(formatShieldBroken(eventData.timestamp))
         return
@@ -117,10 +114,10 @@ function SpiritTracker:handleEvent(eventData)
     end
 end
 
-function SpiritTracker:demo()
+function DeathwhisperTracker:demo()
     self.log(formatShieldBroken(time()))
     self.log(formatSpiritHit(time(), "Player"))
     self.log(formatSpiritMiss(time(), "Lucky"))
 end
 
-return SpiritTracker
+return DeathwhisperTracker

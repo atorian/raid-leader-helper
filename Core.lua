@@ -6,6 +6,7 @@ local GetUnitIdFromGUID = TestAddon.GetUnitIdFromGUID
 local COMBAT_END_CHECK_INTERVAL = 1
 local COMBAT_END_GRACE = 3
 local ENEMY_ACTIVITY_TIMEOUT = 6
+local MODULE_ZONE_ANY = 0
 
 -- Utility functions
 local function wipe(t)
@@ -53,6 +54,7 @@ TestAddon.enemyEvents = {} -- Structure to track enemies and their events
 TestAddon.lastCombatActivityAt = nil
 TestAddon.combatEndRequestedAt = nil
 TestAddon.combatTicker = nil
+TestAddon.currentInstanceId = nil
 
 function TestAddon:Debug(...)
     if self.db.profile.debug then
@@ -97,8 +99,11 @@ end
 function TestAddon:OnEnable()
     self:MinimizeWindow()
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    self:RegisterEvent("PLAYER_ENTERING_WORLD")
     self:RegisterEvent("PLAYER_REGEN_DISABLED")
     self:RegisterEvent("PLAYER_REGEN_ENABLED")
+    self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+    self:UpdateZoneContext()
 end
 
 local function isEnemy(flags)
@@ -322,6 +327,49 @@ function TestAddon:PLAYER_REGEN_DISABLED()
     self:StartCombat("PLAYER_REGEN_DISABLED")
 end
 
+function TestAddon:UpdateZoneContext()
+    if type(GetInstanceInfo) ~= "function" then
+        self.currentInstanceId = MODULE_ZONE_ANY
+        return self.currentInstanceId
+    end
+
+    self.currentInstanceId = select(8, GetInstanceInfo()) or MODULE_ZONE_ANY
+    return self.currentInstanceId
+end
+
+function TestAddon:PLAYER_ENTERING_WORLD()
+    self:UpdateZoneContext()
+end
+
+function TestAddon:ZONE_CHANGED_NEW_AREA()
+    self:UpdateZoneContext()
+end
+
+function TestAddon:ShouldDispatchCombatEventToModule(module)
+    if not module or not module.receivesCombatEvents then
+        return false
+    end
+
+    if self.currentInstanceId == nil then
+        self:UpdateZoneContext()
+    end
+
+    local zoneGateInstanceId = module.zoneGateInstanceId or MODULE_ZONE_ANY
+    return zoneGateInstanceId == MODULE_ZONE_ANY or zoneGateInstanceId == self.currentInstanceId
+end
+
+function TestAddon:DispatchCombatEvent(eventData)
+    if type(self.IterateModules) ~= "function" then
+        return
+    end
+
+    for _, module in self:IterateModules() do
+        if self:ShouldDispatchCombatEventToModule(module) and type(module.handleEvent) == "function" then
+            module:handleEvent(eventData)
+        end
+    end
+end
+
 function affectingGroup(event)
     local sourceFlags = event.sourceFlags
     local destFlags = event.destFlags
@@ -337,6 +385,7 @@ end
 
 function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     local eventData = blizzardEvent(...)
+    self:DispatchCombatEvent(eventData)
     self:trackCombatants(eventData)
 
     if self.currentCombat.firstEnemy or not affectingGroup(eventData) then

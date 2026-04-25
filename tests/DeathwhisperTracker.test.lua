@@ -1,8 +1,8 @@
 require('tests.mocks')
-local SpiritTracker = require("../modules/SpiritTracker")
+local DeathwhisperTracker = require("../modules/bosses/DeathwhisperTracker")
 local spy = require("luassert.spy")
 
-describe('SpiritTracker', function()
+describe('DeathwhisperTracker', function()
     local originalSendChatMessage
     local sendChatMessageSpy
 
@@ -19,7 +19,7 @@ describe('SpiritTracker', function()
 
     before_each(function()
         sendChatMessageSpy:clear()
-        SpiritTracker:reset()
+        DeathwhisperTracker:reset()
     end)
 
     describe('handleEvent', function()
@@ -28,11 +28,11 @@ describe('SpiritTracker', function()
         before_each(function()
             log = spy.new(function()
             end)
-            SpiritTracker.log = log
+            DeathwhisperTracker.log = log
         end)
 
         it('logs shield broken on mana barrier removed', function()
-            SpiritTracker:handleEvent({
+            DeathwhisperTracker:handleEvent({
                 event = "SPELL_AURA_REMOVED",
                 spellId = 70842,
                 timestamp = time()
@@ -60,8 +60,8 @@ describe('SpiritTracker', function()
                 destName = "TestTarget"
             }
 
-            SpiritTracker:handleEvent(summonEvent)
-            SpiritTracker:handleEvent(swingEvent)
+            DeathwhisperTracker:handleEvent(summonEvent)
+            DeathwhisperTracker:handleEvent(swingEvent)
 
             assert.spy(log).was_called_with(
                 "SOME DATE |cFFFFFFFFTestTarget|r взорвал духа |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t")
@@ -86,8 +86,8 @@ describe('SpiritTracker', function()
                 destName = "TestTarget"
             }
 
-            SpiritTracker:handleEvent(summonEvent)
-            SpiritTracker:handleEvent(missEvent)
+            DeathwhisperTracker:handleEvent(summonEvent)
+            DeathwhisperTracker:handleEvent(missEvent)
 
             assert.spy(log).was_called_with("SOME DATE Дух автоатачил |cFFFFFFFFTestTarget|r")
         end)
@@ -96,21 +96,21 @@ describe('SpiritTracker', function()
 
     describe("reset", function()
         it("should send raid message with spirit explosion report", function()
-            SpiritTracker.report = {
+            DeathwhisperTracker.report = {
                 ["Player1"] = 2,
                 ["Player2"] = 1
             }
 
-            SpiritTracker:reset()
+            DeathwhisperTracker:reset()
 
             assert.spy(sendChatMessageSpy).was
                 .called_with("Духов взорвали:  Player1(2) Player2(1)", "RAID")
         end)
 
         it("should not send message when report is empty", function()
-            SpiritTracker.report = {}
+            DeathwhisperTracker.report = {}
 
-            SpiritTracker:reset()
+            DeathwhisperTracker:reset()
 
             assert.spy(sendChatMessageSpy).was_not.called()
         end)

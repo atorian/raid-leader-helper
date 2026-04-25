@@ -4,6 +4,10 @@ local SpellTracker = require("../modules/SpellTracker")
 local Builder = require("../utils/CombatEventBuilder")
 local mocks = require('tests.mocks')
 
+local function dispatch(module, ...)
+    module:handleEvent(blizzardEvent(select(2, ...)))
+end
+
 describe('SpellTracker', function()
     describe('COMBAT_LOG_EVENT_UNFILTERED', function()
         local log
@@ -17,7 +21,7 @@ describe('SpellTracker', function()
         end)
 
         it('logs first damage to enemy', function()
-            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestPlayer"):ToEnemy("TestTarget")
+            dispatch(SpellTracker, Builder:New():FromPlayer("TestPlayer"):ToEnemy("TestTarget")
                 :SpellDamage(12345, "Test Spell", 100):Build())
 
             assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r Первый урон по |cFFFFFFFF%s|r",
@@ -25,7 +29,7 @@ describe('SpellTracker', function()
         end)
 
         it('logs taunt spell cast', function()
-            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestWarrior"):ToEnemy("TestTarget")
+            dispatch(SpellTracker, Builder:New():FromPlayer("TestWarrior"):ToEnemy("TestTarget")
                 :ApplyAura(355, "Taunt"):Build())
 
             assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
@@ -33,7 +37,7 @@ describe('SpellTracker', function()
         end)
 
         it('logs death grip spell cast', function()
-            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestDK"):ToEnemy("TestTarget"):ApplyAura(
+            dispatch(SpellTracker, Builder:New():FromPlayer("TestDK"):ToEnemy("TestTarget"):ApplyAura(
                 49560, "Death Grip"):Build())
 
             assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
@@ -41,7 +45,7 @@ describe('SpellTracker', function()
         end)
 
         it('logs Корона', function()
-            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget")
+            dispatch(SpellTracker, Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget")
                 :ApplyAura(10278, "Seal of Protection"):Build())
 
             assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
@@ -50,14 +54,14 @@ describe('SpellTracker', function()
         end)
 
         it('ignores non-tracked spells', function()
-            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestCaster"):ToEnemy("TestTarget")
+            dispatch(SpellTracker, Builder:New():FromPlayer("TestCaster"):ToEnemy("TestTarget")
                 :ApplyAura(12345, "Random Spell"):Build())
 
             assert.spy(log).was_not_called()
         end)
 
         it('does not log hand of reckoning on aura applied alone', function()
-            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget")
+            dispatch(SpellTracker, Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget")
                 :ApplyAura(62124, "Hand of Reckoning"):Build())
 
             assert.spy(log).was_not_called()
@@ -69,7 +73,7 @@ describe('SpellTracker', function()
                 Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget"):ApplyAura(62124, "Hand of Reckoning")
                     :Build()
 
-            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(eventName, timestamp, event, sourceGUID, sourceName, sourceFlags,
+            dispatch(SpellTracker, eventName, timestamp, event, sourceGUID, sourceName, sourceFlags,
                 destGUID, destName, destFlags, spellId, spellName, spellSchool, auraType)
             mocks:SetUnitGUID("target", destGUID)
             mocks:SetUnitGUID("targettarget", sourceGUID)
@@ -82,7 +86,7 @@ describe('SpellTracker', function()
         end)
 
         it('logs druid battle resurrection on spell resurrect', function()
-            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestDruid"):ToPlayer("DeadPlayer")
+            dispatch(SpellTracker, Builder:New():FromPlayer("TestDruid"):ToPlayer("DeadPlayer")
                 :Resurrect(48477, "Rebirth"):Build())
 
             assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
@@ -96,10 +100,10 @@ describe('SpellTracker', function()
                 Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget"):ApplyAura(62124, "Hand of Reckoning")
                     :Build()
 
-            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(eventName, timestamp, event, sourceGUID, sourceName, sourceFlags,
+            dispatch(SpellTracker, eventName, timestamp, event, sourceGUID, sourceName, sourceFlags,
                 destGUID, destName, destFlags, spellId, spellName, spellSchool, auraType)
 
-            SpellTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("TestPaladin"):ToEnemy("AnotherTarget")
+            dispatch(SpellTracker, Builder:New():FromPlayer("TestPaladin"):ToEnemy("AnotherTarget")
                 :ApplyAura(12345, "Random Spell"):Build())
 
             mocks:SetUnitGUID("target", destGUID)

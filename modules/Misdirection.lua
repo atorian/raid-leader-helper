@@ -1,5 +1,6 @@
-local TestAddon = LibStub("AceAddon-3.0"):GetAddon("TestAddon")
+local TestAddon = LibStub("AceAddon-3.0"):GetAddon("RlHelper")
 local MisdirectionTracker = TestAddon:NewModule("MisdirectionTracker", "AceEvent-3.0")
+MisdirectionTracker.receivesCombatEvents = true
 
 -- hunt
 local MISDIRECTION_START_SPELL_ID = 34477
@@ -48,6 +49,7 @@ local TRACKED_SPELLS = {
     [52874] = "Interface\\Icons\\ability_rogue_fanofknives",
     [57993] = "Interface\\Icons\\ability_rogue_disembowel",
     [48665] = "Interface\\Icons\\ability_dualwield",
+    [14278] = "Interface\\Icons\\spell_shadow_curse",
     [48668] = "Interface\\Icons\\ability_rogue_eviscerate"
 }
 
@@ -56,7 +58,12 @@ local SKIP_SPELLS = {
     [53254] = true, -- "мятежная стрела ханта(лук с леди?)"
     [71834] = true, -- быстрая стрельба
     [69193] = true, -- Ранец Корабли
-    [71341] = true -- Пакт - Ланатель
+    [71341] = true, -- Пакт - Ланатель
+    [71879] = true, -- какой-то дк спелл
+    [72669] = true, -- прокалывание
+    [57981] = true, -- яд роги 2
+    [72817] = true, -- вихрь друля
+    [51675] = true -- какой-то спелл роги
 }
 
 -- Active pulls tracking
@@ -68,7 +75,6 @@ function MisdirectionTracker:OnEnable()
 end
 
 function MisdirectionTracker:OnInitialize()
-    self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
     self:RegisterMessage("TestAddon_Demo", "demo")
     self.log = function(...)
@@ -79,10 +85,6 @@ end
 function MisdirectionTracker:reset()
     activePulls = {}
     pullDamage = {}
-end
-
-function MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
-    self:handleEvent(blizzardEvent(...))
 end
 
 function MisdirectionTracker:handleEvent(eventData)

@@ -1,5 +1,6 @@
 local TestAddon = LibStub("AceAddon-3.0"):GetAddon("RlHelper")
 local SppellTracker = TestAddon:NewModule("SppellTracker", "AceEvent-3.0")
+SppellTracker.receivesCombatEvents = true
 
 -- Флаг для отслеживания первого урона
 local firstDamageDone = false
@@ -29,7 +30,6 @@ local TRACKED_SPELLS = {
 }
 
 function SppellTracker:OnInitialize()
-    self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterEvent("UNIT_TARGET")
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
     self:RegisterMessage("TestAddon_Demo", "demo")
@@ -37,10 +37,6 @@ function SppellTracker:OnInitialize()
     self.log = function(...)
         TestAddon:OnCombatLogEvent(...)
     end
-end
-
-function SppellTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
-    self:handleEvent(blizzardEvent(...), self.log)
 end
 
 function SppellTracker:reset()

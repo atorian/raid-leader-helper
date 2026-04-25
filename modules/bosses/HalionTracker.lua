@@ -1,8 +1,10 @@
 local TestAddon = LibStub("AceAddon-3.0"):GetAddon("RlHelper")
-local DeathTracker = TestAddon:NewModule("DeathTracker", "AceEvent-3.0")
+local HalionTracker = TestAddon:NewModule("HalionTracker", "AceEvent-3.0")
+HalionTracker.receivesCombatEvents = true
+HalionTracker.zoneGateInstanceId = 724 -- The Ruby Sanctum
 
-function DeathTracker:OnInitialize()
-    TestAddon:Print("RL Быдло: DeathTracker инициализируется")
+function HalionTracker:OnInitialize()
+    TestAddon:Print("RL Быдло: HalionTracker инициализируется")
     self.dmgEvents = {}
     self.healEvents = {}
     self.firstEntered = false
@@ -10,7 +12,6 @@ function DeathTracker:OnInitialize()
         TestAddon:OnCombatLogEvent(...)
     end
 
-    self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 end
 
 -- 67662 Ледной Рев
@@ -39,22 +40,18 @@ local spells = {
     [LEZVIA25OB] = string.format(" в лезвиях |T%s:24:24:0:0|t", lezvia_icon)
 }
 
-function DeathTracker:OnEnable()
+function HalionTracker:OnEnable()
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
     self:RegisterMessage("TestAddon_Demo", "demo")
 end
 
-function DeathTracker:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
-    self:handleEvent(blizzardEvent(...), self.log)
-end
-
-function DeathTracker:reset()
+function HalionTracker:reset()
     self.dmgEvents = {}
     self.healEvents = {}
     self.firstEntered = false
 end
 
-function DeathTracker:logDmg(playerName, event)
+function HalionTracker:logDmg(playerName, event)
     if not self.dmgEvents[playerName] then
         self.dmgEvents[playerName] = {}
     end
@@ -66,7 +63,7 @@ function DeathTracker:logDmg(playerName, event)
     end
 end
 
-function DeathTracker:logHeal(playerName, event)
+function HalionTracker:logHeal(playerName, event)
     self.healEvents[playerName] = event
 end
 
@@ -74,7 +71,7 @@ local function formatFirstInTwilight(ts, name)
     return string.format("%s |cFFFFFFFF%s|r зашел во тьму первый", date("%H:%M:%S", ts), name)
 end
 
-function DeathTracker:isFirstInDarkness(event, log)
+function HalionTracker:isFirstInDarkness(event, log)
     if not self.firstEntered and event.spellId >= pelena10 and event.spellId <= pelena25hm then
         self.firstEntered = true
         log(formatFirstInTwilight(event.timestamp, event.destName))
@@ -93,7 +90,7 @@ local function isTwilightCutter(spellId)
     return spellId >= pelena10 and spellId <= pelena25hm
 end
 
-function DeathTracker:handleEvent(event, log)
+function HalionTracker:handleEvent(event, log)
     if isPlayer(event.destFlags) then
         if isTwilightCutter(event.spellId) then
             self:isFirstInDarkness(event, log)
@@ -121,7 +118,7 @@ local function formatDiedFrom(ts, name)
         "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8")
 end
 
-function DeathTracker:ProcessPlayerDeath(log, playerName, timestamp)
+function HalionTracker:ProcessPlayerDeath(log, playerName, timestamp)
     local msg = formatDiedFrom(timestamp, playerName)
     local damageEvents = self.dmgEvents[playerName]
 
@@ -138,11 +135,11 @@ function DeathTracker:ProcessPlayerDeath(log, playerName, timestamp)
     self.dmgEvents[playerName] = nil
 end
 
-function DeathTracker:demo()
+function HalionTracker:demo()
     self.log(formatFirstInTwilight(time(), "PlayerName"))
     self.log(formatDiedFrom(time(), "PlayerName") .. spells[METEORIT])
     self.log(formatDiedFrom(time(), "PlayerName") .. spells[LUZHA])
     self.log(formatDiedFrom(time(), "PlayerName") .. spells[LEZVIA25HM])
 end
 
-return DeathTracker
+return HalionTracker

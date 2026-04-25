@@ -10,16 +10,19 @@
 
 
 # Libraries
-Libs\LibStub\LibStub.lua
-Libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
-Libs\AceAddon-3.0\AceAddon-3.0.xml
-Libs\AceConsole-3.0\AceConsole-3.0.xml
-Libs\AceEvent-3.0\AceEvent-3.0.xml
-Libs\AceModule-3.0\AceModule-3.0.xml
-# Libs\Ace3\AceComm-3.0\ChatThrottleLib.lua
-# Libs\Ace3\AceComm-3.0\AceComm-3.0.lua
-Libs\AceDB-3.0\AceDB-3.0.xml
-Libs\AceGUI-3.0\AceGUI-3.0.xml
+Libs\Libs.xml
+#Libs\LibStub\LibStub.lua
+#Libs\LibCompat-1.0\lib.xml
+#Libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
+#Libs\AceAddon-3.0\AceAddon-3.0.xml
+#Libs\AceConsole-3.0\AceConsole-3.0.xml
+#Libs\AceEvent-3.0\AceEvent-3.0.xml
+#Libs\AceModule-3.0\AceModule-3.0.xml
+#Libs\Ace3\AceComm-3.0\ChatThrottleLib.lua
+#Libs\Ace3\AceComm-3.0\AceComm-3.0.lua
+#Libs\AceDB-3.0\AceDB-3.0.xml
+#Libs\AceGUI-3.0\AceGUI-3.0.xml
+
 
 lib\blizzardEvent.lua
 lib\RingBuffer.lua
@@ -29,5 +32,5 @@ Core.lua
 # Other modules
 modules\SpellTracker.lua
 modules\Misdirection.lua
-modules\SpiritTracker.lua
-modules\DeathTracker.lua
+modules\bosses\DeathwhisperTracker.lua
+modules\bosses\HalionTracker.lua

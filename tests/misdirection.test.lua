@@ -4,6 +4,10 @@ local TestAddon = require('../Core')
 local Builder = require('../utils/CombatEventBuilder')
 local MisdirectionTracker = require('../modules/Misdirection')
 
+local function dispatch(module, ...)
+    module:handleEvent(blizzardEvent(select(2, ...)))
+end
+
 local misdirect = "Interface\\Icons\\Ability_Hunter_Misdirection"
 local bow = "Interface\\Icons\\inv_weapon_bow_55"
 local aimedshot = "Interface\\Icons\\INV_Spear_07"
@@ -22,17 +26,17 @@ describe("Misdirection Tracker", function()
 
     it("отслеживает урон во время активного напула", function()
         -- Начинаем напул
-        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
             :CastSuccess(34477, "Перенаправление"):Build())
 
-        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Охотник"):ToPlayer(
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer(
             "Охотник"):ApplyAura(35079, "Перенаправление"):Build())
 
         -- Охотник наносит урон
-        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Охотник"):ToEnemy("Враг")
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToEnemy("Враг")
             :SpellDamage(49050, "", 1000):Build())
         -- Аура спадает
-        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
             :RemoveAura(35079, "Перенаправление"):Build())
 
         -- Проверяем что был сгенерирован отчет
@@ -48,24 +52,24 @@ describe("Misdirection Tracker", function()
         local murder = "Interface\\Icons\\ability_rogue_murderspree"
 
         -- Начинаем напул
-        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Рога"):ToPlayer("Танк")
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Рога"):ToPlayer("Танк")
             :CastSuccess(57934, "Маленькие хитрости"):Build())
 
-        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Рога"):ToPlayer("Рога")
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Рога"):ToPlayer("Рога")
             :ApplyAura(59628, "Маленькие хитрости"):Build())
 
         -- Рога использует разные способности
-        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New(GetTime() + 1):FromPlayer("Рога"):ToEnemy(
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 1):FromPlayer("Рога"):ToEnemy(
             "Враг"):SpellDamage(48638, "Эвисцерация", 1000):Build())
 
-        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New(GetTime() + 2):FromPlayer("Рога"):ToEnemy(
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 2):FromPlayer("Рога"):ToEnemy(
             "Враг"):SpellDamage(51723, "Веер клинков", 500):Build())
 
-        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New(GetTime() + 4):FromPlayer("Рога"):ToEnemy(
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 4):FromPlayer("Рога"):ToEnemy(
             "Враг"):SpellDamage(57841, "Убийственный разгул", 800):Build())
 
         -- Аура спадает
-        MisdirectionTracker:COMBAT_LOG_EVENT_UNFILTERED(Builder:New(GetTime() + 6):FromPlayer("Рога"):ToPlayer(
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 6):FromPlayer("Рога"):ToPlayer(
             "Танк"):RemoveAura(59628, "Маленькие хитрости"):Build())
 
         -- Проверяем что был сгенерирован отчет

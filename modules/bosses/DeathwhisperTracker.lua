@@ -20,6 +20,7 @@ function DeathwhisperTracker:OnInitialize()
     self.log = function(...)
         TestAddon:OnCombatLogEvent(...)
     end
+    self:RegisterMessage("TestAddon_CombatEnding", "summarizeCombat")
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
     self:RegisterMessage("TestAddon_Demo", "demo")
 end
@@ -30,6 +31,42 @@ end
 
 local function formatShieldBroken(ts)
     return string.format("%s Леди: Щит разбит", date("%H:%M:%S", ts))
+end
+
+local function buildSpiritExplosionSummary(report)
+    local names = {}
+    local total = 0
+
+    for name, count in pairs(report) do
+        total = total + count
+        table.insert(names, name)
+    end
+
+    if total == 0 then
+        return nil
+    end
+
+    table.sort(names, function(a, b)
+        if report[a] == report[b] then
+            return a < b
+        end
+
+        return report[a] > report[b]
+    end)
+
+    local details = {}
+    for _, name in ipairs(names) do
+        table.insert(details, string.format("%s(%s)", name, report[name]))
+    end
+
+    return {
+        total = total,
+        details = table.concat(details, " ")
+    }
+end
+
+local function formatSpiritExplosionSummary(ts, total, details)
+    return string.format("%s Духов взорвали: всего %s %s", date("%H:%M:%S", ts), total, details)
 end
 
 -- function DeathwhisperTracker:ZONE_CHANGED_NEW_AREA()
@@ -43,29 +80,26 @@ end
 
 function DeathwhisperTracker:reset()
     self.currentSpirits = {}
-
-    if not self.report then
-        self.report = {}
-    end
-
-    local msg = ""
-    local names = {}
-    for name in pairs(self.report) do
-        table.insert(names, name)
-    end
-    table.sort(names, function(a, b)
-        return self.report[a] > self.report[b]
-    end)
-
-    for _, name in ipairs(names) do
-        msg = msg .. string.format(" %s(%s)", name, self.report[name])
-    end
-
-    if msg ~= "" then
-        SendChatMessage("Духов взорвали: " .. msg, "RAID")
-    end
-
+    self:sendSummaryToRaid()
     self.report = {}
+end
+
+function DeathwhisperTracker:summarizeCombat()
+    local summary = buildSpiritExplosionSummary(self.report or {})
+    if not summary then
+        return
+    end
+
+    self.log(formatSpiritExplosionSummary(time(), summary.total, summary.details))
+end
+
+function DeathwhisperTracker:sendSummaryToRaid()
+    local summary = buildSpiritExplosionSummary(self.report or {})
+    if not summary then
+        return
+    end
+
+    SendChatMessage(string.format("Духов взорвали: всего %s %s", summary.total, summary.details), "RAID")
 end
 
 local function formatSpiritHit(ts, dest)
@@ -118,6 +152,11 @@ function DeathwhisperTracker:demo()
     self.log(formatShieldBroken(time()))
     self.log(formatSpiritHit(time(), "Player"))
     self.log(formatSpiritMiss(time(), "Lucky"))
+    self.report = {
+        ["Player"] = 2
+    }
+    self:summarizeCombat()
+    self.report = {}
 end
 
 return DeathwhisperTracker

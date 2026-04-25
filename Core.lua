@@ -237,6 +237,8 @@ end
 function TestAddon:FinishCombat(reason)
     self:Debug("Combat ended", reason)
 
+    self:SendMessage("TestAddon_CombatEnding")
+
     local combat = nil
     if self.currentCombat.startTime and #self.currentCombat.messages > 0 then
         combat = {

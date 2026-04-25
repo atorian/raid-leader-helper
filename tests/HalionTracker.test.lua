@@ -9,12 +9,27 @@ end
 
 describe('HalionTracker', function()
     local log
+    local originalDetails
+    local originalSkada
+    local originalRecount
 
     before_each(function()
         HalionTracker:reset()
         log = spy.new(function()
         end)
         HalionTracker.log = log
+        originalDetails = _G._detalhes
+        originalSkada = _G.Skada
+        originalRecount = _G.Recount
+        _G._detalhes = nil
+        _G.Skada = nil
+        _G.Recount = nil
+    end)
+
+    after_each(function()
+        _G._detalhes = originalDetails
+        _G.Skada = originalSkada
+        _G.Recount = originalRecount
     end)
 
     it('logs player death with last damage from meteor', function()
@@ -113,5 +128,62 @@ describe('HalionTracker', function()
         assert.spy(log).was_called(1)
         assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r зашел во тьму первый",
             date("%H:%M:%S", GetTime()), "Игрок1"))
+    end)
+
+    it('resets damage meters on first heroism aura applied', function()
+        local detailsLeaveCalls = 0
+        local detailsEnterCalls = 0
+        local skadaNewSegmentCalls = 0
+        local recountResetFightCalls = 0
+
+        _G._detalhes = {
+            in_combat = true,
+            SairDoCombate = function()
+                detailsLeaveCalls = detailsLeaveCalls + 1
+            end,
+            EntrarEmCombate = function()
+                detailsEnterCalls = detailsEnterCalls + 1
+            end
+        }
+        _G.Skada = {
+            NewSegment = function()
+                skadaNewSegmentCalls = skadaNewSegmentCalls + 1
+            end
+        }
+        _G.Recount = {
+            ResetFightData = function()
+                recountResetFightCalls = recountResetFightCalls + 1
+            end
+        }
+
+        dispatch(HalionTracker, Builder:New():FromPlayer("Шаман"):ToPlayer("Игрок1")
+            :ApplyAura(32182, "Heroism"):Build())
+
+        assert.are.equal(1, detailsLeaveCalls)
+        assert.are.equal(1, detailsEnterCalls)
+        assert.are.equal(1, skadaNewSegmentCalls)
+        assert.are.equal(1, recountResetFightCalls)
+    end)
+
+    it('resets damage meters only once per fight', function()
+        local detailsLeaveCalls = 0
+        local detailsEnterCalls = 0
+        _G._detalhes = {
+            in_combat = true,
+            SairDoCombate = function()
+                detailsLeaveCalls = detailsLeaveCalls + 1
+            end,
+            EntrarEmCombate = function()
+                detailsEnterCalls = detailsEnterCalls + 1
+            end
+        }
+
+        dispatch(HalionTracker, Builder:New():FromPlayer("Шаман"):ToPlayer("Игрок1")
+            :ApplyAura(32182, "Heroism"):Build())
+        dispatch(HalionTracker, Builder:New():FromPlayer("Шаман"):ToPlayer("Игрок2")
+            :ApplyAura(32182, "Heroism"):Build())
+
+        assert.are.equal(1, detailsLeaveCalls)
+        assert.are.equal(1, detailsEnterCalls)
     end)
 end)

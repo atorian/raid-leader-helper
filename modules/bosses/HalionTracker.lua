@@ -25,6 +25,8 @@ local pelena10 = 75483
 local pelena25 = 75484
 local pelena10hm = 75485
 local pelena25hm = 75486
+local HEROISM = 32182
+local BLOODLUST = 2825
 local MAX_DMG_EVENTS_PER_PLAYER = 10
 -- 74792 - metka
 
@@ -40,6 +42,11 @@ local spells = {
     [LEZVIA25OB] = string.format(" в лезвиях |T%s:24:24:0:0|t", lezvia_icon)
 }
 
+local HEROISM_SPELLS = {
+    [HEROISM] = true,
+    [BLOODLUST] = true
+}
+
 function HalionTracker:OnEnable()
     self:RegisterMessage("TestAddon_CombatEnded", "reset")
     self:RegisterMessage("TestAddon_Demo", "demo")
@@ -49,6 +56,78 @@ function HalionTracker:reset()
     self.dmgEvents = {}
     self.healEvents = {}
     self.firstEntered = false
+    self.damageMetersReset = false
+end
+
+function HalionTracker:debugReset(message, ...)
+    TestAddon:Debug("HalionTracker: " .. string.format(message, ...))
+end
+
+function HalionTracker:tryResetRecount()
+    if type(Recount) ~= "table" then
+        return false, "Recount not loaded"
+    end
+
+    if type(Recount.ResetFightData) == "function" then
+        Recount:ResetFightData()
+        return true
+    end
+
+    return false, "Recount current-fight reset API not found"
+end
+
+function HalionTracker:tryResetDetails()
+    local details = _G._detalhes or _G.Details
+    if type(details) ~= "table" then
+        return false, "Details not loaded"
+    end
+
+    if type(details.SairDoCombate) == "function" and type(details.EntrarEmCombate) == "function" and details.in_combat then
+        details:SairDoCombate()
+        details:EntrarEmCombate()
+        return true
+    end
+
+    return false, "Details current-fight reset API not found"
+end
+
+function HalionTracker:tryResetSkada()
+    if type(Skada) ~= "table" then
+        return false, "Skada not loaded"
+    end
+
+    if type(Skada.NewSegment) == "function" then
+        Skada:NewSegment()
+        return true
+    end
+
+    return false, "Skada current-fight reset API not found"
+end
+
+function HalionTracker:resetDamageMeters()
+    local resetters = {
+        { name = "Recount", fn = self.tryResetRecount },
+        { name = "Details", fn = self.tryResetDetails },
+        { name = "Skada", fn = self.tryResetSkada }
+    }
+
+    for _, resetter in ipairs(resetters) do
+        local ok, success, err = pcall(resetter.fn, self)
+        if not ok then
+            self:debugReset("%s reset failed: %s", resetter.name, tostring(success))
+        elseif not success then
+            self:debugReset("%s reset skipped: %s", resetter.name, tostring(err))
+        end
+    end
+end
+
+function HalionTracker:tryResetDamageMetersOnHeroism(event)
+    if self.damageMetersReset or event.event ~= "SPELL_AURA_APPLIED" or not HEROISM_SPELLS[event.spellId] then
+        return
+    end
+
+    self.damageMetersReset = true
+    self:resetDamageMeters()
 end
 
 function HalionTracker:logDmg(playerName, event)
@@ -92,6 +171,8 @@ end
 
 function HalionTracker:handleEvent(event, log)
     if isPlayer(event.destFlags) then
+        self:tryResetDamageMetersOnHeroism(event)
+
         if isTwilightCutter(event.spellId) then
             self:isFirstInDarkness(event, log)
         elseif event.event == "SPELL_DAMAGE" then

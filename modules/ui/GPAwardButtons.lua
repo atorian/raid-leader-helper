@@ -1,0 +1,151 @@
+local TestAddon = LibStub("AceAddon-3.0"):GetAddon("RlHelper")
+local GPAwardButtons = TestAddon:NewModule("GPAwardButtons", "AceEvent-3.0")
+
+local BUTTONS = {
+    { label = "100", amount = 100 },
+    { label = "200", amount = 200 },
+    { label = "250", amount = 250 },
+    { label = "500", amount = 500 },
+    { label = "1к", amount = 1000 }
+}
+
+local function getTargetName()
+    if type(UnitName) ~= "function" then
+        return nil
+    end
+
+    return UnitName("target")
+end
+
+function GPAwardButtons:CanAwardGP()
+    local isLeader = type(UnitIsGroupLeader) == "function" and UnitIsGroupLeader("player")
+    local isAssistant = type(UnitIsGroupAssistant) == "function" and UnitIsGroupAssistant("player")
+
+    return not not (isLeader or isAssistant)
+end
+
+function GPAwardButtons:OnInitialize()
+    self:RegisterMessage("TestAddon_MainFrameCreated", "attachToMainFrame")
+end
+
+function GPAwardButtons:OnEnable()
+    self:RegisterEvent("PLAYER_ENTERING_WORLD", "refreshVisibility")
+    self:RegisterEvent("RAID_ROSTER_UPDATE", "refreshVisibility")
+    self:RegisterEvent("PARTY_LEADER_CHANGED", "refreshVisibility")
+    self:attachToMainFrame()
+end
+
+function GPAwardButtons:printError(message)
+    TestAddon:Print("RL Быдло: " .. message)
+end
+
+function GPAwardButtons:refreshVisibility()
+    if not self.footerFrame then
+        return
+    end
+
+    if self:CanAwardGP() then
+        self.footerFrame:SetHeight(22)
+        self.footerFrame:Show()
+        for _, button in ipairs(self.buttons or {}) do
+            button:Show()
+        end
+    else
+        self.footerFrame:SetHeight(0)
+        for _, button in ipairs(self.buttons or {}) do
+            button:Hide()
+        end
+        self.footerFrame:Hide()
+    end
+
+    TestAddon:LayoutMainFrame()
+end
+
+function GPAwardButtons:AwardTargetGP(label, amount)
+    if not self:CanAwardGP() then
+        return false, "Начислять GP может только РЛ или помощник"
+    end
+
+    if type(UnitExists) ~= "function" or not UnitExists("target") then
+        return false, "Нет выбранной цели"
+    end
+
+    if type(UnitIsPlayer) ~= "function" or not UnitIsPlayer("target") then
+        return false, "Цель должна быть игроком"
+    end
+
+    local targetName = getTargetName()
+    if type(targetName) ~= "string" or targetName == "" then
+        return false, "Не удалось определить имя цели"
+    end
+
+    if type(EPGP) ~= "table" then
+        return false, "Аддон EPGP не загружен"
+    end
+
+    if type(EPGP.GetEPGP) ~= "function" or not EPGP:GetEPGP(targetName) then
+        return false, string.format("EPGP не знает игрока %s", targetName)
+    end
+
+    if type(EPGP.CanIncGPBy) ~= "function" or type(EPGP.IncGPBy) ~= "function" then
+        return false, "В EPGP нет API для начисления GP"
+    end
+
+    if not EPGP:CanIncGPBy(label, amount) then
+        return false, "EPGP не позволяет начислить GP: нет прав или данные не готовы"
+    end
+
+    local awardedName = EPGP:IncGPBy(targetName, label, amount)
+    if not awardedName then
+        return false, string.format("Не удалось начислить %s GP игроку %s", label, targetName)
+    end
+
+    return true, awardedName
+end
+
+function GPAwardButtons:handleButtonClick(buttonInfo)
+    local ok, result = self:AwardTargetGP(buttonInfo.label, buttonInfo.amount)
+    if not ok then
+        self:printError(result)
+    end
+end
+
+function GPAwardButtons:createButton(parent, anchor, buttonInfo)
+    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    button:SetSize(40, 22)
+    if anchor then
+        button:SetPoint("LEFT", anchor, "RIGHT", 4, 0)
+    else
+        button:SetPoint("LEFT", parent, "LEFT", 0, 0)
+    end
+    button:SetText(buttonInfo.label)
+    button:SetScript("OnClick", function()
+        self:handleButtonClick(buttonInfo)
+    end)
+
+    return button
+end
+
+function GPAwardButtons:attachToMainFrame()
+    if self.footerFrame or not TestAddon.mainFrame then
+        return
+    end
+
+    local footer = CreateFrame("Frame", nil, TestAddon.mainFrame)
+    footer:SetPoint("BOTTOMLEFT", TestAddon.mainFrame, "BOTTOMLEFT", 12, 8)
+    footer:SetPoint("BOTTOMRIGHT", TestAddon.mainFrame, "BOTTOMRIGHT", -32, 8)
+    footer:SetHeight(22)
+
+    self.buttons = {}
+    local anchor = nil
+    for _, buttonInfo in ipairs(BUTTONS) do
+        anchor = self:createButton(footer, anchor, buttonInfo)
+        table.insert(self.buttons, anchor)
+    end
+
+    self.footerFrame = footer
+    TestAddon:SetMainFrameBottomPanel(footer)
+    self:refreshVisibility()
+end
+
+return GPAwardButtons

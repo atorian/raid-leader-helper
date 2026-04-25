@@ -32,5 +32,6 @@ Core.lua
 # Other modules
 modules\SpellTracker.lua
 modules\Misdirection.lua
+modules\ui\GPAwardButtons.lua
 modules\bosses\DeathwhisperTracker.lua
 modules\bosses\HalionTracker.lua

@@ -544,6 +544,31 @@ function TestAddon:DisplayCombat(combat)
     end
 end
 
+function TestAddon:LayoutMainFrame()
+    local frame = self.mainFrame
+    if not frame or not frame.logText or not frame.buttonContainer then
+        return
+    end
+
+    frame.logText:ClearAllPoints()
+    frame.logText:SetPoint("TOPLEFT", frame.buttonContainer, "BOTTOMLEFT", 0, -8)
+
+    if frame.bottomPanel then
+        frame.logText:SetPoint("BOTTOMRIGHT", frame.bottomPanel, "TOPRIGHT", 0, 4)
+    else
+        frame.logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -32, 8)
+    end
+end
+
+function TestAddon:SetMainFrameBottomPanel(panel)
+    if not self.mainFrame then
+        return
+    end
+
+    self.mainFrame.bottomPanel = panel
+    self:LayoutMainFrame()
+end
+
 function TestAddon:CreateMainFrame()
     local frame = CreateFrame("Frame", "TestAddonMainFrame", UIParent)
     frame:SetSize(300, 600)
@@ -735,8 +760,6 @@ function TestAddon:CreateMainFrame()
 
     -- Log text
     local logText = CreateFrame("ScrollingMessageFrame", nil, frame)
-    logText:SetPoint("TOPLEFT", buttonContainer, "BOTTOMLEFT", 0, -8)
-    logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -32, 8)
     logText:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
     logText:SetJustifyV("TOP")
     logText:SetJustifyH("LEFT")
@@ -763,12 +786,13 @@ function TestAddon:CreateMainFrame()
     frame.logText = logText
 
     -- Size changed handler
-    frame:SetScript("OnSizeChanged", function(self, width, height)
-        local availableHeight = height - buttonContainer:GetHeight() - 48
-        logText:SetHeight(availableHeight)
+    frame:SetScript("OnSizeChanged", function()
+        TestAddon:LayoutMainFrame()
     end)
 
     self.mainFrame = frame
+    self:LayoutMainFrame()
+    self:SendMessage("TestAddon_MainFrameCreated", frame)
     frame:Hide()
 end
 

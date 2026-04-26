@@ -119,19 +119,27 @@ describe("RLHelper damage meter reset command", function()
     local originalGetModule
     local originalIterateModules
     local originalPrint
+    local originalDb
     local originalTriggerDamageMeterReset
 
     before_each(function()
         originalGetModule = RLHelper.GetModule
         originalIterateModules = RLHelper.IterateModules
         originalPrint = RLHelper.Print
+        originalDb = RLHelper.db
         originalTriggerDamageMeterReset = RLHelper.TriggerDamageMeterReset
+        RLHelper.db = {
+            profile = {
+                debug = true
+            }
+        }
     end)
 
     after_each(function()
         RLHelper.GetModule = originalGetModule
         RLHelper.IterateModules = originalIterateModules
         RLHelper.Print = originalPrint
+        RLHelper.db = originalDb
         RLHelper.TriggerDamageMeterReset = originalTriggerDamageMeterReset
     end)
 
@@ -166,7 +174,7 @@ describe("RLHelper damage meter reset command", function()
         assert.is_nil(RLHelper:FindModuleByName("UnknownModule"))
     end)
 
-    it("triggers damage meter reset through HalionTracker", function()
+    it("logs debug output when damage meter reset succeeds", function()
         local resetCalls = 0
         local printedMessages = {}
         RLHelper.IterateModules = function()
@@ -191,7 +199,7 @@ describe("RLHelper damage meter reset command", function()
         assert.are.same({ "Сброс сегментов урона запущен" }, printedMessages)
     end)
 
-    it("prints an error when no damage meter was actually reset", function()
+    it("logs debug output when no damage meter was actually reset", function()
         local printedMessages = {}
         RLHelper.IterateModules = function()
             return ipairs({
@@ -213,7 +221,7 @@ describe("RLHelper damage meter reset command", function()
         assert.are.same({ "Не удалось переключить сегмент у meter addon" }, printedMessages)
     end)
 
-    it("prints an error when HalionTracker is unavailable", function()
+    it("logs debug output when HalionTracker is unavailable", function()
         local printedMessages = {}
         RLHelper.IterateModules = function()
             return ipairs({
@@ -390,6 +398,10 @@ end)
 describe("RLHelper pull controls", function()
     local originalSlashCmdList
     local originalDBM
+    local originalSendChatMessage
+    local originalPlaySoundFile
+    local originalTimerTracker
+    local originalTimerTrackerOnEvent
 
     local function newVisibilityProbe(initiallyVisible)
         return {
@@ -406,6 +418,10 @@ describe("RLHelper pull controls", function()
     before_each(function()
         originalSlashCmdList = _G.SlashCmdList
         originalDBM = _G.DBM
+        originalSendChatMessage = _G.SendChatMessage
+        originalPlaySoundFile = _G.PlaySoundFile
+        originalTimerTracker = _G.TimerTracker
+        originalTimerTrackerOnEvent = _G.TimerTracker_OnEvent
         RLHelper.pullResetTimer = nil
         RLHelper.C_Timer = {
             NewTimer = function(_, callback)
@@ -433,6 +449,10 @@ describe("RLHelper pull controls", function()
     after_each(function()
         _G.SlashCmdList = originalSlashCmdList
         _G.DBM = originalDBM
+        _G.SendChatMessage = originalSendChatMessage
+        _G.PlaySoundFile = originalPlaySoundFile
+        _G.TimerTracker = originalTimerTracker
+        _G.TimerTracker_OnEvent = originalTimerTrackerOnEvent
     end)
 
     it("restores pull buttons automatically when the countdown finishes", function()
@@ -483,11 +503,52 @@ describe("RLHelper pull controls", function()
         assert.are.same({ "15" }, slashCalls)
     end)
 
-    it("cancels pull through the DBM slash command and then resets local controls", function()
-        local slashCalls = {}
-        _G.SlashCmdList = {
-            DEADLYBOSSMODSPULL = function(msg)
-                table.insert(slashCalls, msg)
+    it("cancels pull through DBM scheduled messages, sounds, and bars", function()
+        local unscheduled = {}
+        local pizzaTimers = {}
+        local cancelledBars = {}
+        local dummyTextCancelled = false
+        local dummyTimerStopped = false
+        local timerTrackerReset = false
+        _G.SendChatMessage = function()
+        end
+        _G.PlaySoundFile = function()
+        end
+        _G.TimerTracker = {}
+        _G.TimerTracker_OnEvent = function(frame, event)
+            if frame == _G.TimerTracker and event == "PLAYER_ENTERING_WORLD" then
+                timerTrackerReset = true
+            end
+        end
+        _G.DBM = {
+            Unschedule = function(_, fn)
+                table.insert(unscheduled, fn)
+            end,
+            CreatePizzaTimer = function(_, time, text)
+                table.insert(pizzaTimers, { time = time, text = text })
+            end,
+            Bars = {
+                CancelBar = function(_, name)
+                    table.insert(cancelledBars, name)
+                end
+            },
+            GetModByName = function(_, name)
+                if name ~= "PullTimerCountdownDummy" then
+                    return nil
+                end
+
+                return {
+                    text = {
+                        Cancel = function()
+                            dummyTextCancelled = true
+                        end
+                    },
+                    timer = {
+                        Stop = function()
+                            dummyTimerStopped = true
+                        end
+                    }
+                }
             end
         }
 
@@ -496,7 +557,16 @@ describe("RLHelper pull controls", function()
 
         RLHelper:CancelPullCountdown()
 
-        assert.are.same({ "0" }, slashCalls)
+        assert.are.same({ _G.SendChatMessage, _G.PlaySoundFile }, unscheduled)
+        assert.are.same({
+            { time = 0, text = "АТAKA!!" },
+            { time = 0, text = "Атака" },
+            { time = 0, text = "Pull in" }
+        }, pizzaTimers)
+        assert.are.same({ "АТAKA!!", "Атака", "Pull in" }, cancelledBars)
+        assert.is_true(dummyTextCancelled)
+        assert.is_true(dummyTimerStopped)
+        assert.is_true(timerTrackerReset)
         assert.is_true(timer.cancelled)
         assert.is_nil(RLHelper.pullResetTimer)
         assert.is_true(RLHelper.mainFrame.pullButtons[1].visible)

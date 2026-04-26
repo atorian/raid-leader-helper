@@ -7,6 +7,11 @@ local COMBAT_END_CHECK_INTERVAL = 1
 local COMBAT_END_GRACE = 3
 local ENEMY_ACTIVITY_TIMEOUT = 6
 local MODULE_ZONE_ANY = 0
+local DBM_PULL_BAR_NAMES = {
+    "АТAKA!!",
+    "Атака",
+    "Pull in"
+}
 
 local IGNORED_COMBAT_ENEMIES = {
     ["World Invisible Trigger"] = true
@@ -564,8 +569,63 @@ function RLHelper:ResetPullControls()
 end
 
 function RLHelper:CancelPullCountdown()
-    self:InvokeDBMPullCommand(0)
+    self:CancelDBMPullCountdown()
     self:ResetPullControls()
+end
+
+function RLHelper:CancelDBMPullCountdown()
+    local dbm = _G.DBM or DBM
+    local cancelled = false
+
+    if dbm and type(dbm.Unschedule) == "function" then
+        if type(SendChatMessage) == "function" then
+            dbm:Unschedule(SendChatMessage)
+            cancelled = true
+        end
+
+        if type(PlaySoundFile) == "function" then
+            dbm:Unschedule(PlaySoundFile)
+            cancelled = true
+        end
+    end
+
+    if dbm and type(dbm.CreatePizzaTimer) == "function" then
+        for _, barName in ipairs(DBM_PULL_BAR_NAMES) do
+            dbm:CreatePizzaTimer(0, barName)
+        end
+        cancelled = true
+    end
+
+    if dbm and dbm.Bars and type(dbm.Bars.CancelBar) == "function" then
+        for _, barName in ipairs(DBM_PULL_BAR_NAMES) do
+            dbm.Bars:CancelBar(barName)
+        end
+        cancelled = true
+    end
+
+    local dummyMod
+    if dbm and type(dbm.GetModByName) == "function" then
+        dummyMod = dbm:GetModByName("PullTimerCountdownDummy")
+    end
+
+    if dummyMod then
+        if dummyMod.text and type(dummyMod.text.Cancel) == "function" then
+            dummyMod.text:Cancel()
+            cancelled = true
+        end
+
+        if dummyMod.timer and type(dummyMod.timer.Stop) == "function" then
+            dummyMod.timer:Stop()
+            cancelled = true
+        end
+
+        if type(TimerTracker_OnEvent) == "function" and TimerTracker then
+            TimerTracker_OnEvent(TimerTracker, "PLAYER_ENTERING_WORLD")
+            cancelled = true
+        end
+    end
+
+    return cancelled
 end
 
 function RLHelper:InvokeDBMPullCommand(duration)
@@ -923,17 +983,17 @@ end
 function RLHelper:TriggerDamageMeterReset()
     local halionTracker = self:FindModuleByName("HalionTracker")
     if not halionTracker or type(halionTracker.resetDamageMeters) ~= "function" then
-        self:Print("HalionTracker недоступен")
+        self:Debug("HalionTracker недоступен")
         return false
     end
 
     local ok = halionTracker:resetDamageMeters()
     if not ok then
-        self:Print("Не удалось переключить сегмент у meter addon")
+        self:Debug("Не удалось переключить сегмент у meter addon")
         return false
     end
 
-    self:Print("Сброс сегментов урона запущен")
+    self:Debug("Сброс сегментов урона запущен")
     return true
 end
 

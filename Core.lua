@@ -61,13 +61,13 @@ RLHelper.combatTicker = nil
 RLHelper.currentInstanceId = nil
 
 function RLHelper:Debug(...)
-    if self.db.profile.debug then
+    if self.db and self.db.profile and self.db.profile.debug then
         self:Print(...)
     end
 end
 
 function RLHelper:isDebugging()
-    return self.db.profile.debug
+    return self.db and self.db.profile and self.db.profile.debug or false
 end
 
 function RLHelper:OnInitialize()

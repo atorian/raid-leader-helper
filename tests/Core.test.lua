@@ -101,6 +101,20 @@ describe("RLHelper.blizzardEvent", function()
     end)
 end)
 
+describe("RLHelper debug helpers", function()
+    it("does not crash when debug is called before db initialization", function()
+        RLHelper.db = nil
+        RLHelper.Print = function()
+            error("Print should not be called when debug is unavailable")
+        end
+
+        assert.has_no.errors(function()
+            RLHelper:Debug("test")
+        end)
+        assert.is_false(RLHelper:isDebugging())
+    end)
+end)
+
 describe("RLHelper frame positioning", function()
     local originalUIParent
 

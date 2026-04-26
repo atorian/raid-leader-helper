@@ -1,8 +1,6 @@
--- TODO: enable only when entering ICC
 local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local DeathwhisperTracker = RLHelper:NewModule("DeathwhisperTracker", "AceEvent-3.0")
 DeathwhisperTracker.receivesCombatEvents = true
-DeathwhisperTracker.zoneGateInstanceId = 631 -- Icecrown Citadel
 
 local TRACKED_SPELLS = {
     [71426] = "spirit_summon" -- Призыв духа
@@ -31,7 +29,7 @@ local function formatShieldBroken(ts)
     return string.format("%s Леди: Щит разбит", date("%H:%M:%S", ts))
 end
 
-local function buildSpiritExplosionSummary(report)
+local function buildSpiritHitSummary(report)
     local names = {}
     local total = 0
 
@@ -63,8 +61,8 @@ local function buildSpiritExplosionSummary(report)
     }
 end
 
-local function formatSpiritExplosionSummary(ts, total, details)
-    return string.format("%s Духов взорвали: всего %s %s", date("%H:%M:%S", ts), total, details)
+local function formatSpiritHitSummary(ts, total, details)
+    return string.format("%s Духи ударили: всего %s %s", date("%H:%M:%S", ts), total, details)
 end
 
 -- function DeathwhisperTracker:ZONE_CHANGED_NEW_AREA()
@@ -83,25 +81,25 @@ function DeathwhisperTracker:reset()
 end
 
 function DeathwhisperTracker:summarizeCombat()
-    local summary = buildSpiritExplosionSummary(self.report or {})
+    local summary = buildSpiritHitSummary(self.report or {})
     if not summary then
         return
     end
 
-    self.log(formatSpiritExplosionSummary(time(), summary.total, summary.details))
+    self.log(formatSpiritHitSummary(time(), summary.total, summary.details))
 end
 
 function DeathwhisperTracker:sendSummaryToRaid()
-    local summary = buildSpiritExplosionSummary(self.report or {})
+    local summary = buildSpiritHitSummary(self.report or {})
     if not summary then
         return
     end
 
-    SendChatMessage(string.format("Духов взорвали: всего %s %s", summary.total, summary.details), "RAID")
+    SendChatMessage(string.format("Духи ударили: всего %s %s", summary.total, summary.details), "RAID")
 end
 
 local function formatSpiritHit(ts, dest)
-    return string.format("%s |cFFFFFFFF%s|r взорвал духа |T%s:24:24:0:0|t", date("%H:%M:%S", ts), dest, icon)
+    return string.format("%s Дух ударил |cFFFFFFFF%s|r |T%s:24:24:0:0|t", date("%H:%M:%S", ts), dest, icon)
 end
 
 local function formatSpiritMiss(ts, dest)

@@ -71,7 +71,7 @@ function RLHelper:isDebugging()
 end
 
 function RLHelper:OnInitialize()
-    self:Print("RL Быдло: Начало инициализации аддона")
+    self:Debug("RL Быдло: Начало инициализации аддона")
 
     self.activeEnemies = self.activeEnemies or {}
     self.activePlayers = self.activePlayers or {}
@@ -97,7 +97,7 @@ function RLHelper:OnInitialize()
 
     self.mainFrame:Show()
 
-    self:Print("RL Быдло: Аддон включен")
+    self:Debug("RL Быдло: Аддон включен")
 end
 
 function RLHelper:OnEnable()
@@ -315,9 +315,9 @@ function RLHelper:printActiveEnemies()
     end
 
     if count > 0 then
-        self:Print("Еще есть живые враги:", table.concat(enemyNames, ", "))
+        self:Debug("Еще есть живые враги:", table.concat(enemyNames, ", "))
     else
-        self:Print("Врагов нет")
+        self:Debug("Врагов нет")
     end
 end
 
@@ -482,13 +482,13 @@ local function sendSync(prefix, msg)
     msg = msg or ""
     local zoneType = select(2, IsInInstance())
     if zoneType == "pvp" or zoneType == "arena" then
-        RLHelper:Print("RL Быдло: Отправлено в BATTLEGROUND")
+        RLHelper:Debug("RL Быдло: Отправлено в BATTLEGROUND")
         SendAddonMessage(prefix, msg, "BATTLEGROUND")
     elseif GetRealNumRaidMembers() > 0 then
-        RLHelper:Print("RL Быдло: Отправлено в RAID")
+        RLHelper:Debug("RL Быдло: Отправлено в RAID")
         SendAddonMessage(prefix, msg, "RAID")
     elseif GetRealNumPartyMembers() > 0 then
-        RLHelper:Print("RL Быдло: Отправлено в PARTY")
+        RLHelper:Debug("RL Быдло: Отправлено в PARTY")
         SendAddonMessage(prefix, msg, "PARTY")
     end
 end
@@ -598,7 +598,7 @@ function RLHelper:BeginPullCountdown(duration)
 end
 
 function RLHelper:UpdateCombatDropdown()
-    self:Print("Updating dropdown list")
+    self:Debug("Updating dropdown list")
 
     local list = {
         ["current"] = "Текущий бой"
@@ -612,7 +612,7 @@ function RLHelper:UpdateCombatDropdown()
     end
 
     dropdown:SetList(list)
-    self:Print("Dropdown list updated with " .. #list .. " items")
+    self:Debug("Dropdown list updated with " .. #list .. " items")
 end
 
 function RLHelper:DisplayCombat(combat)

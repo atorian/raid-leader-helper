@@ -6,7 +6,7 @@ SppellTracker.receivesCombatEvents = true
 local firstDamageDone = false
 local HAND_OF_RECKONING = 62124
 function SppellTracker:OnEnable()
-    RLHelper:Print("RL Быдло: TauntTracker включен")
+    RLHelper:Debug("RL Быдло: TauntTracker включен")
     firstDamageDone = false
 end
 

@@ -493,32 +493,95 @@ local function sendSync(prefix, msg)
     end
 end
 
-function RLHelper:SaveAnchorPosition()
-    local point, _, _, x, y = self.mainFrame:GetPoint()
+function RLHelper:SaveAnchorPosition(silent)
+    local point, _, relativePoint, x, y = self.mainFrame:GetPoint()
     local width = self.mainFrame:GetWidth()
     local height = self.mainFrame:GetHeight()
     self.db.profile.savedPosition = {
+        point = point or "TOPLEFT",
+        relativePoint = relativePoint or point or "TOPLEFT",
         x = x,
-        y = y, -- Сохраняем Y как есть
+        y = y,
         width = width,
         height = height
     }
-    self:Print("Позиция и размер сохранены")
+    if not silent then
+        self:Print("Позиция и размер сохранены")
+    end
 end
 
 function RLHelper:MinimizeWindow()
     self.mainFrame:ClearAllPoints()
     if self.db.profile.savedPosition then
-        self.mainFrame:SetSize(self.db.profile.savedPosition.width, self.db.profile.savedPosition.height)
-
-        self.mainFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", self.db.profile.savedPosition.x,
-            self.db.profile.savedPosition.y)
+        local savedPosition = self.db.profile.savedPosition
+        local point = savedPosition.point or "TOPLEFT"
+        local relativePoint = savedPosition.relativePoint or point
+        self.mainFrame:SetSize(savedPosition.width, savedPosition.height)
+        self.mainFrame:SetPoint(point, UIParent, relativePoint, savedPosition.x, savedPosition.y)
     else
         self.mainFrame:SetSize(400, 150)
         local screenWidth = GetScreenWidth()
         local screenHeight = GetScreenHeight()
         self.mainFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", screenWidth - 420, -20)
     end
+end
+
+function RLHelper:SetPullButtonsVisible(visible)
+    local frame = self.mainFrame
+    if not frame then
+        return
+    end
+
+    for _, btn in ipairs(frame.pullButtons or {}) do
+        if visible then
+            btn:Show()
+        else
+            btn:Hide()
+        end
+    end
+
+    if frame.cancelBtn then
+        if visible then
+            frame.cancelBtn:Hide()
+        else
+            frame.cancelBtn:Show()
+        end
+    end
+end
+
+function RLHelper:CancelPullResetTimer()
+    local timer = self.pullResetTimer
+    if timer and type(timer.Cancel) == "function" then
+        timer:Cancel()
+    end
+
+    self.pullResetTimer = nil
+end
+
+function RLHelper:ResetPullControls()
+    self:CancelPullResetTimer()
+    self:SetPullButtonsVisible(true)
+end
+
+function RLHelper:BeginPullCountdown(duration)
+    local timerApi = self.C_Timer or C_Timer
+    self:CancelPullResetTimer()
+    self:SetPullButtonsVisible(false)
+
+    if not timerApi or type(timerApi.NewTimer) ~= "function" then
+        return
+    end
+
+    local handle
+    handle = timerApi.NewTimer(duration, function()
+        if self.pullResetTimer ~= handle then
+            return
+        end
+
+        self.pullResetTimer = nil
+        self:SetPullButtonsVisible(true)
+    end)
+    self.pullResetTimer = handle
 end
 
 function RLHelper:UpdateCombatDropdown()
@@ -606,7 +669,7 @@ function RLHelper:CreateMainFrame()
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", 15, 10)
-    title:SetText("RL Быдло")
+    title:SetText("RL Пупсик")
 
     -- Close button
     -- local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
@@ -667,11 +730,7 @@ function RLHelper:CreateMainFrame()
         DBM:CreatePizzaTimer(15, "Pull", true)
         RLHelper:MinimizeWindow()
         RLHelper.mainFrame.logText:Clear()
-        -- Hide pull buttons and show cancel button
-        for _, btn in ipairs(frame.pullButtons) do
-            btn:Hide()
-        end
-        frame.cancelBtn:Show()
+        RLHelper:BeginPullCountdown(15)
     end)
 
     local pull75Btn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
@@ -683,11 +742,7 @@ function RLHelper:CreateMainFrame()
         DBM:CreatePizzaTimer(70, "Pull", true)
         RLHelper:MinimizeWindow()
         RLHelper.mainFrame.logText:Clear()
-        -- Hide pull buttons and show cancel button
-        for _, btn in ipairs(frame.pullButtons) do
-            btn:Hide()
-        end
-        frame.cancelBtn:Show()
+        RLHelper:BeginPullCountdown(70)
     end)
 
     -- Cancel button
@@ -699,10 +754,7 @@ function RLHelper:CreateMainFrame()
     frame.cancelBtn:SetScript("OnClick", function()
         DBM:CreatePizzaTimer(0, "Pull", true)
         DBM.Bars:CancelBar("Pull")
-        for _, btn in ipairs(frame.pullButtons) do
-            btn:Show()
-        end
-        frame.cancelBtn:Hide()
+        RLHelper:ResetPullControls()
     end)
 
     local resetBtn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")

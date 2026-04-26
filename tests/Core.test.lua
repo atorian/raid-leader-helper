@@ -101,6 +101,176 @@ describe("RLHelper.blizzardEvent", function()
     end)
 end)
 
+describe("RLHelper frame positioning", function()
+    local originalUIParent
+
+    before_each(function()
+        originalUIParent = _G.UIParent
+        _G.UIParent = {}
+        RLHelper.db = {
+            profile = {}
+        }
+        RLHelper.Print = function()
+        end
+    end)
+
+    after_each(function()
+        _G.UIParent = originalUIParent
+    end)
+
+    it("saves the current anchor point and restores it on minimize", function()
+        local calls = {}
+        RLHelper.mainFrame = {
+            GetPoint = function()
+                return "CENTER", UIParent, "CENTER", 120, -45
+            end,
+            GetWidth = function()
+                return 420
+            end,
+            GetHeight = function()
+                return 180
+            end,
+            ClearAllPoints = function()
+            end,
+            SetSize = function(_, width, height)
+                calls.size = { width = width, height = height }
+            end,
+            SetPoint = function(_, point, relativeTo, relativePoint, x, y)
+                calls.point = {
+                    point = point,
+                    relativeTo = relativeTo,
+                    relativePoint = relativePoint,
+                    x = x,
+                    y = y
+                }
+            end
+        }
+
+        RLHelper:SaveAnchorPosition(true)
+        RLHelper:MinimizeWindow()
+
+        assert.are.same({
+            point = "CENTER",
+            relativePoint = "CENTER",
+            x = 120,
+            y = -45,
+            width = 420,
+            height = 180
+        }, RLHelper.db.profile.savedPosition)
+        assert.are.same({ width = 420, height = 180 }, calls.size)
+        assert.are.same({
+            point = "CENTER",
+            relativeTo = UIParent,
+            relativePoint = "CENTER",
+            x = 120,
+            y = -45
+        }, calls.point)
+    end)
+
+    it("keeps compatibility with old saved positions that had no anchor metadata", function()
+        local setPointCall
+        RLHelper.db.profile.savedPosition = {
+            x = 50,
+            y = -20,
+            width = 400,
+            height = 150
+        }
+        RLHelper.mainFrame = {
+            ClearAllPoints = function()
+            end,
+            SetSize = function()
+            end,
+            SetPoint = function(_, point, relativeTo, relativePoint, x, y)
+                setPointCall = {
+                    point = point,
+                    relativeTo = relativeTo,
+                    relativePoint = relativePoint,
+                    x = x,
+                    y = y
+                }
+            end
+        }
+
+        RLHelper:MinimizeWindow()
+
+        assert.are.same({
+            point = "TOPLEFT",
+            relativeTo = UIParent,
+            relativePoint = "TOPLEFT",
+            x = 50,
+            y = -20
+        }, setPointCall)
+    end)
+end)
+
+describe("RLHelper pull controls", function()
+    local function newVisibilityProbe(initiallyVisible)
+        return {
+            visible = not not initiallyVisible,
+            Show = function(self)
+                self.visible = true
+            end,
+            Hide = function(self)
+                self.visible = false
+            end
+        }
+    end
+
+    before_each(function()
+        RLHelper.pullResetTimer = nil
+        RLHelper.C_Timer = {
+            NewTimer = function(_, callback)
+                local timer = {
+                    callback = callback,
+                    cancelled = false
+                }
+
+                function timer:Cancel()
+                    self.cancelled = true
+                end
+
+                return timer
+            end
+        }
+        RLHelper.mainFrame = {
+            pullButtons = {
+                newVisibilityProbe(true),
+                newVisibilityProbe(true)
+            },
+            cancelBtn = newVisibilityProbe(false)
+        }
+    end)
+
+    it("restores pull buttons automatically when the countdown finishes", function()
+        RLHelper:BeginPullCountdown(15)
+
+        assert.is_false(RLHelper.mainFrame.pullButtons[1].visible)
+        assert.is_false(RLHelper.mainFrame.pullButtons[2].visible)
+        assert.is_true(RLHelper.mainFrame.cancelBtn.visible)
+        assert.is_not_nil(RLHelper.pullResetTimer)
+
+        RLHelper.pullResetTimer.callback()
+
+        assert.is_nil(RLHelper.pullResetTimer)
+        assert.is_true(RLHelper.mainFrame.pullButtons[1].visible)
+        assert.is_true(RLHelper.mainFrame.pullButtons[2].visible)
+        assert.is_false(RLHelper.mainFrame.cancelBtn.visible)
+    end)
+
+    it("cancels the scheduled reset when pull is cancelled manually", function()
+        RLHelper:BeginPullCountdown(70)
+        local timer = RLHelper.pullResetTimer
+
+        RLHelper:ResetPullControls()
+
+        assert.is_true(timer.cancelled)
+        assert.is_nil(RLHelper.pullResetTimer)
+        assert.is_true(RLHelper.mainFrame.pullButtons[1].visible)
+        assert.is_true(RLHelper.mainFrame.pullButtons[2].visible)
+        assert.is_false(RLHelper.mainFrame.cancelBtn.visible)
+    end)
+end)
+
 describe("RLHelper.affectingGroup", function()
     it("should return true when source is player (0x511)", function()
         local event = {

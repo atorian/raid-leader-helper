@@ -144,6 +144,30 @@ local function isGroupInCombat()
 end
 
 C_Timer = {
+    After = function(_, callback)
+        local timer = {
+            callback = callback,
+            cancelled = false
+        }
+
+        function timer:Cancel()
+            self.cancelled = true
+        end
+
+        return timer
+    end,
+    NewTimer = function(_, callback)
+        local timer = {
+            callback = callback,
+            cancelled = false
+        }
+
+        function timer:Cancel()
+            self.cancelled = true
+        end
+
+        return timer
+    end,
     NewTicker = function(_, callback)
         local ticker = {
             callback = callback,

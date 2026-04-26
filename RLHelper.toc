@@ -2,10 +2,10 @@
 ## Title: RL Helper
 ## Notes: Quick access to RL controls
 ## Author: Atorian
-## Version: 0.2.1
+## Version: 0.3.0
 ## SavedVariables: TestAddonDB
 ## Dependencies: DBM-Core
-## OptionalDeps: Ace3
+## OptionalDeps: EPGP, Recount, Skada, Details
 ## X-Category: Raid Tools
 
 

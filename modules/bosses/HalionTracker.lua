@@ -4,7 +4,7 @@ HalionTracker.receivesCombatEvents = true
 HalionTracker.zoneGateInstanceId = 724 -- The Ruby Sanctum
 
 function HalionTracker:OnInitialize()
-    RLHelper:Print("RL Быдло: HalionTracker инициализируется")
+    RLHelper:Debug("HalionTracker инициализируется")
     self.dmgEvents = {}
     self.healEvents = {}
     self.firstEntered = false

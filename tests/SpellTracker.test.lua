@@ -62,6 +62,23 @@ describe('SpellTracker', function()
                 "TargetPlayer"))
         end)
 
+        it('logs Righteous Defense on spell cast success', function()
+            dispatch(SpellTracker, Builder:New():FromPlayer("Julian"):ToPlayer("Soxen")
+                :CastSuccess(31789, "Праведная защита"):Build())
+
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "Julian", "Interface\\Icons\\inv_shoulder_37", "Soxen"))
+        end)
+
+        it('logs Hand of Sacrifice on aura applied', function()
+            dispatch(SpellTracker, Builder:New():FromPlayer("Всёпадаем"):ToPlayer("Брюсуиллис")
+                :ApplyAura(6940, "Длань жертвенности"):Build())
+
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "Всёпадаем", "Interface\\Icons\\Spell_Holy_SealOfSacrifice",
+                "Брюсуиллис"))
+        end)
+
         it('ignores non-tracked spells', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("TestCaster"):ToEnemy("TestTarget")
                 :ApplyAura(12345, "Random Spell"):Build())

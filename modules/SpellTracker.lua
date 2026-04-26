@@ -24,13 +24,15 @@ local TRACKED_SPELLS = {
 
     [10278] = "Interface\\Icons\\Spell_Holy_SealOfProtection", -- Paladin: Корона
     [19752] = "Interface\\Icons\\Spell_Nature_TimeStop", -- Paladin: Диван
+    [6940] = "Interface\\Icons\\Spell_Holy_SealOfSacrifice", -- Paladin: Длань жертвенности
     
     [26994] = "Interface\\Icons\\spell_nature_reincarnation", -- Друид БР
     [48477] = "Interface\\Icons\\spell_nature_reincarnation" -- Друид БР
 }
 
 local TRACKED_CAST_SUCCESS_SPELLS = {
-    [19752] = true -- Божественное вмешательство
+    [19752] = true, -- Божественное вмешательство
+    [31789] = true -- Праведная защита
 }
 
 function SppellTracker:OnInitialize()

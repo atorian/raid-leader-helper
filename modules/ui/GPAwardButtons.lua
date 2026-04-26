@@ -17,13 +17,6 @@ local function getTargetName()
     return UnitName("target")
 end
 
-function GPAwardButtons:CanAwardGP()
-    local isLeader = type(UnitIsGroupLeader) == "function" and UnitIsGroupLeader("player")
-    local isAssistant = type(UnitIsGroupAssistant) == "function" and UnitIsGroupAssistant("player")
-
-    return not not (isLeader or isAssistant)
-end
-
 function GPAwardButtons:OnInitialize()
     self:RegisterMessage("RLHelper_MainFrameCreated", "attachToMainFrame")
 end
@@ -52,10 +45,6 @@ function GPAwardButtons:refreshVisibility()
 end
 
 function GPAwardButtons:AwardTargetGP(label, amount)
-    if not self:CanAwardGP() then
-        return false, "Начислять GP может только РЛ или помощник"
-    end
-
     if type(UnitExists) ~= "function" or not UnitExists("target") then
         return false, "Нет выбранной цели"
     end

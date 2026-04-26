@@ -1,6 +1,6 @@
 require('tests.mocks')
 require('../lib/blizzardEvent')
-local TestAddon = require('../Core')
+local RLHelper = require('../Core')
 local Builder = require('../utils/CombatEventBuilder')
 local MisdirectionTracker = require('../modules/Misdirection')
 

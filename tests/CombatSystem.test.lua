@@ -1,6 +1,6 @@
 local M = require('tests.mocks')
 require('../lib/blizzardEvent')
-local TestAddon = require('../Core')
+local RLHelper = require('../Core')
 local Builder = require('../utils/CombatEventBuilder')
 
 local function count(tbl)
@@ -13,19 +13,19 @@ end
 
 describe("Боевая система", function()
     before_each(function()
-        TestAddon:StopCombatTicker()
-        TestAddon.inCombat = false
-        TestAddon.lastCombatActivityAt = nil
-        TestAddon.combatEndRequestedAt = nil
-        TestAddon.currentCombat = {
+        RLHelper:StopCombatTicker()
+        RLHelper.inCombat = false
+        RLHelper.lastCombatActivityAt = nil
+        RLHelper.combatEndRequestedAt = nil
+        RLHelper.currentCombat = {
             startTime = nil,
             messages = {},
             firstEnemy = nil
         }
-        TestAddon.combatHistory = {}
-        TestAddon.DisplayCombat = function()
+        RLHelper.combatHistory = {}
+        RLHelper.DisplayCombat = function()
         end
-        TestAddon.mainFrame = {
+        RLHelper.mainFrame = {
             logText = {
                 AddMessage = function()
                 end,
@@ -34,11 +34,11 @@ describe("Боевая система", function()
             }
         }
 
-        wipe(TestAddon.activeEnemies)
-        wipe(TestAddon.activePlayers)
-        wipe(TestAddon.enemyEvents)
+        wipe(RLHelper.activeEnemies)
+        wipe(RLHelper.activePlayers)
+        wipe(RLHelper.enemyEvents)
 
-        TestAddon.db = {
+        RLHelper.db = {
             profile = {
                 debug = false,
                 combatHistory = {}
@@ -53,65 +53,65 @@ describe("Боевая система", function()
     end)
 
     it("начинает бой когда игрок входит в бой", function()
-        TestAddon:PLAYER_REGEN_DISABLED()
+        RLHelper:PLAYER_REGEN_DISABLED()
 
-        assert.is_true(TestAddon.inCombat)
+        assert.is_true(RLHelper.inCombat)
     end)
 
     it("начинает бой от боевого лога и отслеживает участников", function()
         M.UnitAffectingCombat1 = false
 
-        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Враг1"):ToPlayer("Игрок1"):Damage(100):Build())
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Враг1"):ToPlayer("Игрок1"):Damage(100):Build())
 
-        assert.is_true(TestAddon.inCombat)
-        assert.are.equal(1, count(TestAddon.activeEnemies))
-        assert.are.equal(1, count(TestAddon.activePlayers))
-        assert.are.equal("Враг1", TestAddon.currentCombat.firstEnemy)
+        assert.is_true(RLHelper.inCombat)
+        assert.are.equal(1, count(RLHelper.activeEnemies))
+        assert.are.equal(1, count(RLHelper.activePlayers))
+        assert.are.equal("Враг1", RLHelper.currentCombat.firstEnemy)
     end)
 
     it("игнорирует World Invisible Trigger как название боя", function()
         M.UnitAffectingCombat1 = false
 
-        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("World Invisible Trigger"):ToPlayer("Игрок1")
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("World Invisible Trigger"):ToPlayer("Игрок1")
             :Damage(100):Build())
-        TestAddon:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Ануб'арак"):ToPlayer("Игрок1")
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Ануб'арак"):ToPlayer("Игрок1")
             :Damage(100):Build())
 
-        assert.are.equal("Ануб'арак", TestAddon.currentCombat.firstEnemy)
+        assert.are.equal("Ануб'арак", RLHelper.currentCombat.firstEnemy)
     end)
 
     it("не завершает бой сразу по PLAYER_REGEN_ENABLED", function()
-        TestAddon:PLAYER_REGEN_DISABLED()
-        TestAddon:PLAYER_REGEN_ENABLED()
+        RLHelper:PLAYER_REGEN_DISABLED()
+        RLHelper:PLAYER_REGEN_ENABLED()
 
-        assert.is_true(TestAddon.inCombat)
+        assert.is_true(RLHelper.inCombat)
     end)
 
     it("не завершает бой пока группа еще в бою", function()
-        TestAddon:PLAYER_REGEN_DISABLED()
-        TestAddon:OnCombatLogEvent("test message")
+        RLHelper:PLAYER_REGEN_DISABLED()
+        RLHelper:OnCombatLogEvent("test message")
 
         M.partySize = 1
         M.UnitAffectingCombat1 = false
         M.UnitAffectingCombat2 = true
-        TestAddon.lastCombatActivityAt = TestAddon:GetCombatNow() - 10
-        TestAddon.combatEndRequestedAt = TestAddon:GetCombatNow() - 5
+        RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
+        RLHelper.combatEndRequestedAt = RLHelper:GetCombatNow() - 5
 
-        assert.is_false(TestAddon:EvaluateCombatEnd("test"))
-        assert.is_true(TestAddon.inCombat)
-        assert.are.equal(0, #TestAddon.combatHistory)
+        assert.is_false(RLHelper:EvaluateCombatEnd("test"))
+        assert.is_true(RLHelper.inCombat)
+        assert.are.equal(0, #RLHelper.combatHistory)
     end)
 
     it("завершает бой после тихого периода вне боя", function()
-        TestAddon:PLAYER_REGEN_DISABLED()
-        TestAddon:OnCombatLogEvent("test message")
+        RLHelper:PLAYER_REGEN_DISABLED()
+        RLHelper:OnCombatLogEvent("test message")
 
         M.UnitAffectingCombat1 = false
-        TestAddon.lastCombatActivityAt = TestAddon:GetCombatNow() - 10
-        TestAddon.combatEndRequestedAt = TestAddon:GetCombatNow() - 5
+        RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
+        RLHelper.combatEndRequestedAt = RLHelper:GetCombatNow() - 5
 
-        assert.is_true(TestAddon:EvaluateCombatEnd("test"))
-        assert.is_false(TestAddon.inCombat)
-        assert.are.equal(1, #TestAddon.combatHistory)
+        assert.is_true(RLHelper:EvaluateCombatEnd("test"))
+        assert.is_false(RLHelper.inCombat)
+        assert.are.equal(1, #RLHelper.combatHistory)
     end)
 end)

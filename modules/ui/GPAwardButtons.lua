@@ -1,5 +1,5 @@
-local TestAddon = LibStub("AceAddon-3.0"):GetAddon("RlHelper")
-local GPAwardButtons = TestAddon:NewModule("GPAwardButtons", "AceEvent-3.0")
+local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
+local GPAwardButtons = RLHelper:NewModule("GPAwardButtons", "AceEvent-3.0")
 
 local BUTTONS = {
     { label = "100", amount = 100 },
@@ -25,7 +25,7 @@ function GPAwardButtons:CanAwardGP()
 end
 
 function GPAwardButtons:OnInitialize()
-    self:RegisterMessage("TestAddon_MainFrameCreated", "attachToMainFrame")
+    self:RegisterMessage("RLHelper_MainFrameCreated", "attachToMainFrame")
 end
 
 function GPAwardButtons:OnEnable()
@@ -36,7 +36,7 @@ function GPAwardButtons:OnEnable()
 end
 
 function GPAwardButtons:printError(message)
-    TestAddon:Print("RL Быдло: " .. message)
+    RLHelper:Print("RL Быдло: " .. message)
 end
 
 function GPAwardButtons:refreshVisibility()
@@ -49,13 +49,13 @@ function GPAwardButtons:refreshVisibility()
         for _, button in ipairs(self.buttons or {}) do
             button:Show()
         end
-        TestAddon:SetMainFrameBottomPanel(self.footerFrame)
+        RLHelper:SetMainFrameBottomPanel(self.footerFrame)
     else
         for _, button in ipairs(self.buttons or {}) do
             button:Hide()
         end
         self.footerFrame:Hide()
-        TestAddon:SetMainFrameBottomPanel(nil)
+        RLHelper:SetMainFrameBottomPanel(nil)
     end
 end
 
@@ -125,13 +125,13 @@ function GPAwardButtons:createButton(parent, anchor, buttonInfo)
 end
 
 function GPAwardButtons:attachToMainFrame()
-    if self.footerFrame or not TestAddon.mainFrame then
+    if self.footerFrame or not RLHelper.mainFrame then
         return
     end
 
-    local footer = CreateFrame("Frame", nil, TestAddon.mainFrame)
-    footer:SetPoint("BOTTOMLEFT", TestAddon.mainFrame, "BOTTOMLEFT", 12, 8)
-    footer:SetPoint("BOTTOMRIGHT", TestAddon.mainFrame, "BOTTOMRIGHT", -32, 8)
+    local footer = CreateFrame("Frame", nil, RLHelper.mainFrame)
+    footer:SetPoint("BOTTOMLEFT", RLHelper.mainFrame, "BOTTOMLEFT", 12, 8)
+    footer:SetPoint("BOTTOMRIGHT", RLHelper.mainFrame, "BOTTOMRIGHT", -32, 8)
     footer:SetHeight(22)
 
     self.buttons = {}
@@ -142,7 +142,7 @@ function GPAwardButtons:attachToMainFrame()
     end
 
     self.footerFrame = footer
-    TestAddon:SetMainFrameBottomPanel(footer)
+    RLHelper:SetMainFrameBottomPanel(footer)
     self:refreshVisibility()
 end
 

@@ -1,15 +1,15 @@
-local TestAddon = LibStub("AceAddon-3.0"):GetAddon("RlHelper")
-local HalionTracker = TestAddon:NewModule("HalionTracker", "AceEvent-3.0")
+local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
+local HalionTracker = RLHelper:NewModule("HalionTracker", "AceEvent-3.0")
 HalionTracker.receivesCombatEvents = true
 HalionTracker.zoneGateInstanceId = 724 -- The Ruby Sanctum
 
 function HalionTracker:OnInitialize()
-    TestAddon:Print("RL Быдло: HalionTracker инициализируется")
+    RLHelper:Print("RL Быдло: HalionTracker инициализируется")
     self.dmgEvents = {}
     self.healEvents = {}
     self.firstEntered = false
     self.log = function(...)
-        TestAddon:OnCombatLogEvent(...)
+        RLHelper:OnCombatLogEvent(...)
     end
 
 end
@@ -48,8 +48,8 @@ local HEROISM_SPELLS = {
 }
 
 function HalionTracker:OnEnable()
-    self:RegisterMessage("TestAddon_CombatEnded", "reset")
-    self:RegisterMessage("TestAddon_Demo", "demo")
+    self:RegisterMessage("RLHelper_CombatEnded", "reset")
+    self:RegisterMessage("RLHelper_Demo", "demo")
 end
 
 function HalionTracker:reset()
@@ -60,7 +60,7 @@ function HalionTracker:reset()
 end
 
 function HalionTracker:debugReset(message, ...)
-    TestAddon:Debug("HalionTracker: " .. string.format(message, ...))
+    RLHelper:Debug("HalionTracker: " .. string.format(message, ...))
 end
 
 function HalionTracker:tryResetRecount()

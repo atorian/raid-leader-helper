@@ -1,5 +1,5 @@
-local TestAddon = LibStub("AceAddon-3.0"):GetAddon("RlHelper")
-local MisdirectionTracker = TestAddon:NewModule("MisdirectionTracker", "AceEvent-3.0")
+local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
+local MisdirectionTracker = RLHelper:NewModule("MisdirectionTracker", "AceEvent-3.0")
 MisdirectionTracker.receivesCombatEvents = true
 
 -- hunt
@@ -71,14 +71,14 @@ local activePulls = {}
 local pullDamage = {}
 
 function MisdirectionTracker:OnEnable()
-    TestAddon:Debug("RL Быдло: MisdirectionTracker включен")
+    RLHelper:Debug("RL Быдло: MisdirectionTracker включен")
 end
 
 function MisdirectionTracker:OnInitialize()
-    self:RegisterMessage("TestAddon_CombatEnded", "reset")
-    self:RegisterMessage("TestAddon_Demo", "demo")
+    self:RegisterMessage("RLHelper_CombatEnded", "reset")
+    self:RegisterMessage("RLHelper_Demo", "demo")
     self.log = function(...)
-        TestAddon:OnCombatLogEvent(...)
+        RLHelper:OnCombatLogEvent(...)
     end
 end
 

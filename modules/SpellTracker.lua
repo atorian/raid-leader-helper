@@ -1,12 +1,12 @@
-local TestAddon = LibStub("AceAddon-3.0"):GetAddon("RlHelper")
-local SppellTracker = TestAddon:NewModule("SppellTracker", "AceEvent-3.0")
+local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
+local SppellTracker = RLHelper:NewModule("SppellTracker", "AceEvent-3.0")
 SppellTracker.receivesCombatEvents = true
 
 -- Флаг для отслеживания первого урона
 local firstDamageDone = false
 local HAND_OF_RECKONING = 62124
 function SppellTracker:OnEnable()
-    TestAddon:Print("RL Быдло: TauntTracker включен")
+    RLHelper:Print("RL Быдло: TauntTracker включен")
     firstDamageDone = false
 end
 
@@ -31,11 +31,11 @@ local TRACKED_SPELLS = {
 
 function SppellTracker:OnInitialize()
     self:RegisterEvent("UNIT_TARGET")
-    self:RegisterMessage("TestAddon_CombatEnded", "reset")
-    self:RegisterMessage("TestAddon_Demo", "demo")
+    self:RegisterMessage("RLHelper_CombatEnded", "reset")
+    self:RegisterMessage("RLHelper_Demo", "demo")
     self.pendingHandOfReckonings = {}
     self.log = function(...)
-        TestAddon:OnCombatLogEvent(...)
+        RLHelper:OnCombatLogEvent(...)
     end
 end
 

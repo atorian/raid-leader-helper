@@ -1,9 +1,9 @@
 local M = require('tests.mocks')
 local blizzardEvent = require('../lib/blizzardEvent')
-local TestAddon = require("Core")
+local RLHelper = require("Core")
 
 -- Test suites
-describe("TestAddon.blizzardEvent", function()
+describe("RLHelper.blizzardEvent", function()
     it("should parse SWING_DAMAGE event correctly", function()
         -- 4/22 19:42:31.683  SWING_DAMAGE,0x00000000003CDB62,"Котозавр",0x514,0xF1500087EC5C09CA,"Гормок Пронзающий Бивень",0x10a48,5010,0,1,0,0,0,1,nil,nil
         local timestamp = 1696870808.708
@@ -101,7 +101,7 @@ describe("TestAddon.blizzardEvent", function()
     end)
 end)
 
-describe("TestAddon.affectingGroup", function()
+describe("RLHelper.affectingGroup", function()
     it("should return true when source is player (0x511)", function()
         local event = {
             sourceFlags = 0x511,

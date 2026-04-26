@@ -1,6 +1,6 @@
 -- TODO: enable only when entering ICC
-local TestAddon = LibStub("AceAddon-3.0"):GetAddon("RlHelper")
-local DeathwhisperTracker = TestAddon:NewModule("DeathwhisperTracker", "AceEvent-3.0")
+local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
+local DeathwhisperTracker = RLHelper:NewModule("DeathwhisperTracker", "AceEvent-3.0")
 DeathwhisperTracker.receivesCombatEvents = true
 DeathwhisperTracker.zoneGateInstanceId = 631 -- Icecrown Citadel
 
@@ -12,19 +12,19 @@ local LADY_DEATHWHISPER_MANA_BARRIER = 70842
 local icon = "Interface\\Icons\\spell_shadow_deathsembrace"
 
 function DeathwhisperTracker:OnInitialize()
-    TestAddon:Debug("DeathwhisperTracker: Инициализация")
+    RLHelper:Debug("DeathwhisperTracker: Инициализация")
     self.currentSpirits = {}
     self.report = {}
     self.log = function(...)
-        TestAddon:OnCombatLogEvent(...)
+        RLHelper:OnCombatLogEvent(...)
     end
-    self:RegisterMessage("TestAddon_CombatEnding", "summarizeCombat")
-    self:RegisterMessage("TestAddon_CombatEnded", "reset")
-    self:RegisterMessage("TestAddon_Demo", "demo")
+    self:RegisterMessage("RLHelper_CombatEnding", "summarizeCombat")
+    self:RegisterMessage("RLHelper_CombatEnded", "reset")
+    self:RegisterMessage("RLHelper_Demo", "demo")
 end
 
 function DeathwhisperTracker:OnEnable()
-    TestAddon:Debug("DeathwhisperTracker: Включен")
+    RLHelper:Debug("DeathwhisperTracker: Включен")
 end
 
 local function formatShieldBroken(ts)

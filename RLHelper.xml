@@ -70,7 +70,7 @@
 
     </Frame>
     <!-- Template for action buttons -->
-    <Button name="TestAddonActionButtonTemplate" virtual="true">
+    <Button name="RLHelperActionButtonTemplate" virtual="true">
         <Size>
             <AbsDimension x="120" y="24"/>
         </Size>

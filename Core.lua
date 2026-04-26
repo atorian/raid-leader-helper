@@ -1,7 +1,7 @@
-local TestAddon = LibStub("AceAddon-3.0"):NewAddon("RlHelper", "AceConsole-3.0", "AceEvent-3.0", "LibCompat-1.0")
-local callbacks = LibStub("CallbackHandler-1.0"):New(TestAddon)
-local IsGroupInCombat, InCombatLockdown = TestAddon.IsGroupInCombat, InCombatLockdown
-local GetUnitIdFromGUID = TestAddon.GetUnitIdFromGUID
+local RLHelper = LibStub("AceAddon-3.0"):NewAddon("RLHelper", "AceConsole-3.0", "AceEvent-3.0", "LibCompat-1.0")
+local callbacks = LibStub("CallbackHandler-1.0"):New(RLHelper)
+local IsGroupInCombat, InCombatLockdown = RLHelper.IsGroupInCombat, InCombatLockdown
+local GetUnitIdFromGUID = RLHelper.GetUnitIdFromGUID
 
 local COMBAT_END_CHECK_INTERVAL = 1
 local COMBAT_END_GRACE = 3
@@ -21,14 +21,14 @@ local function wipe(t)
 end
 
 -- Group affiliation flags
-TestAddon.GROUP_AFFILIATION_PLAYER = 0x1 -- Игрок
-TestAddon.GROUP_AFFILIATION_PARTY = 0x2 -- Член группы
-TestAddon.GROUP_AFFILIATION_RAID = 0x4 -- Член рейда
-TestAddon.GROUP_AFFILIATION_ANY = 0x7 -- Принадлежность к любой группе (игрок/группа/рейд)
+RLHelper.GROUP_AFFILIATION_PLAYER = 0x1 -- Игрок
+RLHelper.GROUP_AFFILIATION_PARTY = 0x2 -- Член группы
+RLHelper.GROUP_AFFILIATION_RAID = 0x4 -- Член рейда
+RLHelper.GROUP_AFFILIATION_ANY = 0x7 -- Принадлежность к любой группе (игрок/группа/рейд)
 
 -- Enemy flags
-TestAddon.ENEMY_FLAGS = 0xa48 -- Маска для проверки враждебных NPC (OUTSIDER | HOSTILE | NPC | NPC_TYPE)
-TestAddon.CONTROLLED_FLAGS = 0x1248 -- Маска для проверки юнитов под контролем (OUTSIDER | CONTROLLED | NPC | NPC_TYPE)
+RLHelper.ENEMY_FLAGS = 0xa48 -- Маска для проверки враждебных NPC (OUTSIDER | HOSTILE | NPC | NPC_TYPE)
+RLHelper.CONTROLLED_FLAGS = 0x1248 -- Маска для проверки юнитов под контролем (OUTSIDER | CONTROLLED | NPC | NPC_TYPE)
 
 -- Default settings
 local defaults = {
@@ -44,40 +44,40 @@ local defaults = {
 }
 
 -- Combat history structures
-TestAddon.combatHistory = {} -- Array for combat history
-TestAddon.currentCombat = {
+RLHelper.combatHistory = {} -- Array for combat history
+RLHelper.currentCombat = {
     startTime = nil,
     messages = {},
     firstEnemy = nil -- Name of the first enemy in combat
 }
-TestAddon.viewingCurrentCombat = true -- Initialize to true by default
+RLHelper.viewingCurrentCombat = true -- Initialize to true by default
 
-TestAddon.activeEnemies = {}
-TestAddon.activePlayers = {}
-TestAddon.enemyEvents = {} -- Structure to track enemies and their events
-TestAddon.lastCombatActivityAt = nil
-TestAddon.combatEndRequestedAt = nil
-TestAddon.combatTicker = nil
-TestAddon.currentInstanceId = nil
+RLHelper.activeEnemies = {}
+RLHelper.activePlayers = {}
+RLHelper.enemyEvents = {} -- Structure to track enemies and their events
+RLHelper.lastCombatActivityAt = nil
+RLHelper.combatEndRequestedAt = nil
+RLHelper.combatTicker = nil
+RLHelper.currentInstanceId = nil
 
-function TestAddon:Debug(...)
+function RLHelper:Debug(...)
     if self.db.profile.debug then
         self:Print(...)
     end
 end
 
-function TestAddon:isDebugging()
+function RLHelper:isDebugging()
     return self.db.profile.debug
 end
 
-function TestAddon:OnInitialize()
+function RLHelper:OnInitialize()
     self:Print("RL Быдло: Начало инициализации аддона")
 
     self.activeEnemies = self.activeEnemies or {}
     self.activePlayers = self.activePlayers or {}
     self.enemyEvents = self.enemyEvents or {}
 
-    self.db = LibStub("AceDB-3.0"):New("TestAddonDB", defaults, true)
+    self.db = LibStub("AceDB-3.0"):New("RLHelperDB", defaults, true)
 
     -- Load combat history from DB
     if self.db.profile.combatHistory then
@@ -100,7 +100,7 @@ function TestAddon:OnInitialize()
     self:Print("RL Быдло: Аддон включен")
 end
 
-function TestAddon:OnEnable()
+function RLHelper:OnEnable()
     self:MinimizeWindow()
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     self:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -111,11 +111,11 @@ function TestAddon:OnEnable()
 end
 
 local function isEnemy(flags)
-    return bit.band(flags or 0, TestAddon.ENEMY_FLAGS) > 0
+    return bit.band(flags or 0, RLHelper.ENEMY_FLAGS) > 0
 end
 
 local function isPlayer(flags)
-    return bit.band(flags or 0, TestAddon.GROUP_AFFILIATION_ANY) > 0
+    return bit.band(flags or 0, RLHelper.GROUP_AFFILIATION_ANY) > 0
 end
 
 local function shouldIgnoreCombatEnemy(name)
@@ -124,7 +124,7 @@ end
 
 local LADY_KONTROL = 71289
 
-function TestAddon:GetCombatNow()
+function RLHelper:GetCombatNow()
     if type(GetTime) == "function" then
         return GetTime()
     end
@@ -132,7 +132,7 @@ function TestAddon:GetCombatNow()
     return time()
 end
 
-function TestAddon:StopCombatTicker()
+function RLHelper:StopCombatTicker()
     if self.combatTicker and type(self.combatTicker.Cancel) == "function" then
         self.combatTicker:Cancel()
     end
@@ -140,7 +140,7 @@ function TestAddon:StopCombatTicker()
     self.combatTicker = nil
 end
 
-function TestAddon:EnsureCombatTicker()
+function RLHelper:EnsureCombatTicker()
     if self.combatTicker then
         return
     end
@@ -159,7 +159,7 @@ local function involvesEnemy(event)
     return isEnemy(event.sourceFlags) or isEnemy(event.destFlags)
 end
 
-function TestAddon:MarkEnemyInactive(guid)
+function RLHelper:MarkEnemyInactive(guid)
     if not guid then
         return
     end
@@ -167,7 +167,7 @@ function TestAddon:MarkEnemyInactive(guid)
     self.activeEnemies[guid] = 0
 end
 
-function TestAddon:MarkEnemyActivity(guid, name, eventName, now)
+function RLHelper:MarkEnemyActivity(guid, name, eventName, now)
     if not guid then
         return
     end
@@ -180,7 +180,7 @@ function TestAddon:MarkEnemyActivity(guid, name, eventName, now)
     }
 end
 
-function TestAddon:HasRecentEnemyActivity(now)
+function RLHelper:HasRecentEnemyActivity(now)
     for guid, seenAt in pairs(self.activeEnemies) do
         if seenAt ~= 0 then
             if now - seenAt <= ENEMY_ACTIVITY_TIMEOUT then
@@ -194,7 +194,7 @@ function TestAddon:HasRecentEnemyActivity(now)
     return false
 end
 
-function TestAddon:IsCombatOngoing(now)
+function RLHelper:IsCombatOngoing(now)
     if InCombatLockdown and InCombatLockdown() then
         return true
     end
@@ -206,7 +206,7 @@ function TestAddon:IsCombatOngoing(now)
     return self:HasRecentEnemyActivity(now)
 end
 
-function TestAddon:StartCombat(reason)
+function RLHelper:StartCombat(reason)
     local now = self:GetCombatNow()
     self.lastCombatActivityAt = now
     self.combatEndRequestedAt = nil
@@ -225,7 +225,7 @@ function TestAddon:StartCombat(reason)
     self:Debug("Combat started", reason)
 end
 
-function TestAddon:ResetCombatState()
+function RLHelper:ResetCombatState()
     self:StopCombatTicker()
     self.inCombat = false
     self.lastCombatActivityAt = nil
@@ -242,10 +242,10 @@ function TestAddon:ResetCombatState()
     wipe(self.enemyEvents)
 end
 
-function TestAddon:FinishCombat(reason)
+function RLHelper:FinishCombat(reason)
     self:Debug("Combat ended", reason)
 
-    self:SendMessage("TestAddon_CombatEnding")
+    self:SendMessage("RLHelper_CombatEnding")
 
     local combat = nil
     if self.currentCombat.startTime and #self.currentCombat.messages > 0 then
@@ -264,10 +264,10 @@ function TestAddon:FinishCombat(reason)
         self:Debug("Combat Saved to history")
     end
 
-    self:SendMessage("TestAddon_CombatEnded")
+    self:SendMessage("RLHelper_CombatEnded")
 end
 
-function TestAddon:trackCombatants(event)
+function RLHelper:trackCombatants(event)
     if event.spellId == LADY_KONTROL or not affectingGroup(event) or not involvesEnemy(event) then
         return false
     end
@@ -300,7 +300,7 @@ function TestAddon:trackCombatants(event)
     return true
 end
 
-function TestAddon:printActiveEnemies()
+function RLHelper:printActiveEnemies()
     local enemyNames = {}
     local count = 0
     for guid, v in pairs(self.activeEnemies) do
@@ -321,7 +321,7 @@ function TestAddon:printActiveEnemies()
     end
 end
 
-function TestAddon:PLAYER_REGEN_ENABLED()
+function RLHelper:PLAYER_REGEN_ENABLED()
     self:Debug("Regen Enabled")
     self:printActiveEnemies()
     if not self.inCombat then
@@ -333,11 +333,11 @@ function TestAddon:PLAYER_REGEN_ENABLED()
     self:EvaluateCombatEnd("PLAYER_REGEN_ENABLED")
 end
 
-function TestAddon:PLAYER_REGEN_DISABLED()
+function RLHelper:PLAYER_REGEN_DISABLED()
     self:StartCombat("PLAYER_REGEN_DISABLED")
 end
 
-function TestAddon:UpdateZoneContext()
+function RLHelper:UpdateZoneContext()
     if type(GetInstanceInfo) ~= "function" then
         self.currentInstanceId = MODULE_ZONE_ANY
         return self.currentInstanceId
@@ -347,15 +347,15 @@ function TestAddon:UpdateZoneContext()
     return self.currentInstanceId
 end
 
-function TestAddon:PLAYER_ENTERING_WORLD()
+function RLHelper:PLAYER_ENTERING_WORLD()
     self:UpdateZoneContext()
 end
 
-function TestAddon:ZONE_CHANGED_NEW_AREA()
+function RLHelper:ZONE_CHANGED_NEW_AREA()
     self:UpdateZoneContext()
 end
 
-function TestAddon:ShouldDispatchCombatEventToModule(module)
+function RLHelper:ShouldDispatchCombatEventToModule(module)
     if not module or not module.receivesCombatEvents then
         return false
     end
@@ -368,7 +368,7 @@ function TestAddon:ShouldDispatchCombatEventToModule(module)
     return zoneGateInstanceId == MODULE_ZONE_ANY or zoneGateInstanceId == self.currentInstanceId
 end
 
-function TestAddon:DispatchCombatEvent(eventData)
+function RLHelper:DispatchCombatEvent(eventData)
     if type(self.IterateModules) ~= "function" then
         return
     end
@@ -385,15 +385,15 @@ function affectingGroup(event)
     local destFlags = event.destFlags
 
     -- Игнорируем события, где источник или цель под контролем
-    if bit.band(sourceFlags, TestAddon.CONTROLLED_FLAGS) == TestAddon.CONTROLLED_FLAGS or
-        bit.band(destFlags, TestAddon.CONTROLLED_FLAGS) == TestAddon.CONTROLLED_FLAGS then
+    if bit.band(sourceFlags, RLHelper.CONTROLLED_FLAGS) == RLHelper.CONTROLLED_FLAGS or
+        bit.band(destFlags, RLHelper.CONTROLLED_FLAGS) == RLHelper.CONTROLLED_FLAGS then
         return false
     end
 
     return isPlayer(sourceFlags) or isPlayer(destFlags)
 end
 
-function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
+function RLHelper:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     local eventData = blizzardEvent(...)
     self:DispatchCombatEvent(eventData)
     self:trackCombatants(eventData)
@@ -416,7 +416,7 @@ function TestAddon:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     end
 end
 
-function TestAddon:OnCombatLogEvent(message)
+function RLHelper:OnCombatLogEvent(message)
     if not self.inCombat then
         self:StartCombat("message")
     end
@@ -431,7 +431,7 @@ function TestAddon:OnCombatLogEvent(message)
     end
 end
 
-function TestAddon:SaveCombatToProfile(combat, profile)
+function RLHelper:SaveCombatToProfile(combat, profile)
     -- Добавляем бой в начало массива
     table.insert(self.combatHistory, 1, combat)
 
@@ -447,11 +447,11 @@ function TestAddon:SaveCombatToProfile(combat, profile)
     end
 end
 
-function TestAddon:EndCombat(reason)
+function RLHelper:EndCombat(reason)
     self:FinishCombat(reason)
 end
 
-function TestAddon:EvaluateCombatEnd(reason)
+function RLHelper:EvaluateCombatEnd(reason)
     if not self.inCombat then
         return false
     end
@@ -482,18 +482,18 @@ local function sendSync(prefix, msg)
     msg = msg or ""
     local zoneType = select(2, IsInInstance())
     if zoneType == "pvp" or zoneType == "arena" then
-        TestAddon:Print("RL Быдло: Отправлено в BATTLEGROUND")
+        RLHelper:Print("RL Быдло: Отправлено в BATTLEGROUND")
         SendAddonMessage(prefix, msg, "BATTLEGROUND")
     elseif GetRealNumRaidMembers() > 0 then
-        TestAddon:Print("RL Быдло: Отправлено в RAID")
+        RLHelper:Print("RL Быдло: Отправлено в RAID")
         SendAddonMessage(prefix, msg, "RAID")
     elseif GetRealNumPartyMembers() > 0 then
-        TestAddon:Print("RL Быдло: Отправлено в PARTY")
+        RLHelper:Print("RL Быдло: Отправлено в PARTY")
         SendAddonMessage(prefix, msg, "PARTY")
     end
 end
 
-function TestAddon:SaveAnchorPosition()
+function RLHelper:SaveAnchorPosition()
     local point, _, _, x, y = self.mainFrame:GetPoint()
     local width = self.mainFrame:GetWidth()
     local height = self.mainFrame:GetHeight()
@@ -506,7 +506,7 @@ function TestAddon:SaveAnchorPosition()
     self:Print("Позиция и размер сохранены")
 end
 
-function TestAddon:MinimizeWindow()
+function RLHelper:MinimizeWindow()
     self.mainFrame:ClearAllPoints()
     if self.db.profile.savedPosition then
         self.mainFrame:SetSize(self.db.profile.savedPosition.width, self.db.profile.savedPosition.height)
@@ -521,7 +521,7 @@ function TestAddon:MinimizeWindow()
     end
 end
 
-function TestAddon:UpdateCombatDropdown()
+function RLHelper:UpdateCombatDropdown()
     self:Print("Updating dropdown list")
 
     local list = {
@@ -539,7 +539,7 @@ function TestAddon:UpdateCombatDropdown()
     self:Print("Dropdown list updated with " .. #list .. " items")
 end
 
-function TestAddon:DisplayCombat(combat)
+function RLHelper:DisplayCombat(combat)
     if not self.mainFrame or not self.mainFrame.logText then
         return
     end
@@ -552,7 +552,7 @@ function TestAddon:DisplayCombat(combat)
     end
 end
 
-function TestAddon:LayoutMainFrame()
+function RLHelper:LayoutMainFrame()
     local frame = self.mainFrame
     if not frame or not frame.logText or not frame.buttonContainer then
         return
@@ -568,7 +568,7 @@ function TestAddon:LayoutMainFrame()
     end
 end
 
-function TestAddon:SetMainFrameBottomPanel(panel)
+function RLHelper:SetMainFrameBottomPanel(panel)
     if not self.mainFrame then
         return
     end
@@ -577,8 +577,8 @@ function TestAddon:SetMainFrameBottomPanel(panel)
     self:LayoutMainFrame()
 end
 
-function TestAddon:CreateMainFrame()
-    local frame = CreateFrame("Frame", "TestAddonMainFrame", UIParent)
+function RLHelper:CreateMainFrame()
+    local frame = CreateFrame("Frame", "RLHelperMainFrame", UIParent)
     frame:SetSize(300, 600)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
@@ -627,7 +627,7 @@ function TestAddon:CreateMainFrame()
     minimizeButton:SetDisabledTexture("")
 
     minimizeButton:SetScript("OnClick", function()
-        TestAddon:MinimizeWindow()
+        RLHelper:MinimizeWindow()
     end)
 
     -- Anchor button
@@ -645,7 +645,7 @@ function TestAddon:CreateMainFrame()
     anchorButton:SetDisabledTexture("")
 
     anchorButton:SetScript("OnClick", function()
-        TestAddon:SaveAnchorPosition()
+        RLHelper:SaveAnchorPosition()
     end)
 
     -- Button container
@@ -665,8 +665,8 @@ function TestAddon:CreateMainFrame()
     frame.pullButtons[1] = pull15Btn
     pull15Btn:SetScript("OnClick", function()
         DBM:CreatePizzaTimer(15, "Pull", true)
-        TestAddon:MinimizeWindow()
-        TestAddon.mainFrame.logText:Clear()
+        RLHelper:MinimizeWindow()
+        RLHelper.mainFrame.logText:Clear()
         -- Hide pull buttons and show cancel button
         for _, btn in ipairs(frame.pullButtons) do
             btn:Hide()
@@ -681,8 +681,8 @@ function TestAddon:CreateMainFrame()
     frame.pullButtons[2] = pull75Btn
     pull75Btn:SetScript("OnClick", function()
         DBM:CreatePizzaTimer(70, "Pull", true)
-        TestAddon:MinimizeWindow()
-        TestAddon.mainFrame.logText:Clear()
+        RLHelper:MinimizeWindow()
+        RLHelper.mainFrame.logText:Clear()
         -- Hide pull buttons and show cancel button
         for _, btn in ipairs(frame.pullButtons) do
             btn:Hide()
@@ -710,13 +710,13 @@ function TestAddon:CreateMainFrame()
     resetBtn:SetPoint("LEFT", pull75Btn, "RIGHT", 4, 0)
     resetBtn:SetText("C")
     resetBtn:SetScript("OnClick", function()
-        TestAddon:ResetCombatState()
-        TestAddon.mainFrame.logText:Clear()
-        self:SendMessage("TestAddon_CombatEnded")
+        RLHelper:ResetCombatState()
+        RLHelper.mainFrame.logText:Clear()
+        self:SendMessage("RLHelper_CombatEnded")
     end)
 
     -- Create dropdown
-    local dropdown = CreateFrame("Frame", "TestAddonCombatDropdown", buttonContainer, "UIDropDownMenuTemplate")
+    local dropdown = CreateFrame("Frame", "RLHelperCombatDropdown", buttonContainer, "UIDropDownMenuTemplate")
     dropdown:SetPoint("LEFT", resetBtn, "RIGHT", -8, -2)
     UIDropDownMenu_SetWidth(dropdown, 50)
     dropdown:Show()
@@ -728,14 +728,14 @@ function TestAddon:CreateMainFrame()
         -- Current combat option
         info.text = "Текущий бой"
         info.value = "current"
-        info.disabled = not TestAddon.currentCombat.startTime
+        info.disabled = not RLHelper.currentCombat.startTime
         info.func = function()
-            TestAddon:DisplayCombat(TestAddon.currentCombat)
-            TestAddon.mainFrame:Show()
+            RLHelper:DisplayCombat(RLHelper.currentCombat)
+            RLHelper.mainFrame:Show()
         end
         UIDropDownMenu_AddButton(info, level)
 
-        for i, combat in ipairs(TestAddon.combatHistory) do
+        for i, combat in ipairs(RLHelper.combatHistory) do
             local startTime = date("%H:%M:%S", combat.startTime)
             local endTime = date("%H:%M:%S", combat.endTime)
             local enemyInfo = combat.firstEnemy or ""
@@ -743,7 +743,7 @@ function TestAddon:CreateMainFrame()
             info.value = tostring(i)
             info.disabled = nil
             info.func = function()
-                TestAddon:ShowCombatByIndex(i)
+                RLHelper:ShowCombatByIndex(i)
             end
             UIDropDownMenu_AddButton(info, level)
         end
@@ -795,22 +795,22 @@ function TestAddon:CreateMainFrame()
 
     -- Size changed handler
     frame:SetScript("OnSizeChanged", function()
-        TestAddon:LayoutMainFrame()
+        RLHelper:LayoutMainFrame()
     end)
 
     self.mainFrame = frame
     self:LayoutMainFrame()
-    self:SendMessage("TestAddon_MainFrameCreated", frame)
+    self:SendMessage("RLHelper_MainFrameCreated", frame)
     frame:Hide()
 end
 
-function TestAddon:ClearCombatHistory()
+function RLHelper:ClearCombatHistory()
     self.combatHistory = {}
     self.db.profile.combatHistory = {}
     self:Print("История боев очищена")
 end
 
-function TestAddon:ShowCombatByIndex(index)
+function RLHelper:ShowCombatByIndex(index)
     if index < 1 or index > #self.combatHistory then
         self:Print(
             "Неверный номер боя. Используйте /rlh history для просмотра списка боев")
@@ -822,7 +822,7 @@ function TestAddon:ShowCombatByIndex(index)
     self.mainFrame:Show()
 end
 
-function TestAddon:HandleSlashCommand(input)
+function RLHelper:HandleSlashCommand(input)
     if input == "" then
         if self.mainFrame:IsShown() then
             self.mainFrame:Hide()
@@ -853,11 +853,11 @@ function TestAddon:HandleSlashCommand(input)
     elseif input == "clear" then
         self:ClearCombatHistory()
     elseif input == "demo" then
-        self:SendMessage("TestAddon_Demo")
+        self:SendMessage("RLHelper_Demo")
     elseif input:match("^b%s+(%d+)$") then
         local index = tonumber(input:match("^b%s+(%d+)$"))
         self:ShowCombatByIndex(index)
     end
 end
 
-return TestAddon
+return RLHelper

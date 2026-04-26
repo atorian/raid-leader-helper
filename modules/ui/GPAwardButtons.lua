@@ -44,19 +44,11 @@ function GPAwardButtons:refreshVisibility()
         return
     end
 
-    if self:CanAwardGP() then
-        self.footerFrame:Show()
-        for _, button in ipairs(self.buttons or {}) do
-            button:Show()
-        end
-        RLHelper:SetMainFrameBottomPanel(self.footerFrame)
-    else
-        for _, button in ipairs(self.buttons or {}) do
-            button:Hide()
-        end
-        self.footerFrame:Hide()
-        RLHelper:SetMainFrameBottomPanel(nil)
+    self.footerFrame:Show()
+    for _, button in ipairs(self.buttons or {}) do
+        button:Show()
     end
+    RLHelper:SetMainFrameBottomPanel(self.footerFrame)
 end
 
 function GPAwardButtons:AwardTargetGP(label, amount)

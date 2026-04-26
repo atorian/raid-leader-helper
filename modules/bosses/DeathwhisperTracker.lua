@@ -62,7 +62,7 @@ local function buildSpiritHitSummary(report)
 end
 
 local function formatSpiritHitSummary(ts, total, details)
-    return string.format("%s Духи ударили: всего %s %s", date("%H:%M:%S", ts), total, details)
+    return string.format("%s Духов взорвали: всего %s %s", date("%H:%M:%S", ts), total, details)
 end
 
 -- function DeathwhisperTracker:ZONE_CHANGED_NEW_AREA()
@@ -95,11 +95,11 @@ function DeathwhisperTracker:sendSummaryToRaid()
         return
     end
 
-    SendChatMessage(string.format("Духи ударили: всего %s %s", summary.total, summary.details), "RAID")
+    SendChatMessage(string.format("Духов взорвали: всего %s %s", summary.total, summary.details), "RAID")
 end
 
 local function formatSpiritHit(ts, dest)
-    return string.format("%s Дух ударил |cFFFFFFFF%s|r |T%s:24:24:0:0|t", date("%H:%M:%S", ts), dest, icon)
+    return string.format("%s |cFFFFFFFF%s|r взорвал духа |T%s:24:24:0:0|t", date("%H:%M:%S", ts), dest, icon)
 end
 
 local function formatSpiritMiss(ts, dest)

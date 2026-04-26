@@ -60,7 +60,7 @@ describe('DeathwhisperTracker', function()
             assert.spy(log).was_not_called()
         end)
 
-        it('logs spirit hit on SWING_DAMAGE', function()
+        it('logs explode on SWING_DAMAGE', function()
             local summonEvent = {
                 event = "SPELL_SUMMON",
                 spellId = 71426,
@@ -83,7 +83,7 @@ describe('DeathwhisperTracker', function()
             DeathwhisperTracker:handleEvent(swingEvent)
 
             assert.spy(log).was_called_with(
-                "SOME DATE Дух ударил |cFFFFFFFFTestTarget|r |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t")
+                "SOME DATE |cFFFFFFFFTestTarget|r взорвал духа |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t")
         end)
 
         it('logs miss on SWING_MISSED', function()
@@ -141,7 +141,7 @@ describe('DeathwhisperTracker', function()
 
             assert.spy(log).was_called(1)
             assert.spy(log).was_called_with(
-                "SOME DATE Дух ударил |cFFFFFFFFTestTarget|r |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t")
+                "SOME DATE |cFFFFFFFFTestTarget|r взорвал духа |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t")
         end)
 
         it('does not add misses to spirit explosion report', function()
@@ -172,7 +172,7 @@ describe('DeathwhisperTracker', function()
     end)
 
     describe("summarizeCombat", function()
-        it("logs total and per-player spirit hit summary", function()
+        it("logs total and per-player spirit explosion summary", function()
             local log = spy.new(function()
             end)
             DeathwhisperTracker.log = log
@@ -183,10 +183,10 @@ describe('DeathwhisperTracker', function()
 
             DeathwhisperTracker:summarizeCombat()
 
-            assert.spy(log).was.called_with("SOME DATE Духи ударили: всего 3 Player1(2) Player2(1)")
+            assert.spy(log).was.called_with("SOME DATE Духов взорвали: всего 3 Player1(2) Player2(1)")
         end)
 
-        it("does not log summary when there were no spirit hits", function()
+        it("does not log summary when there were no spirit explosions", function()
             local log = spy.new(function()
             end)
             DeathwhisperTracker.log = log
@@ -198,7 +198,7 @@ describe('DeathwhisperTracker', function()
     end)
 
     describe("reset", function()
-        it("should send raid message with spirit hit report", function()
+        it("should send raid message with spirit explosion report", function()
             DeathwhisperTracker.report = {
                 ["Player1"] = 2,
                 ["Player2"] = 1
@@ -207,7 +207,7 @@ describe('DeathwhisperTracker', function()
             DeathwhisperTracker:reset()
 
             assert.spy(sendChatMessageSpy).was
-                .called_with("Духи ударили: всего 3 Player1(2) Player2(1)", "RAID")
+                .called_with("Духов взорвали: всего 3 Player1(2) Player2(1)", "RAID")
         end)
 
         it("should not send message when report is empty", function()

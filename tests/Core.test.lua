@@ -204,6 +204,9 @@ describe("RLHelper frame positioning", function()
 end)
 
 describe("RLHelper pull controls", function()
+    local originalSlashCmdList
+    local originalDBM
+
     local function newVisibilityProbe(initiallyVisible)
         return {
             visible = not not initiallyVisible,
@@ -217,6 +220,8 @@ describe("RLHelper pull controls", function()
     end
 
     before_each(function()
+        originalSlashCmdList = _G.SlashCmdList
+        originalDBM = _G.DBM
         RLHelper.pullResetTimer = nil
         RLHelper.C_Timer = {
             NewTimer = function(_, callback)
@@ -239,6 +244,11 @@ describe("RLHelper pull controls", function()
             },
             cancelBtn = newVisibilityProbe(false)
         }
+    end)
+
+    after_each(function()
+        _G.SlashCmdList = originalSlashCmdList
+        _G.DBM = originalDBM
     end)
 
     it("restores pull buttons automatically when the countdown finishes", function()
@@ -268,6 +278,36 @@ describe("RLHelper pull controls", function()
         assert.is_true(RLHelper.mainFrame.pullButtons[1].visible)
         assert.is_true(RLHelper.mainFrame.pullButtons[2].visible)
         assert.is_false(RLHelper.mainFrame.cancelBtn.visible)
+    end)
+
+    it("uses the DBM slash pull command when it is available", function()
+        local slashCalls = {}
+        _G.SlashCmdList = {
+            DEADLYBOSSMODSPULL = function(msg)
+                table.insert(slashCalls, msg)
+            end
+        }
+        _G.DBM = {
+            CreatePizzaTimer = function()
+                error("fallback should not be used when slash pull exists")
+            end
+        }
+
+        local ok = RLHelper:InvokeDBMPullCommand(15)
+
+        assert.is_true(ok)
+        assert.are.same({ "15" }, slashCalls)
+    end)
+
+    it("does nothing when the DBM slash pull command is unavailable", function()
+        _G.SlashCmdList = nil
+        _G.DBM = nil
+
+        local started = RLHelper:InvokeDBMPullCommand(70)
+        local cancelled = RLHelper:InvokeDBMPullCommand(0)
+
+        assert.is_false(started)
+        assert.is_false(cancelled)
     end)
 end)
 

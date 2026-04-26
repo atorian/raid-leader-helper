@@ -563,6 +563,19 @@ function RLHelper:ResetPullControls()
     self:SetPullButtonsVisible(true)
 end
 
+function RLHelper:InvokeDBMPullCommand(duration)
+    local pullValue = tonumber(duration) or 0
+    local slashCmdList = _G.SlashCmdList or SlashCmdList
+    local pullCommand = slashCmdList and slashCmdList["DEADLYBOSSMODSPULL"]
+
+    if type(pullCommand) == "function" then
+        pullCommand(tostring(pullValue))
+        return true
+    end
+
+    return false
+end
+
 function RLHelper:BeginPullCountdown(duration)
     local timerApi = self.C_Timer or C_Timer
     self:CancelPullResetTimer()
@@ -727,7 +740,7 @@ function RLHelper:CreateMainFrame()
     pull15Btn:SetText("Пул 15")
     frame.pullButtons[1] = pull15Btn
     pull15Btn:SetScript("OnClick", function()
-        DBM:CreatePizzaTimer(15, "Pull", true)
+        RLHelper:InvokeDBMPullCommand(15)
         RLHelper:MinimizeWindow()
         RLHelper.mainFrame.logText:Clear()
         RLHelper:BeginPullCountdown(15)
@@ -739,7 +752,7 @@ function RLHelper:CreateMainFrame()
     pull75Btn:SetText("Пул 70")
     frame.pullButtons[2] = pull75Btn
     pull75Btn:SetScript("OnClick", function()
-        DBM:CreatePizzaTimer(70, "Pull", true)
+        RLHelper:InvokeDBMPullCommand(70)
         RLHelper:MinimizeWindow()
         RLHelper.mainFrame.logText:Clear()
         RLHelper:BeginPullCountdown(70)
@@ -752,8 +765,7 @@ function RLHelper:CreateMainFrame()
     frame.cancelBtn:SetText("Отмена")
     frame.cancelBtn:Hide() -- Initially hidden
     frame.cancelBtn:SetScript("OnClick", function()
-        DBM:CreatePizzaTimer(0, "Pull", true)
-        DBM.Bars:CancelBar("Pull")
+        RLHelper:InvokeDBMPullCommand(0)
         RLHelper:ResetPullControls()
     end)
 

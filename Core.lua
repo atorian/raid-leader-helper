@@ -374,9 +374,9 @@ function RLHelper:DispatchCombatEvent(eventData)
     end
 
     for _, module in self:IterateModules() do
-        if self:ShouldDispatchCombatEventToModule(module) and type(module.handleEvent) == "function" then
-            module:handleEvent(eventData)
-        end
+        -- if self:ShouldDispatchCombatEventToModule(module) and type(module.handleEvent) == "function" then
+        module:handleEvent(eventData)
+        -- end
     end
 end
 
@@ -563,17 +563,37 @@ function RLHelper:ResetPullControls()
     self:SetPullButtonsVisible(true)
 end
 
+function RLHelper:CancelPullCountdown()
+    self:InvokeDBMPullCommand(0)
+    self:ResetPullControls()
+end
+
 function RLHelper:InvokeDBMPullCommand(duration)
     local pullValue = tonumber(duration) or 0
     local slashCmdList = _G.SlashCmdList or SlashCmdList
     local pullCommand = slashCmdList and slashCmdList["DEADLYBOSSMODSPULL"]
 
     if type(pullCommand) == "function" then
-        pullCommand(tostring(pullValue))
+        local ok, err = pcall(pullCommand, tostring(pullValue))
+        if not ok then
+            self:Debug("DBM pull command failed:", err)
+            return false
+        end
+
         return true
     end
 
     return false
+end
+
+function RLHelper:StartPullCountdown(duration)
+    self:BeginPullCountdown(duration)
+    self:InvokeDBMPullCommand(duration)
+    self:MinimizeWindow()
+
+    if self.mainFrame and self.mainFrame.logText then
+        self.mainFrame.logText:Clear()
+    end
 end
 
 function RLHelper:BeginPullCountdown(duration)
@@ -740,10 +760,7 @@ function RLHelper:CreateMainFrame()
     pull15Btn:SetText("Пул 15")
     frame.pullButtons[1] = pull15Btn
     pull15Btn:SetScript("OnClick", function()
-        RLHelper:InvokeDBMPullCommand(15)
-        RLHelper:MinimizeWindow()
-        RLHelper.mainFrame.logText:Clear()
-        RLHelper:BeginPullCountdown(15)
+        RLHelper:StartPullCountdown(15)
     end)
 
     local pull75Btn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
@@ -752,10 +769,7 @@ function RLHelper:CreateMainFrame()
     pull75Btn:SetText("Пул 70")
     frame.pullButtons[2] = pull75Btn
     pull75Btn:SetScript("OnClick", function()
-        RLHelper:InvokeDBMPullCommand(70)
-        RLHelper:MinimizeWindow()
-        RLHelper.mainFrame.logText:Clear()
-        RLHelper:BeginPullCountdown(70)
+        RLHelper:StartPullCountdown(70)
     end)
 
     -- Cancel button
@@ -765,8 +779,7 @@ function RLHelper:CreateMainFrame()
     frame.cancelBtn:SetText("Отмена")
     frame.cancelBtn:Hide() -- Initially hidden
     frame.cancelBtn:SetScript("OnClick", function()
-        RLHelper:InvokeDBMPullCommand(0)
-        RLHelper:ResetPullControls()
+        RLHelper:CancelPullCountdown()
     end)
 
     local resetBtn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")

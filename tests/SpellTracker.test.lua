@@ -53,6 +53,15 @@ describe('SpellTracker', function()
                 "TestTarget"))
         end)
 
+        it('logs Divine Intervention on spell cast success', function()
+            dispatch(SpellTracker, Builder:New():FromPlayer("TestPaladin"):ToPlayer("TargetPlayer")
+                :CastSuccess(19752, "Божественное вмешательство"):Build())
+
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "TestPaladin", "Interface\\Icons\\Spell_Nature_TimeStop",
+                "TargetPlayer"))
+        end)
+
         it('ignores non-tracked spells', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("TestCaster"):ToEnemy("TestTarget")
                 :ApplyAura(12345, "Random Spell"):Build())

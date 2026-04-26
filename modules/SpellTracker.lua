@@ -23,10 +23,14 @@ local TRACKED_SPELLS = {
     [5209] = "Interface\\Icons\\Ability_Druid_ChallangingRoar", -- Druid: Growl
 
     [10278] = "Interface\\Icons\\Spell_Holy_SealOfProtection", -- Paladin: Корона
-    [19752] = "Interface\\Icons\\Spell_Nature_TimeStop", -- Paladin: Hand of Protection (BoP)
-
+    [19752] = "Interface\\Icons\\Spell_Nature_TimeStop", -- Paladin: Диван
+    
     [26994] = "Interface\\Icons\\spell_nature_reincarnation", -- Друид БР
     [48477] = "Interface\\Icons\\spell_nature_reincarnation" -- Друид БР
+}
+
+local TRACKED_CAST_SUCCESS_SPELLS = {
+    [19752] = true -- Божественное вмешательство
 }
 
 function SppellTracker:OnInitialize()
@@ -127,6 +131,13 @@ function SppellTracker:handleEvent(eventData)
     end
 
     if eventData.event == "SPELL_RESURRECT" and TRACKED_SPELLS[eventData.spellId] then
+        self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
+            eventData.destName))
+        return
+    end
+
+    if eventData.event == "SPELL_CAST_SUCCESS" and TRACKED_CAST_SUCCESS_SPELLS[eventData.spellId] and
+        TRACKED_SPELLS[eventData.spellId] then
         self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
             eventData.destName))
         return

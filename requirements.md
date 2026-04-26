@@ -24,3 +24,8 @@ This addon for World of Warcraft 3.3.5a assists Raid Leaders in identifying rule
     - 
 - Penalty System: Develop functionality to apply GP penalties via EPGP with customizable reasons tied to specific rule violations.
 - Reporting UI and Testing: Create a user-friendly interface for Raid Leaders to manage modules, view violations, and apply penalties; test in raid environments and refine based on feedback
+
+
+
+Track: 
+- Сальва

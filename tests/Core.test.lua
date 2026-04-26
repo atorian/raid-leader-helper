@@ -313,6 +313,27 @@ describe("RLHelper pull controls", function()
         assert.are.same({ "15" }, slashCalls)
     end)
 
+    it("cancels pull through the DBM slash command and then resets local controls", function()
+        local slashCalls = {}
+        _G.SlashCmdList = {
+            DEADLYBOSSMODSPULL = function(msg)
+                table.insert(slashCalls, msg)
+            end
+        }
+
+        RLHelper:BeginPullCountdown(15)
+        local timer = RLHelper.pullResetTimer
+
+        RLHelper:CancelPullCountdown()
+
+        assert.are.same({ "0" }, slashCalls)
+        assert.is_true(timer.cancelled)
+        assert.is_nil(RLHelper.pullResetTimer)
+        assert.is_true(RLHelper.mainFrame.pullButtons[1].visible)
+        assert.is_true(RLHelper.mainFrame.pullButtons[2].visible)
+        assert.is_false(RLHelper.mainFrame.cancelBtn.visible)
+    end)
+
     it("does nothing when the DBM slash pull command is unavailable", function()
         _G.SlashCmdList = nil
         _G.DBM = nil

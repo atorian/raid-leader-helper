@@ -899,6 +899,44 @@ function RLHelper:ShowCombatByIndex(index)
     self.mainFrame:Show()
 end
 
+function RLHelper:FindModuleByName(moduleName)
+    if type(self.GetModule) == "function" then
+        local ok, module = pcall(self.GetModule, self, moduleName, true)
+        if ok and module then
+            return module
+        end
+    end
+
+    if type(self.IterateModules) ~= "function" then
+        return nil
+    end
+
+    for _, module in self:IterateModules() do
+        if module and module.name == moduleName then
+            return module
+        end
+    end
+
+    return nil
+end
+
+function RLHelper:TriggerDamageMeterReset()
+    local halionTracker = self:FindModuleByName("HalionTracker")
+    if not halionTracker or type(halionTracker.resetDamageMeters) ~= "function" then
+        self:Print("HalionTracker недоступен")
+        return false
+    end
+
+    local ok = halionTracker:resetDamageMeters()
+    if not ok then
+        self:Print("Не удалось переключить сегмент у meter addon")
+        return false
+    end
+
+    self:Print("Сброс сегментов урона запущен")
+    return true
+end
+
 function RLHelper:HandleSlashCommand(input)
     if input == "" then
         if self.mainFrame:IsShown() then
@@ -915,6 +953,7 @@ function RLHelper:HandleSlashCommand(input)
         print("/rlh hist - показать историю боев")
         print("/rlh clear - очистить историю боев")
         print("/rlh demo - show all messages")
+        print("/rlh meters - вручную сбросить сегменты урона")
         print("/rlh b # - показать бой по номеру")
     elseif input == "fill" then
         for i = 1, 50 do
@@ -931,6 +970,8 @@ function RLHelper:HandleSlashCommand(input)
         self:ClearCombatHistory()
     elseif input == "demo" then
         self:SendMessage("RLHelper_Demo")
+    elseif input == "meters" then
+        self:TriggerDamageMeterReset()
     elseif input:match("^b%s+(%d+)$") then
         local index = tonumber(input:match("^b%s+(%d+)$"))
         self:ShowCombatByIndex(index)

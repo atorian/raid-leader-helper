@@ -146,6 +146,7 @@ describe('HalionTracker', function()
             end
         }
         _G.Skada = {
+            current = {},
             NewSegment = function()
                 skadaNewSegmentCalls = skadaNewSegmentCalls + 1
             end
@@ -185,5 +186,43 @@ describe('HalionTracker', function()
 
         assert.are.equal(1, detailsLeaveCalls)
         assert.are.equal(1, detailsEnterCalls)
+    end)
+
+    it('starts a new Details segment even when Details is not already in combat', function()
+        local detailsLeaveCalls = 0
+        local detailsEnterCalls = 0
+        _G._detalhes = {
+            in_combat = false,
+            SairDoCombate = function()
+                detailsLeaveCalls = detailsLeaveCalls + 1
+            end,
+            EntrarEmCombate = function()
+                detailsEnterCalls = detailsEnterCalls + 1
+            end
+        }
+
+        local ok = HalionTracker:resetDamageMeters()
+
+        assert.is_true(ok)
+        assert.are.equal(0, detailsLeaveCalls)
+        assert.are.equal(1, detailsEnterCalls)
+    end)
+
+    it('starts a new Skada segment by starting combat when there is no current segment', function()
+        local startCombatCalls = 0
+        _G.Skada = {
+            current = nil,
+            NewSegment = function()
+                error("NewSegment should not be used without current segment")
+            end,
+            StartCombat = function()
+                startCombatCalls = startCombatCalls + 1
+            end
+        }
+
+        local ok = HalionTracker:resetDamageMeters()
+
+        assert.is_true(ok)
+        assert.are.equal(1, startCombatCalls)
     end)
 end)

@@ -115,6 +115,134 @@ describe("RLHelper debug helpers", function()
     end)
 end)
 
+describe("RLHelper damage meter reset command", function()
+    local originalGetModule
+    local originalIterateModules
+    local originalPrint
+    local originalTriggerDamageMeterReset
+
+    before_each(function()
+        originalGetModule = RLHelper.GetModule
+        originalIterateModules = RLHelper.IterateModules
+        originalPrint = RLHelper.Print
+        originalTriggerDamageMeterReset = RLHelper.TriggerDamageMeterReset
+    end)
+
+    after_each(function()
+        RLHelper.GetModule = originalGetModule
+        RLHelper.IterateModules = originalIterateModules
+        RLHelper.Print = originalPrint
+        RLHelper.TriggerDamageMeterReset = originalTriggerDamageMeterReset
+    end)
+
+    it("finds a module by name through GetModule first", function()
+        local target = { name = "HalionTracker" }
+        RLHelper.GetModule = function(_, name, silent)
+            assert.are.equal("HalionTracker", name)
+            assert.is_true(silent)
+            return target
+        end
+        RLHelper.IterateModules = function()
+            error("IterateModules fallback should not be used when GetModule succeeds")
+        end
+
+        assert.are.equal(target, RLHelper:FindModuleByName("HalionTracker"))
+    end)
+
+    it("finds a module by name through IterateModules", function()
+        RLHelper.GetModule = function()
+            return nil
+        end
+        local target = { name = "HalionTracker" }
+        RLHelper.IterateModules = function()
+            return ipairs({
+                { name = "SpellTracker" },
+                target,
+                { name = "GPAwardButtons" }
+            })
+        end
+
+        assert.are.equal(target, RLHelper:FindModuleByName("HalionTracker"))
+        assert.is_nil(RLHelper:FindModuleByName("UnknownModule"))
+    end)
+
+    it("triggers damage meter reset through HalionTracker", function()
+        local resetCalls = 0
+        local printedMessages = {}
+        RLHelper.IterateModules = function()
+            return ipairs({
+                {
+                    name = "HalionTracker",
+                    resetDamageMeters = function()
+                        resetCalls = resetCalls + 1
+                        return true
+                    end
+                }
+            })
+        end
+        RLHelper.Print = function(_, message)
+            table.insert(printedMessages, message)
+        end
+
+        local ok = RLHelper:TriggerDamageMeterReset()
+
+        assert.is_true(ok)
+        assert.are.equal(1, resetCalls)
+        assert.are.same({ "Сброс сегментов урона запущен" }, printedMessages)
+    end)
+
+    it("prints an error when no damage meter was actually reset", function()
+        local printedMessages = {}
+        RLHelper.IterateModules = function()
+            return ipairs({
+                {
+                    name = "HalionTracker",
+                    resetDamageMeters = function()
+                        return false
+                    end
+                }
+            })
+        end
+        RLHelper.Print = function(_, message)
+            table.insert(printedMessages, message)
+        end
+
+        local ok = RLHelper:TriggerDamageMeterReset()
+
+        assert.is_false(ok)
+        assert.are.same({ "Не удалось переключить сегмент у meter addon" }, printedMessages)
+    end)
+
+    it("prints an error when HalionTracker is unavailable", function()
+        local printedMessages = {}
+        RLHelper.IterateModules = function()
+            return ipairs({
+                { name = "SpellTracker" }
+            })
+        end
+        RLHelper.Print = function(_, message)
+            table.insert(printedMessages, message)
+        end
+
+        local ok = RLHelper:TriggerDamageMeterReset()
+
+        assert.is_false(ok)
+        assert.are.same({ "HalionTracker недоступен" }, printedMessages)
+    end)
+
+    it("handles the slash meters command", function()
+        local resetCalls = 0
+        RLHelper.TriggerDamageMeterReset = function()
+            resetCalls = resetCalls + 1
+            return true
+        end
+
+        RLHelper:HandleSlashCommand("meters")
+
+        assert.are.equal(1, resetCalls)
+    end)
+end)
+
 describe("RLHelper combat event dispatch", function()
     local originalIterateModules
     local originalShouldDispatchCombatEventToModule

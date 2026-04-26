@@ -82,8 +82,11 @@ function HalionTracker:tryResetDetails()
         return false, "Details not loaded"
     end
 
-    if type(details.SairDoCombate) == "function" and type(details.EntrarEmCombate) == "function" and details.in_combat then
-        details:SairDoCombate()
+    if type(details.SairDoCombate) == "function" and type(details.EntrarEmCombate) == "function" then
+        if details.in_combat then
+            details:SairDoCombate()
+        end
+
         details:EntrarEmCombate()
         return true
     end
@@ -96,8 +99,13 @@ function HalionTracker:tryResetSkada()
         return false, "Skada not loaded"
     end
 
-    if type(Skada.NewSegment) == "function" then
+    if type(Skada.NewSegment) == "function" and Skada.current then
         Skada:NewSegment()
+        return true
+    end
+
+    if type(Skada.StartCombat) == "function" and not Skada.current then
+        Skada:StartCombat()
         return true
     end
 
@@ -110,6 +118,7 @@ function HalionTracker:resetDamageMeters()
         { name = "Details", fn = self.tryResetDetails },
         { name = "Skada", fn = self.tryResetSkada }
     }
+    local anyReset = false
 
     for _, resetter in ipairs(resetters) do
         local ok, success, err = pcall(resetter.fn, self)
@@ -117,8 +126,12 @@ function HalionTracker:resetDamageMeters()
             self:debugReset("%s reset failed: %s", resetter.name, tostring(success))
         elseif not success then
             self:debugReset("%s reset skipped: %s", resetter.name, tostring(err))
+        else
+            anyReset = true
         end
     end
+
+    return anyReset
 end
 
 function HalionTracker:tryResetDamageMetersOnHeroism(event)

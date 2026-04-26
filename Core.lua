@@ -374,9 +374,9 @@ function RLHelper:DispatchCombatEvent(eventData)
     end
 
     for _, module in self:IterateModules() do
-        -- if self:ShouldDispatchCombatEventToModule(module) and type(module.handleEvent) == "function" then
-        module:handleEvent(eventData)
-        -- end
+        if self:ShouldDispatchCombatEventToModule(module) and type(module.handleEvent) == "function" then
+            module:handleEvent(eventData)
+        end
     end
 end
 

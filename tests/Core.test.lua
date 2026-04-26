@@ -115,6 +115,48 @@ describe("RLHelper debug helpers", function()
     end)
 end)
 
+describe("RLHelper combat event dispatch", function()
+    local originalIterateModules
+    local originalShouldDispatchCombatEventToModule
+
+    before_each(function()
+        originalIterateModules = RLHelper.IterateModules
+        originalShouldDispatchCombatEventToModule = RLHelper.ShouldDispatchCombatEventToModule
+    end)
+
+    after_each(function()
+        RLHelper.IterateModules = originalIterateModules
+        RLHelper.ShouldDispatchCombatEventToModule = originalShouldDispatchCombatEventToModule
+    end)
+
+    it("skips UI modules that do not handle combat events", function()
+        local eventData = { event = "SPELL_DAMAGE" }
+        local handled = 0
+        local modules = {
+            { name = "GPAwardButtons" },
+            {
+                name = "SpellTracker",
+                handleEvent = function(_, event)
+                    handled = handled + 1
+                    assert.are.same(eventData, event)
+                end
+            }
+        }
+
+        RLHelper.IterateModules = function()
+            return ipairs(modules)
+        end
+        RLHelper.ShouldDispatchCombatEventToModule = function()
+            return true
+        end
+
+        assert.has_no.errors(function()
+            RLHelper:DispatchCombatEvent(eventData)
+        end)
+        assert.are.equal(1, handled)
+    end)
+end)
+
 describe("RLHelper frame positioning", function()
     local originalUIParent
 

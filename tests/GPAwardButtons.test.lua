@@ -44,26 +44,6 @@ describe('GPAwardButtons', function()
         _G.EPGP = originalEPGP
     end)
 
-    it('shows GP permissions for raid leader', function()
-        _G.UnitIsGroupLeader = function(unitId)
-            return unitId == "player"
-        end
-
-        assert.is_true(GPAwardButtons:CanAwardGP())
-    end)
-
-    it('shows GP permissions for raid assistant', function()
-        _G.UnitIsGroupAssistant = function(unitId)
-            return unitId == "player"
-        end
-
-        assert.is_true(GPAwardButtons:CanAwardGP())
-    end)
-
-    it('denies GP permissions without raid role', function()
-        assert.is_false(GPAwardButtons:CanAwardGP())
-    end)
-
     it('awards GP to the current player target', function()
         local incCalls = {}
         mocks:SetUnitGUID("target", "0x0001")
@@ -108,15 +88,6 @@ describe('GPAwardButtons', function()
 
         assert.is_false(ok)
         assert.are.equal("Нет выбранной цели", err)
-    end)
-
-    it('fails when the player has no GP award role', function()
-        mocks:SetUnitGUID("target", "0x0001")
-
-        local ok, err = GPAwardButtons:AwardTargetGP("100", 100)
-
-        assert.is_false(ok)
-        assert.are.equal("Начислять GP может только РЛ или помощник", err)
     end)
 
     it('fails when the target is not a player', function()

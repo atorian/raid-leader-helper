@@ -20,6 +20,7 @@ release:
 	cp Core.lua release/
 	cp -r modules release/
 	cp -r lib release/
+	cp -r Libs release/
 	cd release && zip -r ../RLHelper.zip .
 
 all: clean test build

@@ -6,15 +6,76 @@ TrialCrusaderTracker.zoneGateInstanceId = 649 -- Trial of the Crusader / Trial o
 local ICEHOWL_TRAMPLE = 66734
 local trampleIcon = "Interface\\Icons\\Ability_Druid_DemoralizingRoar"
 
+local RAID_MARKERS = {
+    STAR = 1,
+    CIRCLE = 2,
+    DIAMOND = 3,
+    TRIANGLE = 4,
+    MOON = 5,
+    SKULL = 8
+}
+
+local FIXED_MARKS = {
+    HUNTER = RAID_MARKERS.SKULL,
+    WARRIOR = RAID_MARKERS.CIRCLE,
+    PRIEST = RAID_MARKERS.STAR,
+    WARLOCK = RAID_MARKERS.MOON,
+    DEATH_KNIGHT = RAID_MARKERS.TRIANGLE
+}
+
+local DIAMOND_PRIORITY = {
+    "ENHANCEMENT_SHAMAN",
+    "RETRIBUTION_PALADIN",
+    "BALANCE_DRUID"
+}
+
+local CHAMPION_ROLE_BY_NPC_ID = {
+    [34467] = "HUNTER", -- Alyssia Moonstalker
+    [34448] = "HUNTER", -- Ruj'kah
+
+    [34475] = "WARRIOR", -- Shocuul
+    [34455] = "WARRIOR", -- Narrhok Steelbreaker
+
+    [34466] = "PRIEST", -- Anthar Forgemender
+    [34447] = "PRIEST", -- Caiphus the Stern
+    [34473] = "PRIEST", -- Brienna Nightfell
+    [34441] = "PRIEST", -- Vivienne Blackwhisper
+
+    [34474] = "WARLOCK", -- Serissa Grimdabbler
+    [34450] = "WARLOCK", -- Harkzog
+
+    [34461] = "DEATH_KNIGHT", -- Tyrius Duskblade
+    [34458] = "DEATH_KNIGHT", -- Gorgrim Shadowcleave
+
+    [34463] = "ENHANCEMENT_SHAMAN", -- Shaabad
+    [34444] = "ENHANCEMENT_SHAMAN", -- Broln Stouthorn
+
+    [34471] = "RETRIBUTION_PALADIN", -- Baelnor Lightbearer
+    [34445] = "RETRIBUTION_PALADIN", -- Malithas Brightblade
+
+    [34460] = "BALANCE_DRUID", -- Kavina Grovesong
+    [34451] = "BALANCE_DRUID" -- Birana Stormhoof
+}
+
 function TrialCrusaderTracker:OnInitialize()
     RLHelper:Debug("TrialCrusaderTracker: Инициализация")
     self.log = function(...)
         RLHelper:OnCombatLogEvent(...)
     end
+    self:reset()
+    self:RegisterMessage("RLHelper_CombatEnded", "reset")
 end
 
 function TrialCrusaderTracker:OnEnable()
     RLHelper:Debug("TrialCrusaderTracker: Включен")
+end
+
+function TrialCrusaderTracker:reset()
+    self.championGuidsByRole = {}
+    self.seenChampionGuids = {}
+    self.markedRoles = {}
+    self.diamondRole = nil
+    self.allChampionMarksDone = false
 end
 
 local function formatIcehowlTrample(ts, playerName)
@@ -22,10 +83,159 @@ local function formatIcehowlTrample(ts, playerName)
         trampleIcon)
 end
 
+local function creatureIdFromGuid(guid)
+    if type(RLHelper.GetCreatureId) == "function" then
+        return RLHelper.GetCreatureId(guid)
+    end
+
+    return type(guid) == "string" and tonumber(guid:sub(9, 12), 16) or nil
+end
+
+local function markUnit(unitId, marker)
+    if type(SetRaidTarget) ~= "function" then
+        return false
+    end
+
+    SetRaidTarget(unitId, marker)
+    return true
+end
+
+local function unitIdFromGuid(guid)
+    if type(RLHelper.GetUnitIdFromGUID) ~= "function" then
+        return nil
+    end
+
+    return RLHelper.GetUnitIdFromGUID(guid)
+end
+
+local function isFactionChampionNpcId(npcId)
+    if type(npcId) ~= "number" then
+        return false
+    end
+
+    return (npcId >= 34441 and npcId <= 34458) or (npcId >= 34460 and npcId <= 34475)
+end
+
+local function championRoleFromGuid(guid)
+    local npcId = creatureIdFromGuid(guid)
+    if not isFactionChampionNpcId(npcId) then
+        return nil
+    end
+
+    return CHAMPION_ROLE_BY_NPC_ID[npcId]
+end
+
+local function diamondPriorityIndex(role)
+    for index, priorityRole in ipairs(DIAMOND_PRIORITY) do
+        if priorityRole == role then
+            return index
+        end
+    end
+
+    return nil
+end
+
+function TrialCrusaderTracker:rememberFactionChampion(guid)
+    if not guid then
+        return false
+    end
+
+    local role = championRoleFromGuid(guid)
+    if not role or self.seenChampionGuids[guid] then
+        return false
+    end
+
+    if not self.championGuidsByRole[role] then
+        self.championGuidsByRole[role] = guid
+    end
+
+    self.seenChampionGuids[guid] = true
+    return true
+end
+
+function TrialCrusaderTracker:markFixedChampion(role)
+    local marker = FIXED_MARKS[role]
+    if not marker or self.markedRoles[role] then
+        return false
+    end
+
+    local unitId = unitIdFromGuid(self.championGuidsByRole[role])
+    if unitId and markUnit(unitId, marker) then
+        self.markedRoles[role] = true
+        return true
+    end
+
+    return false
+end
+
+function TrialCrusaderTracker:markDiamondChampion()
+    local bestRole
+    local bestIndex
+
+    for role, guid in pairs(self.championGuidsByRole) do
+        local index = diamondPriorityIndex(role)
+        if index and unitIdFromGuid(guid) and (not bestIndex or index < bestIndex) then
+            bestRole = role
+            bestIndex = index
+        end
+    end
+
+    if not bestRole or bestRole == self.diamondRole then
+        return false
+    end
+
+    if markUnit(unitIdFromGuid(self.championGuidsByRole[bestRole]), RAID_MARKERS.DIAMOND) then
+        self.diamondRole = bestRole
+        return true
+    end
+
+    return false
+end
+
+function TrialCrusaderTracker:AreChampionMarksDone()
+    if self.allChampionMarksDone then
+        return true
+    end
+
+    for role in pairs(FIXED_MARKS) do
+        if not self.markedRoles[role] then
+            return false
+        end
+    end
+
+    if not self.diamondRole then
+        return false
+    end
+
+    self.allChampionMarksDone = true
+    return true
+end
+
 function TrialCrusaderTracker:handleEvent(event)
     if event.event == "SPELL_DAMAGE" and event.spellId == ICEHOWL_TRAMPLE and event.destName then
         self.log(formatIcehowlTrample(event.timestamp, event.destName))
     end
+
+    if self:AreChampionMarksDone() then
+        return
+    end
+
+    local sourceRole = championRoleFromGuid(event.sourceGUID)
+    local destRole = championRoleFromGuid(event.destGUID)
+    if not sourceRole and not destRole then
+        return
+    end
+
+    if sourceRole and self:rememberFactionChampion(event.sourceGUID) then
+        self:markFixedChampion(sourceRole)
+    end
+
+    if destRole and self:rememberFactionChampion(event.destGUID) then
+        self:markFixedChampion(destRole)
+    end
+
+    self:markDiamondChampion()
+    self:AreChampionMarksDone()
 end
 
 return TrialCrusaderTracker

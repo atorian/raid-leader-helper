@@ -83,7 +83,7 @@ describe('DeathwhisperTracker', function()
             DeathwhisperTracker:handleEvent(swingEvent)
 
             assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFTestTarget|r взорвал духа |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t")
+                "SOME DATE |cFFFFFFFFTestTarget|r |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t взорвал духа")
         end)
 
         it('logs miss on SWING_MISSED', function()
@@ -141,7 +141,7 @@ describe('DeathwhisperTracker', function()
 
             assert.spy(log).was_called(1)
             assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFTestTarget|r взорвал духа |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t")
+                "SOME DATE |cFFFFFFFFTestTarget|r |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t взорвал духа")
         end)
 
         it('does not add misses to spirit explosion report', function()

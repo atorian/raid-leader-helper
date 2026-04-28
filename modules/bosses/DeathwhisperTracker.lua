@@ -99,7 +99,7 @@ function DeathwhisperTracker:sendSummaryToRaid()
 end
 
 local function formatSpiritHit(ts, dest)
-    return string.format("%s |cFFFFFFFF%s|r взорвал духа |T%s:24:24:0:0|t", date("%H:%M:%S", ts), dest, icon)
+    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t взорвал духа", date("%H:%M:%S", ts), dest, icon)
 end
 
 local function formatSpiritMiss(ts, dest)

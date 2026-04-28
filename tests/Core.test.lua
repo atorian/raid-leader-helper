@@ -402,6 +402,10 @@ describe("RLHelper pull controls", function()
     local originalPlaySoundFile
     local originalTimerTracker
     local originalTimerTrackerOnEvent
+    local originalSendAddonMessage
+    local originalIsInInstance
+    local originalGetRealNumRaidMembers
+    local originalGetRealNumPartyMembers
 
     local function newVisibilityProbe(initiallyVisible)
         return {
@@ -422,6 +426,19 @@ describe("RLHelper pull controls", function()
         originalPlaySoundFile = _G.PlaySoundFile
         originalTimerTracker = _G.TimerTracker
         originalTimerTrackerOnEvent = _G.TimerTracker_OnEvent
+        originalSendAddonMessage = _G.SendAddonMessage
+        originalIsInInstance = _G.IsInInstance
+        originalGetRealNumRaidMembers = _G.GetRealNumRaidMembers
+        originalGetRealNumPartyMembers = _G.GetRealNumPartyMembers
+        _G.IsInInstance = function()
+            return false, "raid"
+        end
+        _G.GetRealNumRaidMembers = function()
+            return 25
+        end
+        _G.GetRealNumPartyMembers = function()
+            return 0
+        end
         RLHelper.pullResetTimer = nil
         RLHelper.C_Timer = {
             NewTimer = function(_, callback)
@@ -453,6 +470,10 @@ describe("RLHelper pull controls", function()
         _G.PlaySoundFile = originalPlaySoundFile
         _G.TimerTracker = originalTimerTracker
         _G.TimerTracker_OnEvent = originalTimerTrackerOnEvent
+        _G.SendAddonMessage = originalSendAddonMessage
+        _G.IsInInstance = originalIsInInstance
+        _G.GetRealNumRaidMembers = originalGetRealNumRaidMembers
+        _G.GetRealNumPartyMembers = originalGetRealNumPartyMembers
     end)
 
     it("restores pull buttons automatically when the countdown finishes", function()
@@ -504,13 +525,19 @@ describe("RLHelper pull controls", function()
     end)
 
     it("cancels pull through DBM scheduled messages, sounds, and bars", function()
+        local addonMessages = {}
+        local chatMessages = {}
         local unscheduled = {}
         local pizzaTimers = {}
         local cancelledBars = {}
         local dummyTextCancelled = false
         local dummyTimerStopped = false
         local timerTrackerReset = false
-        _G.SendChatMessage = function()
+        _G.SendAddonMessage = function(prefix, msg, channel)
+            table.insert(addonMessages, { prefix = prefix, msg = msg, channel = channel })
+        end
+        _G.SendChatMessage = function(message, channel)
+            table.insert(chatMessages, { message = message, channel = channel })
         end
         _G.PlaySoundFile = function()
         end
@@ -557,6 +584,13 @@ describe("RLHelper pull controls", function()
 
         RLHelper:CancelPullCountdown()
 
+        assert.are.same({
+            { prefix = "DBMv4-PT", msg = "0", channel = "RAID" },
+            { prefix = "DBMv4-Pizza", msg = "0\tАТAKA!!", channel = "RAID" },
+            { prefix = "DBMv4-Pizza", msg = "0\tАтака", channel = "RAID" },
+            { prefix = "DBMv4-Pizza", msg = "0\tPull in", channel = "RAID" }
+        }, addonMessages)
+        assert.are.same({ { message = "ГАЛЯ, ОТМЕНА!", channel = "RAID_WARNING" } }, chatMessages)
         assert.are.same({ _G.SendChatMessage, _G.PlaySoundFile }, unscheduled)
         assert.are.same({
             { time = 0, text = "АТAKA!!" },

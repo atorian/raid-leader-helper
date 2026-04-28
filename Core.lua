@@ -577,6 +577,14 @@ function RLHelper:CancelDBMPullCountdown()
     local dbm = _G.DBM or DBM
     local cancelled = false
 
+    if type(SendAddonMessage) == "function" then
+        sendSync("DBMv4-PT", "0")
+        for _, barName in ipairs(DBM_PULL_BAR_NAMES) do
+            sendSync("DBMv4-Pizza", "0\t" .. barName)
+        end
+        cancelled = true
+    end
+
     if dbm and type(dbm.Unschedule) == "function" then
         if type(SendChatMessage) == "function" then
             dbm:Unschedule(SendChatMessage)
@@ -623,6 +631,12 @@ function RLHelper:CancelDBMPullCountdown()
             TimerTracker_OnEvent(TimerTracker, "PLAYER_ENTERING_WORLD")
             cancelled = true
         end
+    end
+
+    if type(SendChatMessage) == "function" then
+        local channel = (GetRealNumRaidMembers and GetRealNumRaidMembers() > 0) and "RAID_WARNING" or "PARTY"
+        SendChatMessage("ГАЛЯ, ОТМЕНА!", channel)
+        cancelled = true
     end
 
     return cancelled

@@ -29,3 +29,4 @@ This addon for World of Warcraft 3.3.5a assists Raid Leaders in identifying rule
 
 Track: 
 - Сальва
+- масстаунт паладина

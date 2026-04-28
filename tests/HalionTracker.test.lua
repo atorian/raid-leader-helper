@@ -191,6 +191,7 @@ describe('HalionTracker', function()
     it('starts a new Details segment even when Details is not already in combat', function()
         local detailsLeaveCalls = 0
         local detailsEnterCalls = 0
+        local currentCombat = nil
         _G._detalhes = {
             in_combat = false,
             SairDoCombate = function()
@@ -198,6 +199,10 @@ describe('HalionTracker', function()
             end,
             EntrarEmCombate = function()
                 detailsEnterCalls = detailsEnterCalls + 1
+                currentCombat = {}
+            end,
+            GetCurrentCombat = function()
+                return currentCombat
             end
         }
 
@@ -206,6 +211,39 @@ describe('HalionTracker', function()
         assert.is_true(ok)
         assert.are.equal(0, detailsLeaveCalls)
         assert.are.equal(1, detailsEnterCalls)
+        assert.are.equal("Halion Burst", currentCombat.enemy)
+        assert.are.equal("Halion Burst", currentCombat.is_boss.encounter)
+    end)
+
+    it('names Details split segments using the current boss name', function()
+        local endedCombat
+        local currentCombat = {
+            is_boss = {
+                name = "Halion",
+                encounter = "Halion"
+            },
+            enemy = "Halion"
+        }
+        _G._detalhes = {
+            in_combat = true,
+            SairDoCombate = function()
+                endedCombat = currentCombat
+            end,
+            EntrarEmCombate = function()
+                currentCombat = {}
+            end,
+            GetCurrentCombat = function()
+                return currentCombat
+            end
+        }
+
+        local ok = HalionTracker:resetDamageMeters()
+
+        assert.is_true(ok)
+        assert.are.equal("Halion", endedCombat.enemy)
+        assert.are.equal("Halion", endedCombat.is_boss.encounter)
+        assert.are.equal("Halion Burst", currentCombat.enemy)
+        assert.are.equal("Halion Burst", currentCombat.is_boss.encounter)
     end)
 
     it('starts a new Skada segment by starting combat when there is no current segment', function()
@@ -224,5 +262,43 @@ describe('HalionTracker', function()
 
         assert.is_true(ok)
         assert.are.equal(1, startCombatCalls)
+    end)
+
+    it('marks Skada split segments as boss segments so boss-only history keeps both parts', function()
+        local endedSegment
+        _G.Skada = {
+            current = {},
+            NewSegment = function(self)
+                endedSegment = self.current
+                self.current = {}
+            end
+        }
+
+        local ok = HalionTracker:resetDamageMeters()
+
+        assert.is_true(ok)
+        assert.are.equal("Halion", endedSegment.mobname)
+        assert.is_true(endedSegment.gotboss)
+        assert.are.equal("Halion Burst", _G.Skada.current.mobname)
+        assert.is_true(_G.Skada.current.gotboss)
+    end)
+
+    it('uses the remembered enemy name for split segment names', function()
+        local endedSegment
+        _G.Skada = {
+            current = {},
+            NewSegment = function(self)
+                endedSegment = self.current
+                self.current = {}
+            end
+        }
+
+        dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToPlayer("Игрок1")
+            :SpellDamage(75879, "Метеорит", 1000):Build())
+        dispatch(HalionTracker, Builder:New():FromPlayer("Шаман"):ToPlayer("Игрок1")
+            :ApplyAura(32182, "Heroism"):Build())
+
+        assert.are.equal("Халион", endedSegment.mobname)
+        assert.are.equal("Халион Burst", _G.Skada.current.mobname)
     end)
 end)

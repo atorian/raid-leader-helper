@@ -47,6 +47,58 @@ local HEROISM_SPELLS = {
     [BLOODLUST] = true
 }
 
+local function isEnemy(flags)
+    return bit.band(flags or 0, RLHelper.ENEMY_FLAGS or 0xa48) > 0
+end
+
+local function prepareSkadaBossSegment(set, mobname, gotboss, suffix)
+    if type(set) ~= "table" then
+        return mobname, gotboss
+    end
+
+    mobname = mobname or set.mobname or "Halion"
+    gotboss = gotboss or set.gotboss or true
+
+    set.mobname = suffix and (mobname .. suffix) or (set.mobname or mobname)
+    set.gotboss = set.gotboss or gotboss
+
+    return mobname, gotboss
+end
+
+local function getDetailsCurrentCombat(details)
+    if type(details) ~= "table" then
+        return nil
+    end
+
+    if type(details.GetCurrentCombat) == "function" then
+        return details:GetCurrentCombat()
+    end
+
+    if type(details.GetCombat) == "function" then
+        return details:GetCombat("current")
+    end
+
+    return details.tabela_vigente
+end
+
+local function prepareDetailsBossSegment(details, mobname, suffix)
+    local combat = getDetailsCurrentCombat(details)
+    if type(combat) ~= "table" then
+        return mobname
+    end
+
+    local boss = type(combat.is_boss) == "table" and combat.is_boss or nil
+    mobname = mobname or (boss and (boss.encounter or boss.name)) or combat.enemy or "Halion"
+
+    local segmentName = suffix and (mobname .. suffix) or mobname
+    combat.enemy = segmentName
+    combat.is_boss = boss or {}
+    combat.is_boss.name = segmentName
+    combat.is_boss.encounter = segmentName
+
+    return mobname
+end
+
 function HalionTracker:OnEnable()
     self:RegisterMessage("RLHelper_CombatEnded", "reset")
     self:RegisterMessage("RLHelper_Demo", "demo")
@@ -57,10 +109,33 @@ function HalionTracker:reset()
     self.healEvents = {}
     self.firstEntered = false
     self.damageMetersReset = false
+    self.bossName = nil
 end
 
 function HalionTracker:debugReset(message, ...)
     RLHelper:Debug("HalionTracker: " .. string.format(message, ...))
+end
+
+function HalionTracker:GetBossSegmentName()
+    if self.bossName then
+        return self.bossName
+    end
+
+    if RLHelper.currentCombat and RLHelper.currentCombat.firstEnemy then
+        return RLHelper.currentCombat.firstEnemy
+    end
+
+    if type(UnitName) == "function" then
+        return UnitName("boss1")
+    end
+end
+
+function HalionTracker:RememberBossName(event)
+    if isEnemy(event.sourceFlags) and event.sourceName then
+        self.bossName = event.sourceName
+    elseif isEnemy(event.destFlags) and event.destName then
+        self.bossName = event.destName
+    end
 end
 
 function HalionTracker:tryResetRecount()
@@ -83,11 +158,13 @@ function HalionTracker:tryResetDetails()
     end
 
     if type(details.SairDoCombate) == "function" and type(details.EntrarEmCombate) == "function" then
+        local mobname = prepareDetailsBossSegment(details, self:GetBossSegmentName())
         if details.in_combat then
             details:SairDoCombate()
         end
 
         details:EntrarEmCombate()
+        prepareDetailsBossSegment(details, mobname, " Burst")
         return true
     end
 
@@ -100,12 +177,15 @@ function HalionTracker:tryResetSkada()
     end
 
     if type(Skada.NewSegment) == "function" and Skada.current then
+        local mobname, gotboss = prepareSkadaBossSegment(Skada.current, self:GetBossSegmentName())
         Skada:NewSegment()
+        prepareSkadaBossSegment(Skada.current, mobname, gotboss, " Burst")
         return true
     end
 
     if type(Skada.StartCombat) == "function" and not Skada.current then
         Skada:StartCombat()
+        prepareSkadaBossSegment(Skada.current, self:GetBossSegmentName())
         return true
     end
 
@@ -183,6 +263,8 @@ local function isTwilightCutter(spellId)
 end
 
 function HalionTracker:handleEvent(event, log)
+    self:RememberBossName(event)
+
     if isPlayer(event.destFlags) then
         self:tryResetDamageMetersOnHeroism(event)
 

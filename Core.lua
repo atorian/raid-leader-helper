@@ -6,6 +6,7 @@ local GetUnitIdFromGUID = RLHelper.GetUnitIdFromGUID
 local COMBAT_END_CHECK_INTERVAL = 1
 local COMBAT_END_GRACE = 3
 local ENEMY_ACTIVITY_TIMEOUT = 6
+local IGOR_DEATH_COOLDOWN = 180
 local MODULE_ZONE_ANY = 0
 local ZONE_GATE_INSTANCE_ID_BY_INSTANCE_NAME = {
     ["Trial of the Crusader"] = 649,
@@ -22,6 +23,24 @@ local DBM_PULL_BAR_NAMES = {
     "АТAKA!!",
     "Атака",
     "Pull in"
+}
+
+local IGOR_DEATH_PHRASES = {
+    "Игорь осуждает смерть %s.",
+    "Игорь делает вид, что так и было задумано.",
+    "Игорь записал %s в список слабых.",
+    "Игорь молча смотрит на тело %s.",
+    "Игорь считает, что %s мог бы и пожить.",
+    "Игорь тяжело вздыхает.",
+    "Игорь говорит: минус мораль.",
+    "Игорь делает пометку: %s умер не по плану.",
+    "Игорь не одобряет происходящее.",
+    "Игорь подозревает, что %s нажал не ту кнопку.",
+    "Игорь просит больше так не делать.",
+    "Игорь считает эту смерть обучающим моментом.",
+    "Игорь смотрит на %s с разочарованием.",
+    "Игорь говорит: зато красиво.",
+    "Игорь добавляет смерть %s в отчет."
 }
 
 local IGNORED_COMBAT_ENEMIES = {
@@ -51,6 +70,9 @@ local defaults = {
     profile = {
         enabled = true,
         debug = false,
+        pullCancelMessage = "ГАЛЯ, ОТМЕНА!",
+        displayOnlyInGroup = false,
+        igor = false,
         minimap = {
             hide = false
         },
@@ -75,6 +97,7 @@ RLHelper.lastCombatActivityAt = nil
 RLHelper.combatEndRequestedAt = nil
 RLHelper.combatTicker = nil
 RLHelper.currentInstanceId = nil
+RLHelper.lastIgorDeathMessageAt = nil
 
 function RLHelper:Debug(...)
     if self.db and self.db.profile and self.db.profile.debug then
@@ -84,6 +107,49 @@ end
 
 function RLHelper:isDebugging()
     return self.db and self.db.profile and self.db.profile.debug or false
+end
+
+function RLHelper:IsInGroup()
+    if type(GetRealNumRaidMembers) == "function" and GetRealNumRaidMembers() > 0 then
+        return true
+    end
+
+    if type(GetRealNumPartyMembers) == "function" and GetRealNumPartyMembers() > 0 then
+        return true
+    end
+
+    if type(GetNumRaidMembers) == "function" and GetNumRaidMembers() > 0 then
+        return true
+    end
+
+    return type(GetNumPartyMembers) == "function" and GetNumPartyMembers() > 0
+end
+
+function RLHelper:ShouldShowMainFrame()
+    return not (self.db and self.db.profile and self.db.profile.displayOnlyInGroup) or self:IsInGroup()
+end
+
+function RLHelper:RefreshMainFrameVisibility()
+    if self.mainFrame and not self:ShouldShowMainFrame() then
+        self.mainFrame:Hide()
+    end
+end
+
+function RLHelper:SetMainFrameVisible(visible)
+    if not self.mainFrame then
+        return
+    end
+
+    if visible then
+        if self:ShouldShowMainFrame() then
+            self.mainFrame:Show()
+        else
+            self.mainFrame:Hide()
+            self:Print("RL Helper скрыт вне группы")
+        end
+    else
+        self.mainFrame:Hide()
+    end
 end
 
 local function debugValue(value)
@@ -206,8 +272,10 @@ function RLHelper:OnInitialize()
     self:RegisterChatCommand("rlh", "HandleSlashCommand")
 
     self:CreateMainFrame()
+    self:CreateOptionsPanel()
 
     self.mainFrame:Show()
+    self:RefreshMainFrameVisibility()
 
     self:Debug("RL Быдло: Аддон включен")
 end
@@ -219,7 +287,10 @@ function RLHelper:OnEnable()
     self:RegisterEvent("PLAYER_REGEN_DISABLED")
     self:RegisterEvent("PLAYER_REGEN_ENABLED")
     self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+    self:RegisterEvent("PARTY_MEMBERS_CHANGED")
+    self:RegisterEvent("RAID_ROSTER_UPDATE")
     self:UpdateZoneContext()
+    self:RefreshMainFrameVisibility()
 end
 
 local function isEnemy(flags)
@@ -475,6 +546,14 @@ function RLHelper:ZONE_CHANGED_NEW_AREA()
     self:UpdateZoneContext("ZONE_CHANGED_NEW_AREA")
 end
 
+function RLHelper:PARTY_MEMBERS_CHANGED()
+    self:RefreshMainFrameVisibility()
+end
+
+function RLHelper:RAID_ROSTER_UPDATE()
+    self:RefreshMainFrameVisibility()
+end
+
 function RLHelper:ShouldDispatchCombatEventToModule(module)
     if not module or not module.receivesCombatEvents then
         return false
@@ -500,6 +579,48 @@ function RLHelper:DispatchCombatEvent(eventData)
     end
 end
 
+function RLHelper:IsGroupMemberDeath(event)
+    if not event or event.event ~= "UNIT_DIED" then
+        return false
+    end
+
+    local groupFlags = bit.bor and bit.bor(self.GROUP_AFFILIATION_PARTY, self.GROUP_AFFILIATION_RAID) or
+        (self.GROUP_AFFILIATION_PARTY + self.GROUP_AFFILIATION_RAID)
+    return bit.band(event.destFlags or 0, groupFlags) > 0
+end
+
+function RLHelper:FormatIgorDeathMessage(playerName)
+    local phrase = IGOR_DEATH_PHRASES[math.random(#IGOR_DEATH_PHRASES)]
+    if phrase:find("%%s") then
+        return string.format(phrase, playerName or "кто-то")
+    end
+
+    return phrase
+end
+
+function RLHelper:MaybeSendIgorDeathMessage(event)
+    if not self.db or not self.db.profile or not self.db.profile.igor then
+        return false
+    end
+
+    if not self:IsGroupMemberDeath(event) then
+        return false
+    end
+
+    local now = self:GetCombatNow()
+    if self.lastIgorDeathMessageAt and now - self.lastIgorDeathMessageAt < IGOR_DEATH_COOLDOWN then
+        return false
+    end
+
+    if type(SendChatMessage) ~= "function" then
+        return false
+    end
+
+    SendChatMessage(self:FormatIgorDeathMessage(event.destName), "EMOTE")
+    self.lastIgorDeathMessageAt = now
+    return true
+end
+
 function affectingGroup(event)
     local sourceFlags = event.sourceFlags
     local destFlags = event.destFlags
@@ -515,6 +636,7 @@ end
 
 function RLHelper:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     local eventData = blizzardEvent(...)
+    self:MaybeSendIgorDeathMessage(eventData)
     self:DispatchCombatEvent(eventData)
     self:trackCombatants(eventData)
 
@@ -750,7 +872,7 @@ function RLHelper:CancelDBMPullCountdown()
 
     if type(SendChatMessage) == "function" then
         local channel = (GetRealNumRaidMembers and GetRealNumRaidMembers() > 0) and "RAID_WARNING" or "PARTY"
-        SendChatMessage("ГАЛЯ, ОТМЕНА!", channel)
+        SendChatMessage(self.db and self.db.profile and self.db.profile.pullCancelMessage or "ГАЛЯ, ОТМЕНА!", channel)
         cancelled = true
     end
 
@@ -1070,6 +1192,69 @@ function RLHelper:CreateMainFrame()
     frame:Hide()
 end
 
+function RLHelper:CreateOptionsPanel()
+    if type(CreateFrame) ~= "function" or type(InterfaceOptions_AddCategory) ~= "function" then
+        return
+    end
+
+    local panel = CreateFrame("Frame", "RLHelperOptionsPanel", UIParent)
+    panel.name = "RL Helper"
+
+    local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetText("RL Helper")
+
+    local cancelLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    cancelLabel:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -24)
+    cancelLabel:SetText("Pull Cancel message text")
+
+    local cancelEditBox = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
+    cancelEditBox:SetSize(320, 24)
+    cancelEditBox:SetPoint("TOPLEFT", cancelLabel, "BOTTOMLEFT", 8, -8)
+    cancelEditBox:SetAutoFocus(false)
+    cancelEditBox:SetScript("OnEnterPressed", function(self)
+        RLHelper.db.profile.pullCancelMessage = self:GetText()
+        self:ClearFocus()
+    end)
+    cancelEditBox:SetScript("OnEditFocusLost", function(self)
+        RLHelper.db.profile.pullCancelMessage = self:GetText()
+    end)
+
+    local displayOnlyInGroup = CreateFrame("CheckButton", "RLHelperDisplayOnlyInGroupCheckButton", panel,
+        "InterfaceOptionsCheckButtonTemplate")
+    displayOnlyInGroup:SetPoint("TOPLEFT", cancelEditBox, "BOTTOMLEFT", -4, -18)
+    _G[displayOnlyInGroup:GetName() .. "Text"]:SetText("Display only in Group")
+    displayOnlyInGroup:SetScript("OnClick", function(self)
+        RLHelper.db.profile.displayOnlyInGroup = self:GetChecked() and true or false
+        RLHelper:RefreshMainFrameVisibility()
+    end)
+
+    local igor = CreateFrame("CheckButton", "RLHelperIgorCheckButton", panel, "InterfaceOptionsCheckButtonTemplate")
+    igor:SetPoint("TOPLEFT", displayOnlyInGroup, "BOTTOMLEFT", 0, -8)
+    _G[igor:GetName() .. "Text"]:SetText("Игорь")
+    igor:SetScript("OnClick", function(self)
+        RLHelper.db.profile.igor = self:GetChecked() and true or false
+    end)
+
+    panel:SetScript("OnShow", function()
+        cancelEditBox:SetText(RLHelper.db.profile.pullCancelMessage or "")
+        displayOnlyInGroup:SetChecked(RLHelper.db.profile.displayOnlyInGroup)
+        igor:SetChecked(RLHelper.db.profile.igor)
+    end)
+
+    self.optionsPanel = panel
+    InterfaceOptions_AddCategory(panel)
+end
+
+function RLHelper:OpenOptionsPanel()
+    if not self.optionsPanel or type(InterfaceOptionsFrame_OpenToCategory) ~= "function" then
+        return false
+    end
+
+    InterfaceOptionsFrame_OpenToCategory(self.optionsPanel)
+    return true
+end
+
 function RLHelper:ClearCombatHistory()
     self.combatHistory = {}
     self.db.profile.combatHistory = {}
@@ -1129,14 +1314,15 @@ end
 function RLHelper:HandleSlashCommand(input)
     if input == "" then
         if self.mainFrame:IsShown() then
-            self.mainFrame:Hide()
+            self:SetMainFrameVisible(false)
         else
-            self.mainFrame:Show()
+            self:SetMainFrameVisible(true)
         end
     elseif input == "help" then
         print("RL Быдло команды:")
         print("/rlh - показать/скрыть окно")
         print("/rlh help - показать помощь")
+        print("/rlh config|options - открыть настройки")
         print("/rlh debug - включить/выключить режим отладки")
         print("/rlh zone - вывести текущую зону и активность модулей")
         print("/rlh fill - включить/выключить режим отладки")
@@ -1159,6 +1345,8 @@ function RLHelper:HandleSlashCommand(input)
         if self.db.profile.debug then
             self:UpdateZoneContext("debug enabled")
         end
+    elseif input == "config" or input == "options" then
+        self:OpenOptionsPanel()
     elseif input == "zone" then
         self:UpdateZoneContext("slash zone", true)
         self:PrintZoneDebug("slash zone", true)

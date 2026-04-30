@@ -531,6 +531,88 @@ describe("RLHelper frame positioning", function()
     end)
 end)
 
+describe("RLHelper settings helpers", function()
+    local originalDb
+    local originalPrint
+    local originalOpenToCategory
+    local originalOpenOptionsPanel
+    local originalGetRealNumRaidMembers
+    local originalGetRealNumPartyMembers
+
+    before_each(function()
+        originalDb = RLHelper.db
+        originalPrint = RLHelper.Print
+        originalOpenToCategory = _G.InterfaceOptionsFrame_OpenToCategory
+        originalOpenOptionsPanel = RLHelper.OpenOptionsPanel
+        originalGetRealNumRaidMembers = _G.GetRealNumRaidMembers
+        originalGetRealNumPartyMembers = _G.GetRealNumPartyMembers
+        RLHelper.db = {
+            profile = {
+                displayOnlyInGroup = true
+            }
+        }
+    end)
+
+    after_each(function()
+        RLHelper.db = originalDb
+        RLHelper.Print = originalPrint
+        RLHelper.OpenOptionsPanel = originalOpenOptionsPanel
+        _G.InterfaceOptionsFrame_OpenToCategory = originalOpenToCategory
+        _G.GetRealNumRaidMembers = originalGetRealNumRaidMembers
+        _G.GetRealNumPartyMembers = originalGetRealNumPartyMembers
+    end)
+
+    it("opens the registered options panel", function()
+        local openedPanel
+        RLHelper.optionsPanel = { name = "RL Helper" }
+        _G.InterfaceOptionsFrame_OpenToCategory = function(panel)
+            openedPanel = panel
+        end
+
+        assert.is_true(RLHelper:OpenOptionsPanel())
+        assert.are.same(RLHelper.optionsPanel, openedPanel)
+    end)
+
+    it("handles the slash config command", function()
+        local opened = false
+        RLHelper.OpenOptionsPanel = function()
+            opened = true
+            return true
+        end
+
+        RLHelper:HandleSlashCommand("config")
+
+        assert.is_true(opened)
+    end)
+
+    it("keeps the main frame hidden outside a group", function()
+        local hidden = false
+        local printedMessage
+        RLHelper.mainFrame = {
+            Hide = function()
+                hidden = true
+            end,
+            Show = function()
+                error("Main frame should not be shown outside a group")
+            end
+        }
+        RLHelper.Print = function(_, message)
+            printedMessage = message
+        end
+        _G.GetRealNumRaidMembers = function()
+            return 0
+        end
+        _G.GetRealNumPartyMembers = function()
+            return 0
+        end
+
+        RLHelper:SetMainFrameVisible(true)
+
+        assert.is_true(hidden)
+        assert.are.equal("RL Helper скрыт вне группы", printedMessage)
+    end)
+end)
+
 describe("RLHelper pull controls", function()
     local originalSlashCmdList
     local originalDBM
@@ -542,6 +624,7 @@ describe("RLHelper pull controls", function()
     local originalIsInInstance
     local originalGetRealNumRaidMembers
     local originalGetRealNumPartyMembers
+    local originalDb
 
     local function newVisibilityProbe(initiallyVisible)
         return {
@@ -566,6 +649,7 @@ describe("RLHelper pull controls", function()
         originalIsInInstance = _G.IsInInstance
         originalGetRealNumRaidMembers = _G.GetRealNumRaidMembers
         originalGetRealNumPartyMembers = _G.GetRealNumPartyMembers
+        originalDb = RLHelper.db
         _G.IsInInstance = function()
             return false, "raid"
         end
@@ -575,6 +659,11 @@ describe("RLHelper pull controls", function()
         _G.GetRealNumPartyMembers = function()
             return 0
         end
+        RLHelper.db = {
+            profile = {
+                pullCancelMessage = "ГАЛЯ, ОТМЕНА!"
+            }
+        }
         RLHelper.pullResetTimer = nil
         RLHelper.C_Timer = {
             NewTimer = function(_, callback)
@@ -610,6 +699,7 @@ describe("RLHelper pull controls", function()
         _G.IsInInstance = originalIsInInstance
         _G.GetRealNumRaidMembers = originalGetRealNumRaidMembers
         _G.GetRealNumPartyMembers = originalGetRealNumPartyMembers
+        RLHelper.db = originalDb
     end)
 
     it("restores pull buttons automatically when the countdown finishes", function()
@@ -744,6 +834,19 @@ describe("RLHelper pull controls", function()
         assert.is_false(RLHelper.mainFrame.cancelBtn.visible)
     end)
 
+    it("uses the configured pull cancel message", function()
+        local chatMessages = {}
+        _G.SendChatMessage = function(message, channel)
+            table.insert(chatMessages, { message = message, channel = channel })
+        end
+        _G.DBM = nil
+        RLHelper.db.profile.pullCancelMessage = "Стоп пул"
+
+        RLHelper:CancelDBMPullCountdown()
+
+        assert.are.same({ { message = "Стоп пул", channel = "RAID_WARNING" } }, chatMessages)
+    end)
+
     it("does nothing when the DBM slash pull command is unavailable", function()
         _G.SlashCmdList = nil
         _G.DBM = nil
@@ -753,6 +856,96 @@ describe("RLHelper pull controls", function()
 
         assert.is_false(started)
         assert.is_false(cancelled)
+    end)
+end)
+
+describe("RLHelper Igor death emote", function()
+    local originalDb
+    local originalSendChatMessage
+    local originalGetCombatNow
+    local originalRandom
+
+    before_each(function()
+        originalDb = RLHelper.db
+        originalSendChatMessage = _G.SendChatMessage
+        originalGetCombatNow = RLHelper.GetCombatNow
+        originalRandom = math.random
+        RLHelper.lastIgorDeathMessageAt = nil
+        RLHelper.db = {
+            profile = {
+                igor = true
+            }
+        }
+        math.random = function()
+            return 1
+        end
+    end)
+
+    after_each(function()
+        RLHelper.db = originalDb
+        _G.SendChatMessage = originalSendChatMessage
+        RLHelper.GetCombatNow = originalGetCombatNow
+        math.random = originalRandom
+        RLHelper.lastIgorDeathMessageAt = nil
+    end)
+
+    it("sends a random emote when a group member dies", function()
+        local messages = {}
+        _G.SendChatMessage = function(message, channel)
+            table.insert(messages, { message = message, channel = channel })
+        end
+        RLHelper.GetCombatNow = function()
+            return 100
+        end
+
+        local sent = RLHelper:MaybeSendIgorDeathMessage({
+            event = "UNIT_DIED",
+            destName = "Игрок",
+            destFlags = 0x514
+        })
+
+        assert.is_true(sent)
+        assert.are.same({ { message = "Игорь осуждает смерть Игрок.", channel = "EMOTE" } }, messages)
+    end)
+
+    it("does not send more than once every three minutes", function()
+        local messages = {}
+        _G.SendChatMessage = function(message, channel)
+            table.insert(messages, { message = message, channel = channel })
+        end
+        local now = 100
+        RLHelper.GetCombatNow = function()
+            return now
+        end
+        local event = {
+            event = "UNIT_DIED",
+            destName = "Игрок",
+            destFlags = 0x514
+        }
+
+        assert.is_true(RLHelper:MaybeSendIgorDeathMessage(event))
+        now = 200
+        assert.is_false(RLHelper:MaybeSendIgorDeathMessage(event))
+        now = 281
+        assert.is_true(RLHelper:MaybeSendIgorDeathMessage(event))
+
+        assert.are.equal(2, #messages)
+    end)
+
+    it("ignores non-group deaths", function()
+        local sentCount = 0
+        _G.SendChatMessage = function()
+            sentCount = sentCount + 1
+        end
+
+        local sent = RLHelper:MaybeSendIgorDeathMessage({
+            event = "UNIT_DIED",
+            destName = "Враг",
+            destFlags = 0xa48
+        })
+
+        assert.is_false(sent)
+        assert.are.equal(0, sentCount)
     end)
 end)
 

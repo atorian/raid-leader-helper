@@ -44,7 +44,9 @@ local IGOR_DEATH_PHRASES = {
 }
 
 local IGNORED_COMBAT_ENEMIES = {
-    ["World Invisible Trigger"] = true
+    ["World Invisible Trigger"] = true,
+    ["Огрская пиньята"] = true,
+    ["Робот \"Бей-Молоти\""] = true
 }
 
 -- Utility functions
@@ -677,8 +679,8 @@ function RLHelper:SaveCombatToProfile(combat, profile)
     -- Добавляем бой в начало массива
     table.insert(self.combatHistory, 1, combat)
 
-    -- Ограничиваем количество сохраненных боев до 10
-    while #self.combatHistory > 10 do
+    -- Ограничиваем количество сохраненных боев до 50
+    while #self.combatHistory > 50 do
         table.remove(self.combatHistory)
     end
 

@@ -113,6 +113,142 @@ describe("RLHelper debug helpers", function()
         end)
         assert.is_false(RLHelper:isDebugging())
     end)
+
+    it("logs current zone and module gate status in debug mode", function()
+        local originalDb = RLHelper.db
+        local originalPrint = RLHelper.Print
+        local originalIterateModules = RLHelper.IterateModules
+        local originalGetInstanceInfo = _G.GetInstanceInfo
+        local originalIsInInstance = _G.IsInInstance
+        local originalGetRealZoneText = _G.GetRealZoneText
+        local originalGetZoneText = _G.GetZoneText
+        local originalGetSubZoneText = _G.GetSubZoneText
+        local originalGetMinimapZoneText = _G.GetMinimapZoneText
+        local printedMessages = {}
+
+        RLHelper.db = {
+            profile = {
+                debug = true
+            }
+        }
+        RLHelper.Print = function(_, message)
+            table.insert(printedMessages, message)
+        end
+        RLHelper.IterateModules = function()
+            return ipairs({
+                {
+                    name = "TrialCrusaderTracker",
+                    receivesCombatEvents = true,
+                    zoneGateInstanceId = 649
+                },
+                {
+                    name = "HalionTracker",
+                    receivesCombatEvents = true,
+                    zoneGateInstanceId = 724
+                },
+                {
+                    name = "DeathwhisperTracker",
+                    receivesCombatEvents = true
+                }
+            })
+        end
+        _G.GetInstanceInfo = function()
+            return "Испытание крестоносца", "raid", 4, "25 Player", 25, 0, false, 649
+        end
+        _G.IsInInstance = function()
+            return true, "raid"
+        end
+        _G.GetRealZoneText = function()
+            return "Испытание крестоносца"
+        end
+        _G.GetZoneText = function()
+            return "Колизей Авангарда"
+        end
+        _G.GetSubZoneText = function()
+            return "Арена"
+        end
+        _G.GetMinimapZoneText = function()
+            return "Арена"
+        end
+
+        RLHelper:UpdateZoneContext("test")
+
+        assert.are.equal(649, RLHelper.currentInstanceId)
+        assert.are.equal("Зона [test]: name='Испытание крестоносца', mapId=649", printedMessages[1])
+        assert.is_true(printedMessages[2]:find("TrialCrusaderTracker:ON gate=649", 1, true) ~= nil)
+        assert.is_true(printedMessages[2]:find("HalionTracker:OFF gate=724", 1, true) ~= nil)
+        assert.is_true(printedMessages[2]:find("DeathwhisperTracker:ON gate=any", 1, true) ~= nil)
+
+        RLHelper.db = originalDb
+        RLHelper.Print = originalPrint
+        RLHelper.IterateModules = originalIterateModules
+        _G.GetInstanceInfo = originalGetInstanceInfo
+        _G.IsInInstance = originalIsInInstance
+        _G.GetRealZoneText = originalGetRealZoneText
+        _G.GetZoneText = originalGetZoneText
+        _G.GetSubZoneText = originalGetSubZoneText
+        _G.GetMinimapZoneText = originalGetMinimapZoneText
+    end)
+
+    it("uses GetInstanceInfo zone name before map API ids", function()
+        local originalDb = RLHelper.db
+        local originalPrint = RLHelper.Print
+        local originalIterateModules = RLHelper.IterateModules
+        local originalGetInstanceInfo = _G.GetInstanceInfo
+        local originalGetCurrentMapAreaID = _G.GetCurrentMapAreaID
+        local originalSetMapToCurrentZone = _G.SetMapToCurrentZone
+        local originalGetRealZoneText = _G.GetRealZoneText
+        local originalGetZoneText = _G.GetZoneText
+        local printedMessages = {}
+
+        RLHelper.db = {
+            profile = {
+                debug = true
+            }
+        }
+        RLHelper.Print = function(_, message)
+            table.insert(printedMessages, message)
+        end
+        RLHelper.IterateModules = function()
+            return ipairs({
+                {
+                    name = "HalionTracker",
+                    receivesCombatEvents = true,
+                    zoneGateInstanceId = 724
+                }
+            })
+        end
+        _G.GetInstanceInfo = function()
+            return "Рубиновое святилище", "raid", 4, "25 Player", 25, 0, false
+        end
+        _G.SetMapToCurrentZone = function()
+            error("SetMapToCurrentZone should not be used when instance name is known")
+        end
+        _G.GetCurrentMapAreaID = function()
+            error("GetCurrentMapAreaID should not be used when instance name is known")
+        end
+        _G.GetRealZoneText = function()
+            return "Рубиновое святилище"
+        end
+        _G.GetZoneText = function()
+            return "Рубиновое святилище"
+        end
+
+        RLHelper:UpdateZoneContext("test")
+
+        assert.are.equal(724, RLHelper.currentInstanceId)
+        assert.are.equal("Зона [test]: name='Рубиновое святилище', mapId=724", printedMessages[1])
+        assert.is_true(printedMessages[2]:find("HalionTracker:ON gate=724", 1, true) ~= nil)
+
+        RLHelper.db = originalDb
+        RLHelper.Print = originalPrint
+        RLHelper.IterateModules = originalIterateModules
+        _G.GetInstanceInfo = originalGetInstanceInfo
+        _G.GetCurrentMapAreaID = originalGetCurrentMapAreaID
+        _G.SetMapToCurrentZone = originalSetMapToCurrentZone
+        _G.GetRealZoneText = originalGetRealZoneText
+        _G.GetZoneText = originalGetZoneText
+    end)
 end)
 
 describe("RLHelper damage meter reset command", function()

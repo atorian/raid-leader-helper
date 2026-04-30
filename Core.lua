@@ -7,6 +7,17 @@ local COMBAT_END_CHECK_INTERVAL = 1
 local COMBAT_END_GRACE = 3
 local ENEMY_ACTIVITY_TIMEOUT = 6
 local MODULE_ZONE_ANY = 0
+local ZONE_GATE_INSTANCE_ID_BY_INSTANCE_NAME = {
+    ["Trial of the Crusader"] = 649,
+    ["Trial of the Grand Crusader"] = 649,
+    ["Испытание крестоносца"] = 649,
+    ["Испытание великого крестоносца"] = 649,
+    ["The Ruby Sanctum"] = 724,
+    ["Ruby Sanctum"] = 724,
+    ["Рубиновое святилище"] = 724,
+    ["Icecrown Citadel"] = 631,
+    ["Цитадель Ледяной Короны"] = 631
+}
 local DBM_PULL_BAR_NAMES = {
     "АТAKA!!",
     "Атака",
@@ -73,6 +84,102 @@ end
 
 function RLHelper:isDebugging()
     return self.db and self.db.profile and self.db.profile.debug or false
+end
+
+local function debugValue(value)
+    if value == nil or value == "" then
+        return "n/a"
+    end
+
+    return tostring(value)
+end
+
+local function getZoneGateInstanceIdByInstanceName(instanceName)
+    if not instanceName then
+        return nil
+    end
+
+    return ZONE_GATE_INSTANCE_ID_BY_INSTANCE_NAME[instanceName]
+end
+
+local function getCurrentMapAreaId()
+    if type(GetCurrentMapAreaID) ~= "function" then
+        return nil
+    end
+
+    if type(SetMapToCurrentZone) == "function" then
+        SetMapToCurrentZone()
+    end
+
+    return GetCurrentMapAreaID()
+end
+
+function RLHelper:GetZoneDebugSnapshot()
+    local instanceName, instanceType, difficultyIndex, difficultyName, maxPlayers, dynamicDifficulty, isDynamic,
+        instanceMapId
+
+    if type(GetInstanceInfo) == "function" then
+        instanceName, instanceType, difficultyIndex, difficultyName, maxPlayers, dynamicDifficulty, isDynamic,
+            instanceMapId = GetInstanceInfo()
+    end
+
+    local zone = {
+        realZoneText = type(GetRealZoneText) == "function" and GetRealZoneText() or nil,
+        zoneText = type(GetZoneText) == "function" and GetZoneText() or nil,
+        subZoneText = type(GetSubZoneText) == "function" and GetSubZoneText() or nil,
+        minimapZoneText = type(GetMinimapZoneText) == "function" and GetMinimapZoneText() or nil,
+        instanceName = instanceName,
+        instanceType = instanceType,
+        difficultyIndex = difficultyIndex,
+        difficultyName = difficultyName,
+        dynamicDifficulty = dynamicDifficulty,
+        isDynamic = isDynamic,
+        instanceMapId = instanceMapId
+    }
+    zone.instanceMapId = getZoneGateInstanceIdByInstanceName(zone.instanceName) or zone.instanceMapId or
+        getCurrentMapAreaId()
+
+    return zone
+end
+
+function RLHelper:FormatModuleZoneGateDebug()
+    if type(self.IterateModules) ~= "function" then
+        return "модули недоступны"
+    end
+
+    local statuses = {}
+    for _, module in self:IterateModules() do
+        if module and module.receivesCombatEvents then
+            local zoneGateInstanceId = module.zoneGateInstanceId or MODULE_ZONE_ANY
+            local enabled = zoneGateInstanceId == MODULE_ZONE_ANY or zoneGateInstanceId == self.currentInstanceId
+            table.insert(statuses, string.format("%s:%s gate=%s",
+                module.name or "unnamed",
+                enabled and "ON" or "OFF",
+                zoneGateInstanceId == MODULE_ZONE_ANY and "any" or tostring(zoneGateInstanceId)))
+        end
+    end
+
+    if #statuses == 0 then
+        return "combat-модули не найдены"
+    end
+
+    table.sort(statuses)
+    return table.concat(statuses, "; ")
+end
+
+function RLHelper:PrintZoneDebug(reason, force)
+    if not force and not self:isDebugging() then
+        return
+    end
+
+    local zone = self.currentZoneDebug or self:GetZoneDebugSnapshot()
+    local logger = force and self.Print or self.Debug
+
+    logger(self, string.format("Зона [%s]: name='%s', mapId=%s",
+        debugValue(reason),
+        debugValue(zone.instanceName or zone.realZoneText or zone.zoneText),
+        debugValue(zone.instanceMapId)))
+    logger(self, "Зональные combat-модули: " .. self:FormatModuleZoneGateDebug())
 end
 
 function RLHelper:OnInitialize()
@@ -342,22 +449,30 @@ function RLHelper:PLAYER_REGEN_DISABLED()
     self:StartCombat("PLAYER_REGEN_DISABLED")
 end
 
-function RLHelper:UpdateZoneContext()
-    if type(GetInstanceInfo) ~= "function" then
+function RLHelper:UpdateZoneContext(reason, silent)
+    self.currentZoneDebug = self:GetZoneDebugSnapshot()
+
+    if not self.currentZoneDebug.instanceMapId then
         self.currentInstanceId = MODULE_ZONE_ANY
+        if not silent then
+            self:PrintZoneDebug(reason or "UpdateZoneContext")
+        end
         return self.currentInstanceId
     end
 
-    self.currentInstanceId = select(8, GetInstanceInfo()) or MODULE_ZONE_ANY
+    self.currentInstanceId = self.currentZoneDebug.instanceMapId or MODULE_ZONE_ANY
+    if not silent then
+        self:PrintZoneDebug(reason or "UpdateZoneContext")
+    end
     return self.currentInstanceId
 end
 
 function RLHelper:PLAYER_ENTERING_WORLD()
-    self:UpdateZoneContext()
+    self:UpdateZoneContext("PLAYER_ENTERING_WORLD")
 end
 
 function RLHelper:ZONE_CHANGED_NEW_AREA()
-    self:UpdateZoneContext()
+    self:UpdateZoneContext("ZONE_CHANGED_NEW_AREA")
 end
 
 function RLHelper:ShouldDispatchCombatEventToModule(module)
@@ -1023,6 +1138,7 @@ function RLHelper:HandleSlashCommand(input)
         print("/rlh - показать/скрыть окно")
         print("/rlh help - показать помощь")
         print("/rlh debug - включить/выключить режим отладки")
+        print("/rlh zone - вывести текущую зону и активность модулей")
         print("/rlh fill - включить/выключить режим отладки")
         print("/rlh hist - показать историю боев")
         print("/rlh clear - очистить историю боев")
@@ -1040,6 +1156,12 @@ function RLHelper:HandleSlashCommand(input)
     elseif input == "debug" then
         self.db.profile.debug = not self.db.profile.debug
         print("Режим отладки: " .. (self.db.profile.debug and "включен" or "выключен"))
+        if self.db.profile.debug then
+            self:UpdateZoneContext("debug enabled")
+        end
+    elseif input == "zone" then
+        self:UpdateZoneContext("slash zone", true)
+        self:PrintZoneDebug("slash zone", true)
     elseif input == "clear" then
         self:ClearCombatHistory()
     elseif input == "demo" then

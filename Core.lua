@@ -660,7 +660,7 @@ function RLHelper:MarkBossCombat(event)
     end
 
     local bossName = getBoss1Name()
-    if not bossName or shouldIgnoreCombatEnemy(bossName) then
+    if not bossName then
         return false
     end
 

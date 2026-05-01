@@ -311,27 +311,16 @@ local function shouldIgnoreCombatEnemy(name)
     return IGNORED_COMBAT_ENEMIES[name] == true
 end
 
-local function isKnownBossUnit(guid, name)
-    if type(UnitGUID) ~= "function" and type(UnitName) ~= "function" then
-        return false
+local function getBoss1Name()
+    if type(UnitExists) == "function" and not UnitExists("boss1") then
+        return nil
     end
 
-    for i = 1, 5 do
-        local unitId = "boss" .. i
-        if type(UnitExists) ~= "function" or UnitExists(unitId) then
-            local unitGuid = type(UnitGUID) == "function" and UnitGUID(unitId) or nil
-            if guid and unitGuid and unitGuid ~= "0x0000000000000000" and unitGuid == guid then
-                return true
-            end
-
-            local unitName = type(UnitName) == "function" and UnitName(unitId) or nil
-            if name and unitName and unitName == name then
-                return true
-            end
-        end
+    if type(UnitName) == "function" then
+        return UnitName("boss1")
     end
 
-    return false
+    return nil
 end
 
 local LADY_KONTROL = 71289
@@ -670,13 +659,7 @@ function RLHelper:MarkBossCombat(event)
         return false
     end
 
-    local bossName
-    if isEnemy(event.sourceFlags) and isKnownBossUnit(event.sourceGUID, event.sourceName) then
-        bossName = event.sourceName
-    elseif isEnemy(event.destFlags) and isKnownBossUnit(event.destGUID, event.destName) then
-        bossName = event.destName
-    end
-
+    local bossName = getBoss1Name()
     if not bossName or shouldIgnoreCombatEnemy(bossName) then
         return false
     end

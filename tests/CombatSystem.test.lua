@@ -78,12 +78,25 @@ describe("Боевая система", function()
         RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Адд"):ToPlayer("Игрок1"):Damage(100):Build())
 
         local bossEvent = { Builder:New():FromEnemy("Босс"):ToPlayer("Игрок1"):Damage(100):Build() }
-        M:SetUnitGUID("boss1", bossEvent[4])
+        M:SetUnitGUID("boss1", "0xF130000000000001")
+        M:SetUnitName("boss1", "Босс")
 
         RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(bossEvent))
 
         assert.is_true(RLHelper.currentCombat.isBoss)
         assert.are.equal("Босс", RLHelper.currentCombat.firstEnemy)
+    end)
+
+    it("проверяет только boss1 при определении босса", function()
+        M.UnitAffectingCombat1 = false
+
+        local bossEvent = { Builder:New():FromEnemy("Босс2"):ToPlayer("Игрок1"):Damage(100):Build() }
+        M:SetUnitGUID("boss2", bossEvent[4])
+        M:SetUnitName("boss2", "Босс2")
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(bossEvent))
+
+        assert.is_false(RLHelper.currentCombat.isBoss)
     end)
 
     it("игнорирует World Invisible Trigger как название боя", function()
@@ -151,8 +164,9 @@ describe("Боевая система", function()
         M.UnitAffectingCombat1 = false
 
         RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Адд"):ToPlayer("Игрок1"):Damage(100):Build())
-        local bossEvent = { Builder:New():FromEnemy("Босс"):ToPlayer("Игрок1"):Damage(100):Build() }
-        M:SetUnitGUID("boss1", bossEvent[4])
+        local bossEvent = { Builder:New():FromEnemy("Адд2"):ToPlayer("Игрок1"):Damage(100):Build() }
+        M:SetUnitGUID("boss1", "0xF130000000000001")
+        M:SetUnitName("boss1", "Босс")
 
         RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(bossEvent))
         RLHelper:OnCombatLogEvent("test message")

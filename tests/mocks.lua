@@ -47,6 +47,7 @@ end
 
 -- Таблица для хранения GUID'ов юнитов
 local unitGuids = {}
+local unitNames = {}
 local glyphSockets = {}
 local threatStates = {}
 
@@ -55,9 +56,14 @@ function M:SetUnitGUID(unitId, guid)
     unitGuids[unitId] = guid
 end
 
+function M:SetUnitName(unitId, name)
+    unitNames[unitId] = name
+end
+
 -- Функция для очистки всех установленных GUID'ов
 function M:ClearUnitGUIDs()
     wipe(unitGuids)
+    wipe(unitNames)
 end
 
 function M:SetGlyph(socketId, glyphSpellId)
@@ -86,6 +92,10 @@ end
 
 UnitExists = function(unitId)
     return unitGuids[unitId] ~= nil
+end
+
+UnitName = function(unitId)
+    return unitNames[unitId]
 end
 
 GetNumGlyphSockets = function()

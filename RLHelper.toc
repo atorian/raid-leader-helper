@@ -24,5 +24,6 @@ modules\Misdirection.lua
 modules\ui\GPAwardButtons.lua
 modules\bosses\DeathwhisperTracker.lua
 modules\bosses\BloodPrincesTracker.lua
+modules\bosses\BloodQueenTracker.lua
 modules\bosses\TrialCrusaderTracker.lua
 modules\bosses\HalionTracker.lua

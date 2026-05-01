@@ -585,7 +585,8 @@ describe("RLHelper settings helpers", function()
         assert.is_true(opened)
     end)
 
-    it("keeps the main frame hidden outside a group", function()
+    it("allows manual show outside a group when displayOnlyInGroup is enabled", function()
+        local shown = false
         local hidden = false
         local printedMessage
         RLHelper.mainFrame = {
@@ -593,7 +594,7 @@ describe("RLHelper settings helpers", function()
                 hidden = true
             end,
             Show = function()
-                error("Main frame should not be shown outside a group")
+                shown = true
             end
         }
         RLHelper.Print = function(_, message)
@@ -608,8 +609,82 @@ describe("RLHelper settings helpers", function()
 
         RLHelper:SetMainFrameVisible(true)
 
+        assert.is_true(shown)
+        assert.is_false(hidden)
+        assert.is_nil(printedMessage)
+    end)
+
+    it("automatically hides the main frame outside a group when displayOnlyInGroup is enabled", function()
+        local shown = false
+        local hidden = false
+        RLHelper.mainFrame = {
+            Hide = function()
+                hidden = true
+            end,
+            Show = function()
+                shown = true
+            end
+        }
+        _G.GetRealNumRaidMembers = function()
+            return 0
+        end
+        _G.GetRealNumPartyMembers = function()
+            return 0
+        end
+
+        RLHelper:RefreshMainFrameVisibility()
+
         assert.is_true(hidden)
-        assert.are.equal("RL Helper скрыт вне группы", printedMessage)
+        assert.is_false(shown)
+    end)
+
+    it("automatically shows the main frame in a group when displayOnlyInGroup is enabled", function()
+        local shown = false
+        local hidden = false
+        RLHelper.mainFrame = {
+            Hide = function()
+                hidden = true
+            end,
+            Show = function()
+                shown = true
+            end
+        }
+        _G.GetRealNumRaidMembers = function()
+            return 1
+        end
+        _G.GetRealNumPartyMembers = function()
+            return 0
+        end
+
+        RLHelper:RefreshMainFrameVisibility()
+
+        assert.is_true(shown)
+        assert.is_false(hidden)
+    end)
+
+    it("does not force visibility when displayOnlyInGroup is disabled", function()
+        local shown = false
+        local hidden = false
+        RLHelper.db.profile.displayOnlyInGroup = false
+        RLHelper.mainFrame = {
+            Hide = function()
+                hidden = true
+            end,
+            Show = function()
+                shown = true
+            end
+        }
+        _G.GetRealNumRaidMembers = function()
+            return 1
+        end
+        _G.GetRealNumPartyMembers = function()
+            return 0
+        end
+
+        RLHelper:RefreshMainFrameVisibility()
+
+        assert.is_false(shown)
+        assert.is_false(hidden)
     end)
 end)
 

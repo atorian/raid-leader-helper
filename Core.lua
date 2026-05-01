@@ -134,7 +134,13 @@ function RLHelper:ShouldShowMainFrame()
 end
 
 function RLHelper:RefreshMainFrameVisibility()
-    if self.mainFrame and not self:ShouldShowMainFrame() then
+    if not self.mainFrame or not (self.db and self.db.profile and self.db.profile.displayOnlyInGroup) then
+        return
+    end
+
+    if self:IsInGroup() then
+        self.mainFrame:Show()
+    else
         self.mainFrame:Hide()
     end
 end
@@ -145,12 +151,7 @@ function RLHelper:SetMainFrameVisible(visible)
     end
 
     if visible then
-        if self:ShouldShowMainFrame() then
-            self.mainFrame:Show()
-        else
-            self.mainFrame:Hide()
-            self:Print("RL Helper скрыт вне группы")
-        end
+        self.mainFrame:Show()
     else
         self.mainFrame:Hide()
     end

@@ -15,12 +15,12 @@ The module handles only WoW 3.3.5a combat-log data.
 The tracker logs only events matching all of these rules:
 
 - `event.event == "SPELL_DAMAGE"`
-- `event.spellId == 71483`
+- `event.spellId` is one of `71483`, `71481`, or `71447`
 - `sourceFlags` marks the source as a player, party member, or raid member via `RLHelper.GROUP_AFFILIATION_ANY`
 
 The tracker ignores:
 
-- boss-source `71483` events from `Кровавая королева Лана'тель`
+- boss-source splash events from `Кровавая королева Лана'тель`
 - `71480` / `Сумеречная кровяная стрела`
 - aura events, misses, periodic damage, and any unrelated spell
 
@@ -53,8 +53,8 @@ Add the module to `RLHelper.toc` near the other ICC boss modules.
 Add focused Busted tests in `tests/BloodQueenTracker.test.lua`:
 
 - module receives combat events only in Icecrown Citadel
-- logs player-source `71483` as `source -> dest`
-- ignores boss-source `71483`
+- logs player-source `71483`, `71481`, and `71447` as `source -> dest`
+- ignores boss-source splash events
 - ignores `71480`
 - ignores non-`SPELL_DAMAGE` events
 
@@ -62,7 +62,7 @@ No roster lookup is needed for this feature.
 
 ## Success Criteria
 
-- `BloodQueenTracker` logs one message for each qualifying player-source `71483` event.
+- `BloodQueenTracker` logs one message for each qualifying player-source splash event: `71483`, `71481`, or `71447`.
 - The boss-source duplicate in the sample log is ignored.
 - Existing Blood Princes behavior remains unchanged.
 - Relevant tests pass.

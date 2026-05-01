@@ -5,10 +5,10 @@ local BloodPrincesTracker = require("../modules/bosses/BloodPrincesTracker")
 describe('BloodPrincesTracker', function()
     local log
 
-    local function vortexDamage(sourceName, destName)
+    local function vortexDamage(sourceName, destName, spellId)
         return {
             event = "SPELL_DAMAGE",
-            spellId = 72817,
+            spellId = spellId or 72817,
             spellName = "Могучий вихрь",
             timestamp = time(),
             sourceName = sourceName,
@@ -48,6 +48,20 @@ describe('BloodPrincesTracker', function()
 
         assert.spy(log).was_called_with(
             "SOME DATE |cFFFFFFFFЗаблудшый|r |TInterface\\Icons\\Spell_Shadow_Teleport:24:24:0:0|t |cFFFFFFFFВольно|r")
+    end)
+
+    it('logs all Powerful Vortex dungeon-version spell ids', function()
+        local spellIds = { 72817, 72816, 72815, 72038 }
+        mocks.raidSize = 1
+        mocks:SetRaidRosterInfo(1, "Вольно", 5, "PRIEST")
+
+        for _, spellId in ipairs(spellIds) do
+            log:clear()
+
+            BloodPrincesTracker:handleEvent(vortexDamage("Источник", "Вольно", spellId))
+
+            assert.spy(log).was_called()
+        end
     end)
 
     it('logs vortex damage to each allowed healer class in group 5', function()

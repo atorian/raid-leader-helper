@@ -74,6 +74,7 @@ local defaults = {
         debug = false,
         pullCancelMessage = "ГАЛЯ, ОТМЕНА!",
         displayOnlyInGroup = false,
+        bossOnlyHistory = false,
         igor = false,
         minimap = {
             hide = false
@@ -88,7 +89,8 @@ RLHelper.combatHistory = {} -- Array for combat history
 RLHelper.currentCombat = {
     startTime = nil,
     messages = {},
-    firstEnemy = nil -- Name of the first enemy in combat
+    firstEnemy = nil, -- Name of the first enemy in combat
+    isBoss = false
 }
 RLHelper.viewingCurrentCombat = true -- Initialize to true by default
 
@@ -266,7 +268,8 @@ function RLHelper:OnInitialize()
                 startTime = combat.startTime,
                 endTime = combat.endTime,
                 messages = combat.messages,
-                firstEnemy = combat.firstEnemy
+                firstEnemy = combat.firstEnemy,
+                isBoss = combat.isBoss
             })
         end
     end
@@ -305,6 +308,29 @@ end
 
 local function shouldIgnoreCombatEnemy(name)
     return IGNORED_COMBAT_ENEMIES[name] == true
+end
+
+local function isKnownBossUnit(guid, name)
+    if type(UnitGUID) ~= "function" and type(UnitName) ~= "function" then
+        return false
+    end
+
+    for i = 1, 5 do
+        local unitId = "boss" .. i
+        if type(UnitExists) ~= "function" or UnitExists(unitId) then
+            local unitGuid = type(UnitGUID) == "function" and UnitGUID(unitId) or nil
+            if guid and unitGuid and unitGuid ~= "0x0000000000000000" and unitGuid == guid then
+                return true
+            end
+
+            local unitName = type(UnitName) == "function" and UnitName(unitId) or nil
+            if name and unitName and unitName == name then
+                return true
+            end
+        end
+    end
+
+    return false
 end
 
 local LADY_KONTROL = 71289
@@ -419,7 +445,8 @@ function RLHelper:ResetCombatState()
     self.currentCombat = {
         startTime = nil,
         messages = {},
-        firstEnemy = nil
+        firstEnemy = nil,
+        isBoss = false
     }
 
     wipe(self.activeEnemies)
@@ -438,13 +465,14 @@ function RLHelper:FinishCombat(reason)
             startTime = self.currentCombat.startTime,
             endTime = time(),
             messages = self.currentCombat.messages,
-            firstEnemy = self.currentCombat.firstEnemy
+            firstEnemy = self.currentCombat.firstEnemy,
+            isBoss = self.currentCombat.isBoss
         }
     end
 
     self:ResetCombatState()
 
-    if combat then
+    if combat and self:ShouldSaveCombatToHistory(combat) then
         self:SaveCombatToProfile(combat, self.db.profile)
         self:Debug("Combat Saved to history")
     end
@@ -636,11 +664,38 @@ function affectingGroup(event)
     return isPlayer(sourceFlags) or isPlayer(destFlags)
 end
 
+function RLHelper:MarkBossCombat(event)
+    if not self.currentCombat or self.currentCombat.isBoss or not affectingGroup(event) then
+        return false
+    end
+
+    if isEnemy(event.sourceFlags) and isKnownBossUnit(event.sourceGUID, event.sourceName) then
+        self.currentCombat.isBoss = true
+        return true
+    end
+
+    if isEnemy(event.destFlags) and isKnownBossUnit(event.destGUID, event.destName) then
+        self.currentCombat.isBoss = true
+        return true
+    end
+
+    return false
+end
+
+function RLHelper:ShouldSaveCombatToHistory(combat)
+    if not self.db or not self.db.profile or not self.db.profile.bossOnlyHistory then
+        return true
+    end
+
+    return combat and combat.isBoss == true
+end
+
 function RLHelper:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     local eventData = blizzardEvent(...)
     self:MaybeSendIgorDeathMessage(eventData)
     self:DispatchCombatEvent(eventData)
     self:trackCombatants(eventData)
+    self:MarkBossCombat(eventData)
 
     if self.currentCombat.firstEnemy or not affectingGroup(eventData) then
         return
@@ -1231,8 +1286,16 @@ function RLHelper:CreateOptionsPanel()
         RLHelper:RefreshMainFrameVisibility()
     end)
 
+    local bossOnlyHistory = CreateFrame("CheckButton", "RLHelperBossOnlyHistoryCheckButton", panel,
+        "InterfaceOptionsCheckButtonTemplate")
+    bossOnlyHistory:SetPoint("TOPLEFT", displayOnlyInGroup, "BOTTOMLEFT", 0, -8)
+    _G[bossOnlyHistory:GetName() .. "Text"]:SetText("Оставлять бои только с боссами")
+    bossOnlyHistory:SetScript("OnClick", function(self)
+        RLHelper.db.profile.bossOnlyHistory = self:GetChecked() and true or false
+    end)
+
     local igor = CreateFrame("CheckButton", "RLHelperIgorCheckButton", panel, "InterfaceOptionsCheckButtonTemplate")
-    igor:SetPoint("TOPLEFT", displayOnlyInGroup, "BOTTOMLEFT", 0, -8)
+    igor:SetPoint("TOPLEFT", bossOnlyHistory, "BOTTOMLEFT", 0, -8)
     _G[igor:GetName() .. "Text"]:SetText("Игорь")
     igor:SetScript("OnClick", function(self)
         RLHelper.db.profile.igor = self:GetChecked() and true or false
@@ -1241,6 +1304,7 @@ function RLHelper:CreateOptionsPanel()
     panel:SetScript("OnShow", function()
         cancelEditBox:SetText(RLHelper.db.profile.pullCancelMessage or "")
         displayOnlyInGroup:SetChecked(RLHelper.db.profile.displayOnlyInGroup)
+        bossOnlyHistory:SetChecked(RLHelper.db.profile.bossOnlyHistory)
         igor:SetChecked(RLHelper.db.profile.igor)
     end)
 

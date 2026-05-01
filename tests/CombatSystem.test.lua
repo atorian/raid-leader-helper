@@ -20,7 +20,8 @@ describe("Боевая система", function()
         RLHelper.currentCombat = {
             startTime = nil,
             messages = {},
-            firstEnemy = nil
+            firstEnemy = nil,
+            isBoss = false
         }
         RLHelper.combatHistory = {}
         RLHelper.DisplayCombat = function()
@@ -41,10 +42,12 @@ describe("Боевая система", function()
         RLHelper.db = {
             profile = {
                 debug = false,
-                combatHistory = {}
+                combatHistory = {},
+                bossOnlyHistory = false
             }
         }
 
+        M:ClearUnitGUIDs()
         M.partySize = 0
         M.raidSize = 0
         M.UnitAffectingCombat1 = true
@@ -113,5 +116,38 @@ describe("Боевая система", function()
         assert.is_true(RLHelper:EvaluateCombatEnd("test"))
         assert.is_false(RLHelper.inCombat)
         assert.are.equal(1, #RLHelper.combatHistory)
+    end)
+
+    it("не сохраняет обычный бой когда включена история только боссов", function()
+        RLHelper.db.profile.bossOnlyHistory = true
+        RLHelper:PLAYER_REGEN_DISABLED()
+        RLHelper:OnCombatLogEvent("test message")
+
+        M.UnitAffectingCombat1 = false
+        RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
+        RLHelper.combatEndRequestedAt = RLHelper:GetCombatNow() - 5
+
+        assert.is_true(RLHelper:EvaluateCombatEnd("test"))
+        assert.are.equal(0, #RLHelper.combatHistory)
+        assert.are.equal(0, #RLHelper.db.profile.combatHistory)
+    end)
+
+    it("сохраняет боссовый бой когда включена история только боссов", function()
+        RLHelper.db.profile.bossOnlyHistory = true
+        M.UnitAffectingCombat1 = false
+
+        local event = { Builder:New():FromEnemy("Босс"):ToPlayer("Игрок1"):Damage(100):Build() }
+        M:SetUnitGUID("boss1", event[4])
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(event))
+        RLHelper:OnCombatLogEvent("test message")
+
+        RLHelper.activeEnemies[event[4]] = RLHelper:GetCombatNow() - 10
+        RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
+        RLHelper.combatEndRequestedAt = RLHelper:GetCombatNow() - 5
+
+        assert.is_true(RLHelper:EvaluateCombatEnd("test"))
+        assert.are.equal(1, #RLHelper.combatHistory)
+        assert.is_true(RLHelper.combatHistory[1].isBoss)
     end)
 end)

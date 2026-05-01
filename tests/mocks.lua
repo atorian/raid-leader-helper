@@ -48,6 +48,7 @@ end
 -- Таблица для хранения GUID'ов юнитов
 local unitGuids = {}
 local unitNames = {}
+local raidRoster = {}
 local glyphSockets = {}
 local threatStates = {}
 
@@ -64,6 +65,18 @@ end
 function M:ClearUnitGUIDs()
     wipe(unitGuids)
     wipe(unitNames)
+end
+
+function M:SetRaidRosterInfo(index, name, subgroup, class)
+    raidRoster[index] = {
+        name = name,
+        subgroup = subgroup,
+        class = class
+    }
+end
+
+function M:ClearRaidRoster()
+    wipe(raidRoster)
 end
 
 function M:SetGlyph(socketId, glyphSpellId)
@@ -127,6 +140,15 @@ end
 
 GetNumRaidMembers = function()
     return M.raidSize or 0
+end
+
+GetRaidRosterInfo = function(index)
+    local member = raidRoster[index]
+    if not member then
+        return nil
+    end
+
+    return member.name, nil, member.subgroup, nil, member.class
 end
 
 GetNumPartyMembers = function()

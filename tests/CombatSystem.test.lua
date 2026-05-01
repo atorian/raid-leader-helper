@@ -72,6 +72,20 @@ describe("Боевая система", function()
         assert.are.equal("Враг1", RLHelper.currentCombat.firstEnemy)
     end)
 
+    it("переименовывает бой в имя босса если босс появился после обычного врага", function()
+        M.UnitAffectingCombat1 = false
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Адд"):ToPlayer("Игрок1"):Damage(100):Build())
+
+        local bossEvent = { Builder:New():FromEnemy("Босс"):ToPlayer("Игрок1"):Damage(100):Build() }
+        M:SetUnitGUID("boss1", bossEvent[4])
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(bossEvent))
+
+        assert.is_true(RLHelper.currentCombat.isBoss)
+        assert.are.equal("Босс", RLHelper.currentCombat.firstEnemy)
+    end)
+
     it("игнорирует World Invisible Trigger как название боя", function()
         M.UnitAffectingCombat1 = false
 
@@ -136,18 +150,23 @@ describe("Боевая система", function()
         RLHelper.db.profile.bossOnlyHistory = true
         M.UnitAffectingCombat1 = false
 
-        local event = { Builder:New():FromEnemy("Босс"):ToPlayer("Игрок1"):Damage(100):Build() }
-        M:SetUnitGUID("boss1", event[4])
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Адд"):ToPlayer("Игрок1"):Damage(100):Build())
+        local bossEvent = { Builder:New():FromEnemy("Босс"):ToPlayer("Игрок1"):Damage(100):Build() }
+        M:SetUnitGUID("boss1", bossEvent[4])
 
-        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(event))
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(bossEvent))
         RLHelper:OnCombatLogEvent("test message")
 
-        RLHelper.activeEnemies[event[4]] = RLHelper:GetCombatNow() - 10
+        for guid in pairs(RLHelper.activeEnemies) do
+            RLHelper.activeEnemies[guid] = RLHelper:GetCombatNow() - 10
+        end
         RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
         RLHelper.combatEndRequestedAt = RLHelper:GetCombatNow() - 5
 
         assert.is_true(RLHelper:EvaluateCombatEnd("test"))
         assert.are.equal(1, #RLHelper.combatHistory)
         assert.is_true(RLHelper.combatHistory[1].isBoss)
+        assert.are.equal("Босс", RLHelper.combatHistory[1].firstEnemy)
+        assert.are.equal("Босс", RLHelper.db.profile.combatHistory[1].firstEnemy)
     end)
 end)

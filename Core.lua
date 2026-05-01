@@ -670,17 +670,20 @@ function RLHelper:MarkBossCombat(event)
         return false
     end
 
+    local bossName
     if isEnemy(event.sourceFlags) and isKnownBossUnit(event.sourceGUID, event.sourceName) then
-        self.currentCombat.isBoss = true
-        return true
+        bossName = event.sourceName
+    elseif isEnemy(event.destFlags) and isKnownBossUnit(event.destGUID, event.destName) then
+        bossName = event.destName
     end
 
-    if isEnemy(event.destFlags) and isKnownBossUnit(event.destGUID, event.destName) then
-        self.currentCombat.isBoss = true
-        return true
+    if not bossName or shouldIgnoreCombatEnemy(bossName) then
+        return false
     end
 
-    return false
+    self.currentCombat.isBoss = true
+    self.currentCombat.firstEnemy = bossName
+    return true
 end
 
 function RLHelper:ShouldSaveCombatToHistory(combat)

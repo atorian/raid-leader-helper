@@ -1263,7 +1263,7 @@ describe("RLHelper Igor death emote", function()
         assert.are.same({ { message = "Игорь осуждает смерть Игрок.", channel = "EMOTE" } }, messages)
     end)
 
-    it("does not send more than once every three minutes", function()
+    it("does not send more than once every ten seconds", function()
         local messages = {}
         _G.SendChatMessage = function(message, channel)
             table.insert(messages, { message = message, channel = channel })
@@ -1279,9 +1279,9 @@ describe("RLHelper Igor death emote", function()
         }
 
         assert.is_true(RLHelper:MaybeSendIgorDeathMessage(event))
-        now = 200
+        now = 109
         assert.is_false(RLHelper:MaybeSendIgorDeathMessage(event))
-        now = 281
+        now = 111
         assert.is_true(RLHelper:MaybeSendIgorDeathMessage(event))
 
         assert.are.equal(2, #messages)

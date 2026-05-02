@@ -11,6 +11,7 @@ describe('TrialCrusaderTracker', function()
     local log
     local originalSetRaidTarget
     local originalGetRealNumRaidMembers
+    local originalGetTime
 
     local function championGuid(npcId, spawnId)
         return string.format("0xF13000%04X%06X", npcId, spawnId or npcId)
@@ -43,6 +44,7 @@ describe('TrialCrusaderTracker', function()
     before_each(function()
         originalSetRaidTarget = _G.SetRaidTarget
         originalGetRealNumRaidMembers = _G.GetRealNumRaidMembers
+        originalGetTime = _G.GetTime
         log = spy.new(function()
         end)
         TrialCrusaderTracker.log = log
@@ -52,6 +54,7 @@ describe('TrialCrusaderTracker', function()
     after_each(function()
         _G.SetRaidTarget = originalSetRaidTarget
         _G.GetRealNumRaidMembers = originalGetRealNumRaidMembers
+        _G.GetTime = originalGetTime
         require('tests.mocks'):ClearUnitGUIDs()
     end)
 
@@ -306,6 +309,59 @@ describe('TrialCrusaderTracker', function()
             }
         }, calls)
         assert.are.equal("ENHANCEMENT_SHAMAN", TrialCrusaderTracker.diamondRole)
+    end)
+
+    it('starts automark for 180 seconds', function()
+        TrialCrusaderTracker:StartFactionChampionAutomark()
+
+        assert.are.equal(GetTime() + 180, TrialCrusaderTracker.factionChampionAutomarkActiveUntil)
+        assert.is_not_nil(TrialCrusaderTracker.factionChampionAutomarkTicker)
+    end)
+
+    it('stops automark when all configured marks are done', function()
+        local mocks = require('tests.mocks')
+        collectMarks()
+        local guids = {
+            hunter = championGuid(34467),
+            warrior = championGuid(34455),
+            priest = championGuid(34447),
+            warlock = championGuid(34450),
+            deathKnight = championGuid(34458),
+            shaman = championGuid(34463)
+        }
+
+        mocks:SetUnitGUID("target", guids.hunter)
+        TrialCrusaderTracker:StartFactionChampionAutomark()
+        mocks:SetUnitGUID("target", guids.warrior)
+        TrialCrusaderTracker:ScanFactionChampionAutomark()
+        mocks:SetUnitGUID("target", guids.priest)
+        TrialCrusaderTracker:ScanFactionChampionAutomark()
+        mocks:SetUnitGUID("target", guids.warlock)
+        TrialCrusaderTracker:ScanFactionChampionAutomark()
+        mocks:SetUnitGUID("target", guids.deathKnight)
+        TrialCrusaderTracker:ScanFactionChampionAutomark()
+        mocks:SetUnitGUID("target", guids.shaman)
+        TrialCrusaderTracker:ScanFactionChampionAutomark()
+
+        assert.is_true(TrialCrusaderTracker:AreChampionMarksDone())
+        assert.is_nil(TrialCrusaderTracker.factionChampionAutomarkTicker)
+        assert.is_nil(TrialCrusaderTracker.factionChampionAutomarkActiveUntil)
+    end)
+
+    it('stops automark after the active window expires', function()
+        local now = 100
+        _G.GetTime = function()
+            return now
+        end
+
+        TrialCrusaderTracker:StartFactionChampionAutomark()
+        assert.are.equal(280, TrialCrusaderTracker.factionChampionAutomarkActiveUntil)
+
+        now = 281
+        TrialCrusaderTracker:ScanFactionChampionAutomark()
+
+        assert.is_nil(TrialCrusaderTracker.factionChampionAutomarkTicker)
+        assert.is_nil(TrialCrusaderTracker.factionChampionAutomarkActiveUntil)
     end)
 
     it('stops champion marking after all configured marks are done', function()

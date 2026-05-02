@@ -1120,12 +1120,13 @@ function RLHelper:CreateMainFrame()
             print("ReadyCheck недоступен")
         end
     end)
+    frame.pullButtons[1] = frame.raidCheckBtn
 
     local pull15Btn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
     pull15Btn:SetSize(60, 25)
     pull15Btn:SetPoint("LEFT", frame.raidCheckBtn, "RIGHT", 4, 0)
     pull15Btn:SetText("Пул 15")
-    frame.pullButtons[1] = pull15Btn
+    frame.pullButtons[2] = pull15Btn
     pull15Btn:SetScript("OnClick", function()
         RLHelper:StartPullCountdown(15)
     end)
@@ -1134,7 +1135,7 @@ function RLHelper:CreateMainFrame()
     pull75Btn:SetSize(60, 25)
     pull75Btn:SetPoint("LEFT", pull15Btn, "RIGHT", 4, 0)
     pull75Btn:SetText("Пул 70")
-    frame.pullButtons[2] = pull75Btn
+    frame.pullButtons[3] = pull75Btn
     pull75Btn:SetScript("OnClick", function()
         RLHelper:StartPullCountdown(70)
     end)

@@ -959,11 +959,14 @@ describe("RLHelper main frame raid check button", function()
         assert.equals("РЧ", RLHelper.mainFrame.raidCheckBtn.text)
         assert.equals(32, RLHelper.mainFrame.raidCheckBtn.width)
         assert.equals(25, RLHelper.mainFrame.raidCheckBtn.height)
+        assert.equals(RLHelper.mainFrame.raidCheckBtn, RLHelper.mainFrame.pullButtons[1])
+        assert.equals("Пул 15", RLHelper.mainFrame.pullButtons[2].text)
+        assert.equals("Пул 70", RLHelper.mainFrame.pullButtons[3].text)
         assert.are.same({ "LEFT", RLHelper.mainFrame.buttonContainer, "LEFT", 0, 0 }, RLHelper.mainFrame.raidCheckBtn.points[1])
-        assert.are.same({ "LEFT", RLHelper.mainFrame.raidCheckBtn, "RIGHT", 4, 0 }, RLHelper.mainFrame.pullButtons[1].points[1])
-        assert.are.same({ "LEFT", RLHelper.mainFrame.pullButtons[1], "RIGHT", 4, 0 }, RLHelper.mainFrame.pullButtons[2].points[1])
+        assert.are.same({ "LEFT", RLHelper.mainFrame.raidCheckBtn, "RIGHT", 4, 0 }, RLHelper.mainFrame.pullButtons[2].points[1])
+        assert.are.same({ "LEFT", RLHelper.mainFrame.pullButtons[2], "RIGHT", 4, 0 }, RLHelper.mainFrame.pullButtons[3].points[1])
         assert.is_false(RLHelper.mainFrame.resetBtn.visible)
-        assert.are.same({ "LEFT", RLHelper.mainFrame.pullButtons[2], "RIGHT", -8, -2 }, RLHelper.mainFrame.combatDropdown.points[1])
+        assert.are.same({ "LEFT", RLHelper.mainFrame.pullButtons[3], "RIGHT", -8, -2 }, RLHelper.mainFrame.combatDropdown.points[1])
     end)
 
     it("calls the global DoReadyCheck function", function()
@@ -1058,6 +1061,7 @@ describe("RLHelper pull controls", function()
         RLHelper.mainFrame = {
             pullButtons = {
                 newVisibilityProbe(true),
+                newVisibilityProbe(true),
                 newVisibilityProbe(true)
             },
             cancelBtn = newVisibilityProbe(false)
@@ -1083,6 +1087,7 @@ describe("RLHelper pull controls", function()
 
         assert.is_false(RLHelper.mainFrame.pullButtons[1].visible)
         assert.is_false(RLHelper.mainFrame.pullButtons[2].visible)
+        assert.is_false(RLHelper.mainFrame.pullButtons[3].visible)
         assert.is_true(RLHelper.mainFrame.cancelBtn.visible)
         assert.is_not_nil(RLHelper.pullResetTimer)
 
@@ -1091,6 +1096,7 @@ describe("RLHelper pull controls", function()
         assert.is_nil(RLHelper.pullResetTimer)
         assert.is_true(RLHelper.mainFrame.pullButtons[1].visible)
         assert.is_true(RLHelper.mainFrame.pullButtons[2].visible)
+        assert.is_true(RLHelper.mainFrame.pullButtons[3].visible)
         assert.is_false(RLHelper.mainFrame.cancelBtn.visible)
     end)
 
@@ -1104,6 +1110,7 @@ describe("RLHelper pull controls", function()
         assert.is_nil(RLHelper.pullResetTimer)
         assert.is_true(RLHelper.mainFrame.pullButtons[1].visible)
         assert.is_true(RLHelper.mainFrame.pullButtons[2].visible)
+        assert.is_true(RLHelper.mainFrame.pullButtons[3].visible)
         assert.is_false(RLHelper.mainFrame.cancelBtn.visible)
     end)
 
@@ -1207,6 +1214,7 @@ describe("RLHelper pull controls", function()
         assert.is_nil(RLHelper.pullResetTimer)
         assert.is_true(RLHelper.mainFrame.pullButtons[1].visible)
         assert.is_true(RLHelper.mainFrame.pullButtons[2].visible)
+        assert.is_true(RLHelper.mainFrame.pullButtons[3].visible)
         assert.is_false(RLHelper.mainFrame.cancelBtn.visible)
     end)
 

@@ -39,10 +39,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       
       - name: Create release archive
         run: |
           make release
+
+      - name: Generate release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          current_tag="${GITHUB_REF_NAME}"
+          previous_tag="$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // ""')"
+
+          if [ -n "$previous_tag" ]; then
+            {
+              printf 'Changes since %s:\n\n' "$previous_tag"
+              git log --reverse --pretty=format:'- %s' "$previous_tag..$current_tag"
+              printf '\n'
+            } > release-notes.md
+          else
+            {
+              printf 'Changes:\n\n'
+              git log --reverse --pretty=format:'- %s' "$current_tag"
+              printf '\n'
+            } > release-notes.md
+          fi
           
       - name: Create Release
         id: create_release
@@ -52,6 +75,7 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
+          body_path: release-notes.md
           draft: true
           prerelease: true
 

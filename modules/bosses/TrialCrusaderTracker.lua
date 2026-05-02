@@ -60,7 +60,9 @@ local CHAMPION_ROLE_BY_NPC_ID = {
     [34451] = "BALANCE_DRUID" -- Birana Stormhoof
 }
 
-local FACTION_CHAMPION_START_FRAGMENTS = {}
+local FACTION_CHAMPION_START_FRAGMENTS = {
+    "В следующем бою вы встретитесь с могучими рыцарями Серебряного Авангарда! Лишь победив их, вы заслужите достойную награду."
+}
 
 TrialCrusaderTracker.factionChampionStartFragments = FACTION_CHAMPION_START_FRAGMENTS
 
@@ -326,22 +328,22 @@ function TrialCrusaderTracker:shouldStartFactionChampionAutomark(message)
     return false
 end
 
-function TrialCrusaderTracker:handleBossMessage(eventName, message, sender)
+function TrialCrusaderTracker:handleBossMessage(eventName, message, sender, canStartAutomark)
     self.debug(formatBossMessageDebug(eventName, message, sender))
 
-    if self:shouldStartFactionChampionAutomark(message) then
+    if canStartAutomark and self:shouldStartFactionChampionAutomark(message) then
         return self:StartFactionChampionAutomark()
     end
 
     return false
 end
 
-function TrialCrusaderTracker:CHAT_MSG_MONSTER_YELL(message, sender)
-    return self:handleBossMessage("CHAT_MSG_MONSTER_YELL", message, sender)
+function TrialCrusaderTracker:CHAT_MSG_MONSTER_YELL(eventName, message, sender)
+    return self:handleBossMessage(eventName, message, sender, true)
 end
 
-function TrialCrusaderTracker:CHAT_MSG_RAID_BOSS_EMOTE(message, sender)
-    return self:handleBossMessage("CHAT_MSG_RAID_BOSS_EMOTE", message, sender)
+function TrialCrusaderTracker:CHAT_MSG_RAID_BOSS_EMOTE(eventName, message, sender)
+    return self:handleBossMessage(eventName, message, sender, false)
 end
 
 function TrialCrusaderTracker:handleEvent(event)

@@ -54,7 +54,7 @@ describe('TrialCrusaderTracker', function()
         debugLog = spy.new(function()
         end)
         TrialCrusaderTracker.debug = debugLog
-        TrialCrusaderTracker.factionChampionStartFragments = {}
+        TrialCrusaderTracker.factionChampionStartFragments = nil
         TrialCrusaderTracker:reset()
     end)
 
@@ -63,7 +63,7 @@ describe('TrialCrusaderTracker', function()
         _G.GetRealNumRaidMembers = originalGetRealNumRaidMembers
         _G.GetTime = originalGetTime
         TrialCrusaderTracker.debug = originalDebug
-        TrialCrusaderTracker.factionChampionStartFragments = {}
+        TrialCrusaderTracker.factionChampionStartFragments = nil
         require('tests.mocks'):ClearUnitGUIDs()
     end)
 
@@ -374,8 +374,9 @@ describe('TrialCrusaderTracker', function()
     end)
 
     it('logs Trial of the Crusader boss yell and emote messages for debug collection', function()
-        TrialCrusaderTracker:CHAT_MSG_MONSTER_YELL("Champions, attack!", "Tirion Fordring")
-        TrialCrusaderTracker:CHAT_MSG_RAID_BOSS_EMOTE("The next battle begins.", "Argent Coliseum")
+        TrialCrusaderTracker:CHAT_MSG_MONSTER_YELL("CHAT_MSG_MONSTER_YELL", "Champions, attack!", "Tirion Fordring")
+        TrialCrusaderTracker:CHAT_MSG_RAID_BOSS_EMOTE("CHAT_MSG_RAID_BOSS_EMOTE", "The next battle begins.",
+            "Argent Coliseum")
 
         assert.spy(debugLog).was_called_with(
             "TrialCrusaderTracker CHAT_MSG_MONSTER_YELL sender='Tirion Fordring' text='Champions, attack!'")
@@ -383,13 +384,24 @@ describe('TrialCrusaderTracker', function()
             "TrialCrusaderTracker CHAT_MSG_RAID_BOSS_EMOTE sender='Argent Coliseum' text='The next battle begins.'")
     end)
 
-    it('starts automark when a boss message contains a configured trigger fragment', function()
-        TrialCrusaderTracker.factionChampionStartFragments = { "Champions" }
-
-        local started = TrialCrusaderTracker:CHAT_MSG_MONSTER_YELL("Champions, attack!", "Tirion Fordring")
+    it('starts automark when Tirion announces Faction Champions', function()
+        local started = TrialCrusaderTracker:CHAT_MSG_MONSTER_YELL(
+            "CHAT_MSG_MONSTER_YELL",
+            "В следующем бою вы встретитесь с могучими рыцарями Серебряного Авангарда! Лишь победив их, вы заслужите достойную награду.",
+            "Тирион Фордринг")
 
         assert.is_true(started)
         assert.are.equal(GetTime() + 180, TrialCrusaderTracker.factionChampionAutomarkActiveUntil)
+    end)
+
+    it('does not start automark from a raid boss emote with the Faction Champions phrase', function()
+        local started = TrialCrusaderTracker:CHAT_MSG_RAID_BOSS_EMOTE(
+            "CHAT_MSG_RAID_BOSS_EMOTE",
+            "В следующем бою вы встретитесь с могучими рыцарями Серебряного Авангарда! Лишь победив их, вы заслужите достойную награду.",
+            "Тирион Фордринг")
+
+        assert.is_false(started)
+        assert.is_nil(TrialCrusaderTracker.factionChampionAutomarkActiveUntil)
     end)
 
     it('stops champion marking after all configured marks are done', function()

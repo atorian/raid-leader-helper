@@ -1379,20 +1379,6 @@ function RLHelper:TriggerDamageMeterReset()
     return true
 end
 
-function RLHelper:TriggerTrialCrusaderAutomark()
-    local trialCrusaderTracker = self:FindModuleByName("TrialCrusaderTracker")
-    if not trialCrusaderTracker or type(trialCrusaderTracker.StartFactionChampionAutomark) ~= "function" then
-        self:Debug("TrialCrusaderTracker недоступен")
-        return false
-    end
-
-    local ok = trialCrusaderTracker:StartFactionChampionAutomark()
-    if ok then
-        self:Debug("Faction Champions automark запущен")
-    end
-    return ok
-end
-
 function RLHelper:HandleSlashCommand(input)
     if input == "" then
         if self.mainFrame:IsShown() then
@@ -1412,7 +1398,6 @@ function RLHelper:HandleSlashCommand(input)
         print("/rlh clear - очистить историю боев")
         print("/rlh demo - show all messages")
         print("/rlh meters - вручную сбросить сегменты урона")
-        print("/rlh tocmarks - включить метки Faction Champions на 180 секунд")
         print("/rlh b # - показать бой по номеру")
     elseif input == "fill" then
         for i = 1, 50 do
@@ -1439,8 +1424,6 @@ function RLHelper:HandleSlashCommand(input)
         self:SendMessage("RLHelper_Demo")
     elseif input == "meters" then
         self:TriggerDamageMeterReset()
-    elseif input == "tocmarks" then
-        self:TriggerTrialCrusaderAutomark()
     elseif input:match("^b%s+(%d+)$") then
         local index = tonumber(input:match("^b%s+(%d+)$"))
         self:ShowCombatByIndex(index)

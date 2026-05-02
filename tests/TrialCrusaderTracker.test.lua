@@ -241,6 +241,73 @@ describe('TrialCrusaderTracker', function()
         assert.are.same({}, TrialCrusaderTracker.championGuidsByRole)
     end)
 
+    it('marks a champion discovered by combat log once it becomes target', function()
+        local mocks = require('tests.mocks')
+        local hunterGuid = championGuid(34467)
+
+        TrialCrusaderTracker:handleEvent(damageFromChampion(34467))
+        assert.are.equal(hunterGuid, TrialCrusaderTracker.championGuidsByRole.HUNTER)
+        assert.is_nil(TrialCrusaderTracker.markedRoles.HUNTER)
+
+        local calls = collectMarks()
+        mocks:SetUnitGUID("target", hunterGuid)
+
+        TrialCrusaderTracker:StartFactionChampionAutomark()
+
+        assert.are.same({
+            {
+                unitId = "target",
+                marker = 8
+            }
+        }, calls)
+        assert.is_true(TrialCrusaderTracker.markedRoles.HUNTER)
+    end)
+
+    it('does not duplicate a fixed mark already assigned through combat log', function()
+        local mocks = require('tests.mocks')
+        local hunterGuid = championGuid(34467)
+        local calls = collectMarks()
+
+        mocks:SetUnitGUID("boss1", hunterGuid)
+        TrialCrusaderTracker:handleEvent(damageFromChampion(34467))
+
+        mocks:SetUnitGUID("target", hunterGuid)
+        TrialCrusaderTracker:StartFactionChampionAutomark()
+
+        assert.are.same({
+            {
+                unitId = "boss1",
+                marker = 8
+            }
+        }, calls)
+    end)
+
+    it('marks diamond by priority when champions are discovered through target and mouseover', function()
+        local mocks = require('tests.mocks')
+        local druidGuid = championGuid(34451)
+        local shamanGuid = championGuid(34463)
+        local calls = collectMarks()
+
+        mocks:SetUnitGUID("target", druidGuid)
+        TrialCrusaderTracker:StartFactionChampionAutomark()
+
+        mocks:SetUnitGUID("target", nil)
+        mocks:SetUnitGUID("mouseover", shamanGuid)
+        TrialCrusaderTracker:ScanFactionChampionAutomark()
+
+        assert.are.same({
+            {
+                unitId = "target",
+                marker = 3
+            },
+            {
+                unitId = "mouseover",
+                marker = 3
+            }
+        }, calls)
+        assert.are.equal("ENHANCEMENT_SHAMAN", TrialCrusaderTracker.diamondRole)
+    end)
+
     it('stops champion marking after all configured marks are done', function()
         local mocks = require('tests.mocks')
         local guids = {

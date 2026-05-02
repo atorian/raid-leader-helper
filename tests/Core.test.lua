@@ -387,6 +387,35 @@ describe("RLHelper damage meter reset command", function()
     end)
 end)
 
+describe("RLHelper Trial Crusader automark command", function()
+    local originalFindModuleByName
+
+    before_each(function()
+        originalFindModuleByName = RLHelper.FindModuleByName
+    end)
+
+    after_each(function()
+        RLHelper.FindModuleByName = originalFindModuleByName
+    end)
+
+    it("handles the slash tocmarks command", function()
+        local startCalls = 0
+        RLHelper.FindModuleByName = function(_, moduleName)
+            assert.are.equal("TrialCrusaderTracker", moduleName)
+            return {
+                StartFactionChampionAutomark = function()
+                    startCalls = startCalls + 1
+                    return true
+                end
+            }
+        end
+
+        RLHelper:HandleSlashCommand("tocmarks")
+
+        assert.are.equal(1, startCalls)
+    end)
+end)
+
 describe("RLHelper combat event dispatch", function()
     local originalIterateModules
     local originalShouldDispatchCombatEventToModule

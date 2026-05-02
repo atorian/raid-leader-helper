@@ -4,6 +4,9 @@ TrialCrusaderTracker.receivesCombatEvents = true
 TrialCrusaderTracker.zoneGateInstanceId = 649 -- Trial of the Crusader / Trial of the Grand Crusader
 
 local ICEHOWL_TRAMPLE = 66734
+local FACTION_CHAMPION_AUTOMARK_SECONDS = 180
+local FACTION_CHAMPION_AUTOMARK_INTERVAL = 0.2
+local FACTION_CHAMPION_AUTOMARK_UNITS = { "target", "mouseover" }
 local trampleIcon = "Interface\\Icons\\Ability_Druid_DemoralizingRoar"
 
 local RAID_MARKERS = {
@@ -71,6 +74,7 @@ function TrialCrusaderTracker:OnEnable()
 end
 
 function TrialCrusaderTracker:reset()
+    self:StopFactionChampionAutomark()
     self.championGuidsByRole = {}
     self.seenChampionGuids = {}
     self.markedRoles = {}
@@ -153,19 +157,22 @@ function TrialCrusaderTracker:rememberFactionChampion(guid)
     return true
 end
 
-function TrialCrusaderTracker:markFixedChampion(role)
+function TrialCrusaderTracker:markFixedChampionUnit(role, unitId)
     local marker = FIXED_MARKS[role]
-    if not marker or self.markedRoles[role] then
+    if not marker or self.markedRoles[role] or not unitId then
         return false
     end
 
-    local unitId = unitIdFromGuid(self.championGuidsByRole[role])
-    if unitId and markUnit(unitId, marker) then
+    if markUnit(unitId, marker) then
         self.markedRoles[role] = true
         return true
     end
 
     return false
+end
+
+function TrialCrusaderTracker:markFixedChampion(role)
+    return self:markFixedChampionUnit(role, unitIdFromGuid(self.championGuidsByRole[role]))
 end
 
 function TrialCrusaderTracker:markDiamondChampion()
@@ -190,6 +197,85 @@ function TrialCrusaderTracker:markDiamondChampion()
     end
 
     return false
+end
+
+local function getNow()
+    if type(GetTime) == "function" then
+        return GetTime()
+    end
+
+    return time()
+end
+
+function TrialCrusaderTracker:markFactionChampionUnit(unitId)
+    if type(UnitGUID) ~= "function" then
+        return false
+    end
+
+    local guid = UnitGUID(unitId)
+    local role = championRoleFromGuid(guid)
+    if not role then
+        return false
+    end
+
+    self:rememberFactionChampion(guid)
+    local fixedMarked = self:markFixedChampionUnit(role, unitId)
+    local diamondMarked = self:markDiamondChampion()
+
+    return fixedMarked or diamondMarked
+end
+
+function TrialCrusaderTracker:ScanFactionChampionAutomark()
+    if not self.factionChampionAutomarkActiveUntil then
+        return false
+    end
+
+    if self:AreChampionMarksDone() or getNow() > self.factionChampionAutomarkActiveUntil then
+        self:StopFactionChampionAutomark()
+        return false
+    end
+
+    local marked = false
+    for _, unitId in ipairs(FACTION_CHAMPION_AUTOMARK_UNITS) do
+        if self:markFactionChampionUnit(unitId) then
+            marked = true
+        end
+    end
+
+    if self:AreChampionMarksDone() then
+        self:StopFactionChampionAutomark()
+    end
+
+    return marked
+end
+
+function TrialCrusaderTracker:StopFactionChampionAutomark()
+    if self.factionChampionAutomarkTicker and type(self.factionChampionAutomarkTicker.Cancel) == "function" then
+        self.factionChampionAutomarkTicker:Cancel()
+    end
+
+    self.factionChampionAutomarkTicker = nil
+    self.factionChampionAutomarkActiveUntil = nil
+end
+
+function TrialCrusaderTracker:StartFactionChampionAutomark()
+    if self:AreChampionMarksDone() then
+        return false
+    end
+
+    self.factionChampionAutomarkActiveUntil = getNow() + FACTION_CHAMPION_AUTOMARK_SECONDS
+
+    if not self.factionChampionAutomarkTicker then
+        local timerApi = C_Timer
+        if timerApi and type(timerApi.NewTicker) == "function" then
+            self.factionChampionAutomarkTicker = timerApi.NewTicker(FACTION_CHAMPION_AUTOMARK_INTERVAL, function()
+                self:ScanFactionChampionAutomark()
+            end)
+        end
+    end
+
+    self:ScanFactionChampionAutomark()
+    return true
 end
 
 function TrialCrusaderTracker:AreChampionMarksDone()

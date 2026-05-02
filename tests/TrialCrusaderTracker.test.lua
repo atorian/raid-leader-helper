@@ -32,6 +32,14 @@ describe('TrialCrusaderTracker', function()
         }
     end
 
+    local function collectMarks()
+        local calls = {}
+        _G.SetRaidTarget = function(unitId, marker)
+            table.insert(calls, { unitId = unitId, marker = marker })
+        end
+        return calls
+    end
+
     before_each(function()
         originalSetRaidTarget = _G.SetRaidTarget
         originalGetRealNumRaidMembers = _G.GetRealNumRaidMembers
@@ -181,6 +189,56 @@ describe('TrialCrusaderTracker', function()
         assert.are.equal(0, setRaidTargetCalls)
         assert.are.same({}, TrialCrusaderTracker.championGuidsByRole)
         assert.are.same({}, TrialCrusaderTracker.seenChampionGuids)
+    end)
+
+    it('marks a target faction champion during automark scan', function()
+        local mocks = require('tests.mocks')
+        local hunterGuid = championGuid(34467)
+        local calls = collectMarks()
+
+        mocks:SetUnitGUID("target", hunterGuid)
+
+        TrialCrusaderTracker:StartFactionChampionAutomark()
+
+        assert.are.same({
+            {
+                unitId = "target",
+                marker = 8
+            }
+        }, calls)
+        assert.are.equal(hunterGuid, TrialCrusaderTracker.championGuidsByRole.HUNTER)
+    end)
+
+    it('marks a mouseover faction champion during automark scan', function()
+        local mocks = require('tests.mocks')
+        local warriorGuid = championGuid(34455)
+        local calls = collectMarks()
+
+        mocks:SetUnitGUID("mouseover", warriorGuid)
+
+        TrialCrusaderTracker:StartFactionChampionAutomark()
+
+        assert.are.same({
+            {
+                unitId = "mouseover",
+                marker = 2
+            }
+        }, calls)
+        assert.are.equal(warriorGuid, TrialCrusaderTracker.championGuidsByRole.WARRIOR)
+    end)
+
+    it('does not scan boss focus or raid units during automark scan', function()
+        local mocks = require('tests.mocks')
+        local calls = collectMarks()
+
+        mocks:SetUnitGUID("boss1", championGuid(34467))
+        mocks:SetUnitGUID("focus", championGuid(34455))
+        mocks:SetUnitGUID("raid1target", championGuid(34447))
+
+        TrialCrusaderTracker:StartFactionChampionAutomark()
+
+        assert.are.same({}, calls)
+        assert.are.same({}, TrialCrusaderTracker.championGuidsByRole)
     end)
 
     it('stops champion marking after all configured marks are done', function()

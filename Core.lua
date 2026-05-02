@@ -7,6 +7,9 @@ local COMBAT_END_CHECK_INTERVAL = 1
 local COMBAT_END_GRACE = 3
 local ENEMY_ACTIVITY_TIMEOUT = 6
 local IGOR_DEATH_COOLDOWN = 10
+local COMBATLOG_OBJECT_TYPE_PLAYER_FLAG = COMBATLOG_OBJECT_TYPE_PLAYER or 0x00000400
+local COMBATLOG_OBJECT_TYPE_PET_FLAG = COMBATLOG_OBJECT_TYPE_PET or 0x00001000
+local COMBATLOG_OBJECT_TYPE_GUARDIAN_FLAG = COMBATLOG_OBJECT_TYPE_GUARDIAN or 0x00002000
 local MODULE_ZONE_ANY = 0
 local ZONE_GATE_INSTANCE_ID_BY_INSTANCE_NAME = {
     ["Trial of the Crusader"] = 649,
@@ -41,6 +44,19 @@ local IGOR_DEATH_PHRASES = {
     "Игорь смотрит на %s с разочарованием.",
     "Игорь говорит: зато красиво.",
     "Игорь добавляет смерть %s в отчет."
+}
+
+local IGOR_PET_DEATH_PHRASES = {
+    "Игорь скорбит по питомцу %s.",
+    "Игорь считает, что %s заслуживал большего.",
+    "Игорь делает пометку: %s погиб за чужие ошибки.",
+    "Игорь говорит: минус лапа в рейде.",
+    "Игорь подозревает, что %s просто хотел домой.",
+    "Игорь смотрит на тело %s и молчит.",
+    "Игорь напоминает: питомцев тоже надо лечить.",
+    "Игорь записал смерть %s в отчет о халатности.",
+    "Игорь говорит: зверя жалко.",
+    "Игорь считает, что %s был лучшим из нас."
 }
 
 local IGNORED_COMBAT_ENEMIES = {
@@ -305,6 +321,16 @@ end
 
 local function isPlayer(flags)
     return bit.band(flags or 0, RLHelper.GROUP_AFFILIATION_ANY) > 0
+end
+
+local function isPlayerType(flags)
+    return bit.band(flags or 0, COMBATLOG_OBJECT_TYPE_PLAYER_FLAG) > 0
+end
+
+local function isPetOrGuardianType(flags)
+    local value = flags or 0
+    return bit.band(value, COMBATLOG_OBJECT_TYPE_PET_FLAG) > 0 or
+        bit.band(value, COMBATLOG_OBJECT_TYPE_GUARDIAN_FLAG) > 0
 end
 
 local function shouldIgnoreCombatEnemy(name)
@@ -599,18 +625,36 @@ function RLHelper:DispatchCombatEvent(eventData)
     end
 end
 
-function RLHelper:IsGroupMemberDeath(event)
+function RLHelper:GetGroupDeathMessagePhrases(event)
     if not event or event.event ~= "UNIT_DIED" then
-        return false
+        return nil
     end
 
+    local destFlags = event.destFlags or 0
     local groupFlags = bit.bor and bit.bor(self.GROUP_AFFILIATION_PARTY, self.GROUP_AFFILIATION_RAID) or
         (self.GROUP_AFFILIATION_PARTY + self.GROUP_AFFILIATION_RAID)
-    return bit.band(event.destFlags or 0, groupFlags) > 0
+    if bit.band(destFlags, groupFlags) <= 0 then
+        return nil
+    end
+
+    if isPlayerType(destFlags) then
+        return IGOR_DEATH_PHRASES
+    end
+
+    if isPetOrGuardianType(destFlags) then
+        return IGOR_PET_DEATH_PHRASES
+    end
+
+    return nil
 end
 
-function RLHelper:FormatIgorDeathMessage(playerName)
-    local phrase = IGOR_DEATH_PHRASES[math.random(#IGOR_DEATH_PHRASES)]
+function RLHelper:IsGroupMemberDeath(event)
+    return self:GetGroupDeathMessagePhrases(event) ~= nil
+end
+
+function RLHelper:FormatIgorDeathMessage(playerName, phrases)
+    local phraseList = phrases or IGOR_DEATH_PHRASES
+    local phrase = phraseList[math.random(#phraseList)]
     if phrase:find("%%s") then
         return string.format(phrase, playerName or "кто-то")
     end
@@ -623,7 +667,8 @@ function RLHelper:MaybeSendIgorDeathMessage(event)
         return false
     end
 
-    if not self:IsGroupMemberDeath(event) then
+    local phrases = self:GetGroupDeathMessagePhrases(event)
+    if not phrases then
         return false
     end
 
@@ -636,7 +681,7 @@ function RLHelper:MaybeSendIgorDeathMessage(event)
         return false
     end
 
-    SendChatMessage(self:FormatIgorDeathMessage(event.destName), "EMOTE")
+    SendChatMessage(self:FormatIgorDeathMessage(event.destName, phrases), "EMOTE")
     self.lastIgorDeathMessageAt = now
     return true
 end

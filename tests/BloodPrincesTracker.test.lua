@@ -102,13 +102,14 @@ describe('BloodPrincesTracker', function()
         assert.spy(log).was_not_called()
     end)
 
-    it('ignores vortex misses', function()
+    it('logs vortex misses to a group 5 healer', function()
         mocks.raidSize = 1
         mocks:SetRaidRosterInfo(1, "Прист", 5, "PRIEST")
 
         BloodPrincesTracker:handleEvent(vortexMiss("Источник", "Прист"))
 
-        assert.spy(log).was_not_called()
+        assert.spy(log).was_called_with(
+            "SOME DATE |cFFFFFFFFИсточник|r |TInterface\\Icons\\Spell_Shadow_Teleport:24:24:0:0|t |cFFFFFFFFПрист|r")
     end)
 
     it('does not filter the source player', function()

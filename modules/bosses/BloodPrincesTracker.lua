@@ -51,7 +51,7 @@ local function formatVortexHealerHit(ts, sourceName, destName)
 end
 
 function BloodPrincesTracker:handleEvent(event)
-    if event.event ~= "SPELL_DAMAGE" or not POWERFUL_VORTEX_SPELLS[event.spellId] then
+    if (event.event ~= "SPELL_DAMAGE" and event.event ~= "SPELL_MISSED") or not POWERFUL_VORTEX_SPELLS[event.spellId] then
         return
     end
 

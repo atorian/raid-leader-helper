@@ -1109,9 +1109,21 @@ function RLHelper:CreateMainFrame()
     frame.pullButtons = {}
 
     -- Buttons
+    frame.raidCheckBtn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
+    frame.raidCheckBtn:SetSize(32, 25)
+    frame.raidCheckBtn:SetPoint("LEFT", buttonContainer, "LEFT", 0, 0)
+    frame.raidCheckBtn:SetText("РЧ")
+    frame.raidCheckBtn:SetScript("OnClick", function()
+        if type(RaidCheck) == "function" then
+            RaidCheck()
+        else
+            print("RaidCheck недоступен")
+        end
+    end)
+
     local pull15Btn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
     pull15Btn:SetSize(60, 25)
-    pull15Btn:SetPoint("LEFT", buttonContainer, "LEFT", 0, 0)
+    pull15Btn:SetPoint("LEFT", frame.raidCheckBtn, "RIGHT", 4, 0)
     pull15Btn:SetText("Пул 15")
     frame.pullButtons[1] = pull15Btn
     pull15Btn:SetScript("OnClick", function()
@@ -1137,11 +1149,12 @@ function RLHelper:CreateMainFrame()
         RLHelper:CancelPullCountdown()
     end)
 
-    local resetBtn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
-    resetBtn:SetSize(25, 25)
-    resetBtn:SetPoint("LEFT", pull75Btn, "RIGHT", 4, 0)
-    resetBtn:SetText("C")
-    resetBtn:SetScript("OnClick", function()
+    frame.resetBtn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
+    frame.resetBtn:SetSize(25, 25)
+    frame.resetBtn:SetPoint("LEFT", pull75Btn, "RIGHT", 4, 0)
+    frame.resetBtn:SetText("C")
+    frame.resetBtn:Hide()
+    frame.resetBtn:SetScript("OnClick", function()
         RLHelper:ResetCombatState()
         RLHelper.mainFrame.logText:Clear()
         self:SendMessage("RLHelper_CombatEnded")
@@ -1149,7 +1162,8 @@ function RLHelper:CreateMainFrame()
 
     -- Create dropdown
     local dropdown = CreateFrame("Frame", "RLHelperCombatDropdown", buttonContainer, "UIDropDownMenuTemplate")
-    dropdown:SetPoint("LEFT", resetBtn, "RIGHT", -8, -2)
+    dropdown:SetPoint("LEFT", pull75Btn, "RIGHT", -8, -2)
+    frame.combatDropdown = dropdown
     UIDropDownMenu_SetWidth(dropdown, 50)
     dropdown:Show()
 

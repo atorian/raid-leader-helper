@@ -717,6 +717,278 @@ describe("RLHelper settings helpers", function()
     end)
 end)
 
+describe("RLHelper main frame raid check button", function()
+    local originalCreateFrame
+    local originalUIParent
+    local originalUIDropDownMenuSetWidth
+    local originalUIDropDownMenuCreateInfo
+    local originalUIDropDownMenuAddButton
+    local originalUIDropDownMenuInitialize
+    local originalUIDropDownMenuSetText
+    local originalRaidCheck
+    local originalPrint
+    local originalLayoutMainFrame
+    local originalSendMessage
+    local frames
+    local printedMessages
+
+    local function newFrame(frameType, name, parent, template)
+        local frame = {
+            frameType = frameType,
+            name = name,
+            parent = parent,
+            template = template,
+            visible = true,
+            points = {},
+            scripts = {}
+        }
+
+        function frame:SetSize(width, height)
+            self.width = width
+            self.height = height
+        end
+
+        function frame:SetPoint(...)
+            table.insert(self.points, { ... })
+        end
+
+        function frame:SetMovable(value)
+            self.movable = value
+        end
+
+        function frame:SetResizable(value)
+            self.resizable = value
+        end
+
+        function frame:SetMinResize(width, height)
+            self.minResize = { width, height }
+        end
+
+        function frame:SetMaxResize(width, height)
+            self.maxResize = { width, height }
+        end
+
+        function frame:EnableMouse(value)
+            self.mouseEnabled = value
+        end
+
+        function frame:RegisterForDrag(button)
+            self.dragButton = button
+        end
+
+        function frame:SetScript(event, callback)
+            self.scripts[event] = callback
+        end
+
+        function frame:SetBackdrop(backdrop)
+            self.backdrop = backdrop
+        end
+
+        function frame:CreateFontString()
+            return newFrame("FontString", nil, self)
+        end
+
+        function frame:SetText(text)
+            self.text = text
+        end
+
+        function frame:GetFontString()
+            return {
+                SetFont = function(_, font, size, flags)
+                    frame.font = { font, size, flags }
+                end,
+                SetPoint = function(_, ...)
+                    frame.fontPoint = { ... }
+                end
+            }
+        end
+
+        function frame:SetNormalTexture(texture)
+            self.normalTexture = texture
+        end
+
+        function frame:SetPushedTexture(texture)
+            self.pushedTexture = texture
+        end
+
+        function frame:SetHighlightTexture(texture)
+            self.highlightTexture = texture
+        end
+
+        function frame:SetDisabledTexture(texture)
+            self.disabledTexture = texture
+        end
+
+        function frame:SetHeight(height)
+            self.height = height
+        end
+
+        function frame:Show()
+            self.visible = true
+        end
+
+        function frame:Hide()
+            self.visible = false
+        end
+
+        function frame:SetFont(font, size, flags)
+            self.font = { font, size, flags }
+        end
+
+        function frame:SetJustifyV(value)
+            self.justifyV = value
+        end
+
+        function frame:SetJustifyH(value)
+            self.justifyH = value
+        end
+
+        function frame:SetFading(value)
+            self.fading = value
+        end
+
+        function frame:SetMaxLines(value)
+            self.maxLines = value
+        end
+
+        function frame:EnableMouseWheel(value)
+            self.mouseWheelEnabled = value
+        end
+
+        function frame:SetHyperlinksEnabled(value)
+            self.hyperlinksEnabled = value
+        end
+
+        function frame:SetIndentedWordWrap(value)
+            self.indentedWordWrap = value
+        end
+
+        function frame:SetInsertMode(value)
+            self.insertMode = value
+        end
+
+        function frame:StartMoving()
+            self.startedMoving = true
+        end
+
+        function frame:StopMovingOrSizing()
+            self.stoppedMoving = true
+        end
+
+        function frame:StartSizing(direction)
+            self.startedSizing = direction
+        end
+
+        function frame:Clear()
+            self.cleared = true
+        end
+
+        function frame:ScrollUp()
+            self.scrolledUp = true
+        end
+
+        function frame:ScrollDown()
+            self.scrolledDown = true
+        end
+
+        table.insert(frames, frame)
+        return frame
+    end
+
+    before_each(function()
+        originalCreateFrame = _G.CreateFrame
+        originalUIParent = _G.UIParent
+        originalUIDropDownMenuSetWidth = _G.UIDropDownMenu_SetWidth
+        originalUIDropDownMenuCreateInfo = _G.UIDropDownMenu_CreateInfo
+        originalUIDropDownMenuAddButton = _G.UIDropDownMenu_AddButton
+        originalUIDropDownMenuInitialize = _G.UIDropDownMenu_Initialize
+        originalUIDropDownMenuSetText = _G.UIDropDownMenu_SetText
+        originalRaidCheck = _G.RaidCheck
+        originalPrint = _G.print
+        originalLayoutMainFrame = RLHelper.LayoutMainFrame
+        originalSendMessage = RLHelper.SendMessage
+        frames = {}
+        printedMessages = {}
+
+        _G.UIParent = newFrame("Frame", "UIParent")
+        _G.CreateFrame = newFrame
+        _G.UIDropDownMenu_SetWidth = function(frame, width)
+            frame.dropdownWidth = width
+        end
+        _G.UIDropDownMenu_CreateInfo = function()
+            return {}
+        end
+        _G.UIDropDownMenu_AddButton = function()
+        end
+        _G.UIDropDownMenu_Initialize = function(frame, initialize)
+            frame.initialize = initialize
+        end
+        _G.UIDropDownMenu_SetText = function(frame, text)
+            frame.text = text
+        end
+        _G.print = function(message)
+            table.insert(printedMessages, message)
+        end
+
+        RLHelper.mainFrame = nil
+        RLHelper.currentCombat = {}
+        RLHelper.combatHistory = {}
+        RLHelper.LayoutMainFrame = function()
+        end
+        RLHelper.SendMessage = function()
+        end
+    end)
+
+    after_each(function()
+        _G.CreateFrame = originalCreateFrame
+        _G.UIParent = originalUIParent
+        _G.UIDropDownMenu_SetWidth = originalUIDropDownMenuSetWidth
+        _G.UIDropDownMenu_CreateInfo = originalUIDropDownMenuCreateInfo
+        _G.UIDropDownMenu_AddButton = originalUIDropDownMenuAddButton
+        _G.UIDropDownMenu_Initialize = originalUIDropDownMenuInitialize
+        _G.UIDropDownMenu_SetText = originalUIDropDownMenuSetText
+        _G.RaidCheck = originalRaidCheck
+        _G.print = originalPrint
+        RLHelper.LayoutMainFrame = originalLayoutMainFrame
+        RLHelper.SendMessage = originalSendMessage
+    end)
+
+    it("adds Raid Check before pull buttons and hides cleanup", function()
+        RLHelper:CreateMainFrame()
+
+        assert.equals("РЧ", RLHelper.mainFrame.raidCheckBtn.text)
+        assert.equals(32, RLHelper.mainFrame.raidCheckBtn.width)
+        assert.equals(25, RLHelper.mainFrame.raidCheckBtn.height)
+        assert.are.same({ "LEFT", RLHelper.mainFrame.buttonContainer, "LEFT", 0, 0 }, RLHelper.mainFrame.raidCheckBtn.points[1])
+        assert.are.same({ "LEFT", RLHelper.mainFrame.raidCheckBtn, "RIGHT", 4, 0 }, RLHelper.mainFrame.pullButtons[1].points[1])
+        assert.are.same({ "LEFT", RLHelper.mainFrame.pullButtons[1], "RIGHT", 4, 0 }, RLHelper.mainFrame.pullButtons[2].points[1])
+        assert.is_false(RLHelper.mainFrame.resetBtn.visible)
+        assert.are.same({ "LEFT", RLHelper.mainFrame.pullButtons[2], "RIGHT", -8, -2 }, RLHelper.mainFrame.combatDropdown.points[1])
+    end)
+
+    it("calls the global RaidCheck function", function()
+        local raidCheckCalls = 0
+        _G.RaidCheck = function()
+            raidCheckCalls = raidCheckCalls + 1
+        end
+
+        RLHelper:CreateMainFrame()
+        RLHelper.mainFrame.raidCheckBtn.scripts.OnClick()
+
+        assert.equals(1, raidCheckCalls)
+        assert.are.same({}, printedMessages)
+    end)
+
+    it("prints a warning when RaidCheck is unavailable", function()
+        _G.RaidCheck = nil
+
+        RLHelper:CreateMainFrame()
+        RLHelper.mainFrame.raidCheckBtn.scripts.OnClick()
+
+        assert.are.same({ "RaidCheck недоступен" }, printedMessages)
+    end)
+end)
+
 describe("RLHelper pull controls", function()
     local originalSlashCmdList
     local originalDBM

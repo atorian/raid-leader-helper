@@ -1114,10 +1114,10 @@ function RLHelper:CreateMainFrame()
     frame.raidCheckBtn:SetPoint("LEFT", buttonContainer, "LEFT", 0, 0)
     frame.raidCheckBtn:SetText("РЧ")
     frame.raidCheckBtn:SetScript("OnClick", function()
-        if type(RaidCheck) == "function" then
-            RaidCheck()
+        if type(DoReadyCheck) == "function" then
+            DoReadyCheck()
         else
-            print("RaidCheck недоступен")
+            print("ReadyCheck недоступен")
         end
     end)
 

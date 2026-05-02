@@ -725,7 +725,7 @@ describe("RLHelper main frame raid check button", function()
     local originalUIDropDownMenuAddButton
     local originalUIDropDownMenuInitialize
     local originalUIDropDownMenuSetText
-    local originalRaidCheck
+    local originalDoReadyCheck
     local originalPrint
     local originalLayoutMainFrame
     local originalSendMessage
@@ -903,7 +903,7 @@ describe("RLHelper main frame raid check button", function()
         originalUIDropDownMenuAddButton = _G.UIDropDownMenu_AddButton
         originalUIDropDownMenuInitialize = _G.UIDropDownMenu_Initialize
         originalUIDropDownMenuSetText = _G.UIDropDownMenu_SetText
-        originalRaidCheck = _G.RaidCheck
+        originalDoReadyCheck = _G.DoReadyCheck
         originalPrint = _G.print
         originalLayoutMainFrame = RLHelper.LayoutMainFrame
         originalSendMessage = RLHelper.SendMessage
@@ -947,7 +947,7 @@ describe("RLHelper main frame raid check button", function()
         _G.UIDropDownMenu_AddButton = originalUIDropDownMenuAddButton
         _G.UIDropDownMenu_Initialize = originalUIDropDownMenuInitialize
         _G.UIDropDownMenu_SetText = originalUIDropDownMenuSetText
-        _G.RaidCheck = originalRaidCheck
+        _G.DoReadyCheck = originalDoReadyCheck
         _G.print = originalPrint
         RLHelper.LayoutMainFrame = originalLayoutMainFrame
         RLHelper.SendMessage = originalSendMessage
@@ -966,26 +966,26 @@ describe("RLHelper main frame raid check button", function()
         assert.are.same({ "LEFT", RLHelper.mainFrame.pullButtons[2], "RIGHT", -8, -2 }, RLHelper.mainFrame.combatDropdown.points[1])
     end)
 
-    it("calls the global RaidCheck function", function()
-        local raidCheckCalls = 0
-        _G.RaidCheck = function()
-            raidCheckCalls = raidCheckCalls + 1
+    it("calls the global DoReadyCheck function", function()
+        local readyCheckCalls = 0
+        _G.DoReadyCheck = function()
+            readyCheckCalls = readyCheckCalls + 1
         end
 
         RLHelper:CreateMainFrame()
         RLHelper.mainFrame.raidCheckBtn.scripts.OnClick()
 
-        assert.equals(1, raidCheckCalls)
+        assert.equals(1, readyCheckCalls)
         assert.are.same({}, printedMessages)
     end)
 
-    it("prints a warning when RaidCheck is unavailable", function()
-        _G.RaidCheck = nil
+    it("prints a warning when DoReadyCheck is unavailable", function()
+        _G.DoReadyCheck = nil
 
         RLHelper:CreateMainFrame()
         RLHelper.mainFrame.raidCheckBtn.scripts.OnClick()
 
-        assert.are.same({ "RaidCheck недоступен" }, printedMessages)
+        assert.are.same({ "ReadyCheck недоступен" }, printedMessages)
     end)
 end)
 

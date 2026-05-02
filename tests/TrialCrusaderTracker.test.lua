@@ -9,6 +9,8 @@ end
 
 describe('TrialCrusaderTracker', function()
     local log
+    local debugLog
+    local originalDebug
     local originalSetRaidTarget
     local originalGetRealNumRaidMembers
     local originalGetTime
@@ -48,6 +50,11 @@ describe('TrialCrusaderTracker', function()
         log = spy.new(function()
         end)
         TrialCrusaderTracker.log = log
+        originalDebug = TrialCrusaderTracker.debug
+        debugLog = spy.new(function()
+        end)
+        TrialCrusaderTracker.debug = debugLog
+        TrialCrusaderTracker.factionChampionStartFragments = {}
         TrialCrusaderTracker:reset()
     end)
 
@@ -55,6 +62,8 @@ describe('TrialCrusaderTracker', function()
         _G.SetRaidTarget = originalSetRaidTarget
         _G.GetRealNumRaidMembers = originalGetRealNumRaidMembers
         _G.GetTime = originalGetTime
+        TrialCrusaderTracker.debug = originalDebug
+        TrialCrusaderTracker.factionChampionStartFragments = {}
         require('tests.mocks'):ClearUnitGUIDs()
     end)
 
@@ -362,6 +371,25 @@ describe('TrialCrusaderTracker', function()
 
         assert.is_nil(TrialCrusaderTracker.factionChampionAutomarkTicker)
         assert.is_nil(TrialCrusaderTracker.factionChampionAutomarkActiveUntil)
+    end)
+
+    it('logs Trial of the Crusader boss yell and emote messages for debug collection', function()
+        TrialCrusaderTracker:CHAT_MSG_MONSTER_YELL("Champions, attack!", "Tirion Fordring")
+        TrialCrusaderTracker:CHAT_MSG_RAID_BOSS_EMOTE("The next battle begins.", "Argent Coliseum")
+
+        assert.spy(debugLog).was_called_with(
+            "TrialCrusaderTracker CHAT_MSG_MONSTER_YELL sender='Tirion Fordring' text='Champions, attack!'")
+        assert.spy(debugLog).was_called_with(
+            "TrialCrusaderTracker CHAT_MSG_RAID_BOSS_EMOTE sender='Argent Coliseum' text='The next battle begins.'")
+    end)
+
+    it('starts automark when a boss message contains a configured trigger fragment', function()
+        TrialCrusaderTracker.factionChampionStartFragments = { "Champions" }
+
+        local started = TrialCrusaderTracker:CHAT_MSG_MONSTER_YELL("Champions, attack!", "Tirion Fordring")
+
+        assert.is_true(started)
+        assert.are.equal(GetTime() + 180, TrialCrusaderTracker.factionChampionAutomarkActiveUntil)
     end)
 
     it('stops champion marking after all configured marks are done', function()

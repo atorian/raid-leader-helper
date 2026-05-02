@@ -60,6 +60,10 @@ local CHAMPION_ROLE_BY_NPC_ID = {
     [34451] = "BALANCE_DRUID" -- Birana Stormhoof
 }
 
+local FACTION_CHAMPION_START_FRAGMENTS = {}
+
+TrialCrusaderTracker.factionChampionStartFragments = FACTION_CHAMPION_START_FRAGMENTS
+
 function TrialCrusaderTracker:OnInitialize()
     RLHelper:Debug("TrialCrusaderTracker: Инициализация")
     self.log = function(...)
@@ -67,6 +71,8 @@ function TrialCrusaderTracker:OnInitialize()
     end
     self:reset()
     self:RegisterMessage("RLHelper_CombatEnded", "reset")
+    self:RegisterEvent("CHAT_MSG_MONSTER_YELL")
+    self:RegisterEvent("CHAT_MSG_RAID_BOSS_EMOTE")
 end
 
 function TrialCrusaderTracker:OnEnable()
@@ -85,6 +91,11 @@ end
 local function formatIcehowlTrample(ts, playerName)
     return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t размазало об стену", date("%H:%M:%S", ts), playerName,
         trampleIcon)
+end
+
+local function formatBossMessageDebug(eventName, message, sender)
+    return string.format("TrialCrusaderTracker %s sender='%s' text='%s'", eventName, tostring(sender or ""),
+        tostring(message or ""))
 end
 
 local function creatureIdFromGuid(guid)
@@ -295,6 +306,42 @@ function TrialCrusaderTracker:AreChampionMarksDone()
 
     self.allChampionMarksDone = true
     return true
+end
+
+function TrialCrusaderTracker.debug(message)
+    RLHelper:Debug(message)
+end
+
+function TrialCrusaderTracker:shouldStartFactionChampionAutomark(message)
+    if type(message) ~= "string" then
+        return false
+    end
+
+    for _, fragment in ipairs(self.factionChampionStartFragments or FACTION_CHAMPION_START_FRAGMENTS) do
+        if fragment ~= "" and message:find(fragment, 1, true) then
+            return true
+        end
+    end
+
+    return false
+end
+
+function TrialCrusaderTracker:handleBossMessage(eventName, message, sender)
+    self.debug(formatBossMessageDebug(eventName, message, sender))
+
+    if self:shouldStartFactionChampionAutomark(message) then
+        return self:StartFactionChampionAutomark()
+    end
+
+    return false
+end
+
+function TrialCrusaderTracker:CHAT_MSG_MONSTER_YELL(message, sender)
+    return self:handleBossMessage("CHAT_MSG_MONSTER_YELL", message, sender)
+end
+
+function TrialCrusaderTracker:CHAT_MSG_RAID_BOSS_EMOTE(message, sender)
+    return self:handleBossMessage("CHAT_MSG_RAID_BOSS_EMOTE", message, sender)
 end
 
 function TrialCrusaderTracker:handleEvent(event)

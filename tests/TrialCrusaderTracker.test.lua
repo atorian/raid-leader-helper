@@ -90,7 +90,7 @@ describe('TrialCrusaderTracker', function()
     it('marks faction champions once they appear in combat log', function()
         local mocks = require('tests.mocks')
         local hunterGuid = championGuid(34467)
-        local warriorGuid = championGuid(34455)
+        local warriorGuid = championGuid(34453)
         local priestGuid = championGuid(34447)
         local warlockGuid = championGuid(34450)
         local deathKnightGuid = championGuid(34458)
@@ -107,7 +107,7 @@ describe('TrialCrusaderTracker', function()
         end
 
         TrialCrusaderTracker:handleEvent(damageFromChampion(34467))
-        TrialCrusaderTracker:handleEvent(damageFromChampion(34455))
+        TrialCrusaderTracker:handleEvent(damageFromChampion(34453))
         TrialCrusaderTracker:handleEvent(damageFromChampion(34447))
         TrialCrusaderTracker:handleEvent(damageFromChampion(34450))
         TrialCrusaderTracker:handleEvent(damageFromChampion(34458))
@@ -135,6 +135,26 @@ describe('TrialCrusaderTracker', function()
             {
                 unitId = "boss1",
                 marker = 8
+            }
+        }, calls)
+    end)
+
+    it('marks rogue faction champions with cross', function()
+        local mocks = require('tests.mocks')
+        local rogueGuid = championGuid(34454)
+        local calls = {}
+
+        mocks:SetUnitGUID("boss1", rogueGuid)
+        _G.SetRaidTarget = function(unitId, marker)
+            table.insert(calls, { unitId = unitId, marker = marker })
+        end
+
+        TrialCrusaderTracker:handleEvent(damageFromChampion(34454))
+
+        assert.are.same({
+            {
+                unitId = "boss1",
+                marker = 7
             }
         }, calls)
     end)
@@ -223,7 +243,7 @@ describe('TrialCrusaderTracker', function()
 
     it('marks a mouseover faction champion during automark scan', function()
         local mocks = require('tests.mocks')
-        local warriorGuid = championGuid(34455)
+        local warriorGuid = championGuid(34453)
         local calls = collectMarks()
 
         mocks:SetUnitGUID("mouseover", warriorGuid)
@@ -244,7 +264,7 @@ describe('TrialCrusaderTracker', function()
         local calls = collectMarks()
 
         mocks:SetUnitGUID("boss1", championGuid(34467))
-        mocks:SetUnitGUID("focus", championGuid(34455))
+        mocks:SetUnitGUID("focus", championGuid(34453))
         mocks:SetUnitGUID("raid1target", championGuid(34447))
 
         TrialCrusaderTracker:StartFactionChampionAutomark()
@@ -332,10 +352,11 @@ describe('TrialCrusaderTracker', function()
         collectMarks()
         local guids = {
             hunter = championGuid(34467),
-            warrior = championGuid(34455),
+            warrior = championGuid(34453),
             priest = championGuid(34447),
             warlock = championGuid(34450),
             deathKnight = championGuid(34458),
+            rogue = championGuid(34454),
             shaman = championGuid(34463)
         }
 
@@ -348,6 +369,8 @@ describe('TrialCrusaderTracker', function()
         mocks:SetUnitGUID("target", guids.warlock)
         TrialCrusaderTracker:ScanFactionChampionAutomark()
         mocks:SetUnitGUID("target", guids.deathKnight)
+        TrialCrusaderTracker:ScanFactionChampionAutomark()
+        mocks:SetUnitGUID("target", guids.rogue)
         TrialCrusaderTracker:ScanFactionChampionAutomark()
         mocks:SetUnitGUID("target", guids.shaman)
         TrialCrusaderTracker:ScanFactionChampionAutomark()
@@ -408,10 +431,11 @@ describe('TrialCrusaderTracker', function()
         local mocks = require('tests.mocks')
         local guids = {
             hunter = championGuid(34467),
-            warrior = championGuid(34455),
+            warrior = championGuid(34453),
             priest = championGuid(34447),
             warlock = championGuid(34450),
             deathKnight = championGuid(34458),
+            rogue = championGuid(34454),
             shaman = championGuid(34463),
             paladin = championGuid(34445)
         }
@@ -423,6 +447,7 @@ describe('TrialCrusaderTracker', function()
         mocks:SetUnitGUID("boss4", guids.warlock)
         mocks:SetUnitGUID("boss5", guids.deathKnight)
         mocks:SetUnitGUID("focus", guids.shaman)
+        mocks:SetUnitGUID("mouseover", guids.rogue)
         mocks:SetUnitGUID("target", guids.paladin)
 
         _G.SetRaidTarget = function()
@@ -430,10 +455,11 @@ describe('TrialCrusaderTracker', function()
         end
 
         TrialCrusaderTracker:handleEvent(damageFromChampion(34467))
-        TrialCrusaderTracker:handleEvent(damageFromChampion(34455))
+        TrialCrusaderTracker:handleEvent(damageFromChampion(34453))
         TrialCrusaderTracker:handleEvent(damageFromChampion(34447))
         TrialCrusaderTracker:handleEvent(damageFromChampion(34450))
         TrialCrusaderTracker:handleEvent(damageFromChampion(34458))
+        TrialCrusaderTracker:handleEvent(damageFromChampion(34454))
         TrialCrusaderTracker:handleEvent(damageFromChampion(34463))
 
         assert.is_true(TrialCrusaderTracker:AreChampionMarksDone())

@@ -11,7 +11,9 @@ TrialCrusaderTracker.bossIds = {
     [34467] = "Чемпионы фракций",
     [34448] = "Чемпионы фракций",
     [34475] = "Чемпионы фракций",
-    [34455] = "Чемпионы фракций",
+    [34453] = "Чемпионы фракций",
+    [34454] = "Чемпионы фракций",
+    [34472] = "Чемпионы фракций",
     [34466] = "Чемпионы фракций",
     [34447] = "Чемпионы фракций",
     [34473] = "Чемпионы фракций",
@@ -43,6 +45,7 @@ local RAID_MARKERS = {
     DIAMOND = 3,
     TRIANGLE = 4,
     MOON = 5,
+    CROSS = 7,
     SKULL = 8
 }
 
@@ -51,7 +54,8 @@ local FIXED_MARKS = {
     WARRIOR = RAID_MARKERS.CIRCLE,
     PRIEST = RAID_MARKERS.STAR,
     WARLOCK = RAID_MARKERS.MOON,
-    DEATH_KNIGHT = RAID_MARKERS.TRIANGLE
+    DEATH_KNIGHT = RAID_MARKERS.TRIANGLE,
+    ROGUE = RAID_MARKERS.CROSS
 }
 
 local DIAMOND_PRIORITY = {
@@ -65,7 +69,10 @@ local CHAMPION_ROLE_BY_NPC_ID = {
     [34448] = "HUNTER", -- Ruj'kah
 
     [34475] = "WARRIOR", -- Shocuul
-    [34455] = "WARRIOR", -- Narrhok Steelbreaker
+    [34453] = "WARRIOR", -- Narrhok Steelbreaker
+
+    [34454] = "ROGUE", -- Maz'dinah
+    [34472] = "ROGUE", -- Irieth Shadowstep
 
     [34466] = "PRIEST", -- Anthar Forgemender
     [34447] = "PRIEST", -- Caiphus the Stern

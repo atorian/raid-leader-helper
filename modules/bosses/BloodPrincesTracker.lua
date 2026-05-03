@@ -2,6 +2,11 @@ local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local BloodPrincesTracker = RLHelper:NewModule("BloodPrincesTracker", "AceEvent-3.0")
 BloodPrincesTracker.receivesCombatEvents = true
 BloodPrincesTracker.zoneGateInstanceId = 631 -- Icecrown Citadel
+BloodPrincesTracker.bossIds = {
+    [37970] = "Кровавый совет", -- Prince Valanar
+    [37972] = "Кровавый совет", -- Prince Keleseth
+    [37973] = "Кровавый совет" -- Prince Taldaram
+}
 
 local POWERFUL_VORTEX_SPELLS = {
     [72038] = true,

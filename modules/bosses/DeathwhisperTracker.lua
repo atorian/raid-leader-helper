@@ -1,5 +1,8 @@
 local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local DeathwhisperTracker = RLHelper:NewModule("DeathwhisperTracker", "AceEvent-3.0")
+DeathwhisperTracker.bossIds = {
+    [36855] = "Леди Смертный Шепот"
+}
 DeathwhisperTracker.receivesCombatEvents = true
 
 local TRACKED_SPELLS = {

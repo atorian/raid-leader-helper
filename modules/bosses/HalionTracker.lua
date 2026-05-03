@@ -2,6 +2,10 @@ local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local HalionTracker = RLHelper:NewModule("HalionTracker", "AceEvent-3.0")
 HalionTracker.receivesCombatEvents = true
 HalionTracker.zoneGateInstanceId = 724 -- The Ruby Sanctum
+HalionTracker.bossIds = {
+    [39863] = "Халион",
+    [40142] = "Халион"
+}
 
 function HalionTracker:OnInitialize()
     RLHelper:Debug("HalionTracker инициализируется")

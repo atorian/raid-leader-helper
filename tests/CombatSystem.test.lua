@@ -11,8 +11,21 @@ local function count(tbl)
     return total
 end
 
+local function npcGuid(npcId, spawnId)
+    return string.format("0xF13000%04X%06X", npcId, spawnId or npcId)
+end
+
+local function setBossModules(modules)
+    RLHelper.IterateModules = function()
+        return ipairs(modules)
+    end
+end
+
 describe("Боевая система", function()
+    local originalIterateModules
+
     before_each(function()
+        originalIterateModules = RLHelper.IterateModules
         RLHelper:StopCombatTicker()
         RLHelper.inCombat = false
         RLHelper.lastCombatActivityAt = nil
@@ -55,6 +68,10 @@ describe("Боевая система", function()
         M.UnitAffectingCombat3 = false
     end)
 
+    after_each(function()
+        RLHelper.IterateModules = originalIterateModules
+    end)
+
     it("начинает бой когда игрок входит в бой", function()
         RLHelper:PLAYER_REGEN_DISABLED()
 
@@ -72,31 +89,74 @@ describe("Боевая система", function()
         assert.are.equal("Враг1", RLHelper.currentCombat.firstEnemy)
     end)
 
-    it("переименовывает бой в имя босса если босс появился после обычного врага", function()
+    it("переименовывает бой в имя босса по известному npc id без boss1", function()
         M.UnitAffectingCombat1 = false
+        RLHelper.currentInstanceId = 631
+        setBossModules({
+            {
+                name = "BloodQueenTracker",
+                receivesCombatEvents = true,
+                zoneGateInstanceId = 631,
+                bossIds = {
+                    [37955] = "Кровавая королева Лана'тель"
+                }
+            }
+        })
 
         RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Адд"):ToPlayer("Игрок1"):Damage(100):Build())
 
-        local bossEvent = { Builder:New():FromEnemy("Босс"):ToPlayer("Игрок1"):Damage(100):Build() }
-        M:SetUnitGUID("boss1", "0xF130000000000001")
-        M:SetUnitName("boss1", "Босс")
+        local bossEvent = { Builder:New():FromEnemy("Кровавая королева Лана'тель"):ToPlayer("Игрок1"):Damage(100):Build() }
+        bossEvent[4] = npcGuid(37955)
 
         RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(bossEvent))
 
         assert.is_true(RLHelper.currentCombat.isBoss)
-        assert.are.equal("Босс", RLHelper.currentCombat.firstEnemy)
+        assert.are.equal("Кровавая королева Лана'тель", RLHelper.currentCombat.firstEnemy)
     end)
 
-    it("проверяет только boss1 при определении босса", function()
+    it("определяет босса по destGUID если босс является целью события", function()
         M.UnitAffectingCombat1 = false
+        RLHelper.currentInstanceId = 724
+        setBossModules({
+            {
+                name = "HalionTracker",
+                receivesCombatEvents = true,
+                zoneGateInstanceId = 724,
+                bossIds = {
+                    [39863] = "Халион"
+                }
+            }
+        })
 
-        local bossEvent = { Builder:New():FromEnemy("Босс2"):ToPlayer("Игрок1"):Damage(100):Build() }
-        M:SetUnitGUID("boss2", bossEvent[4])
-        M:SetUnitName("boss2", "Босс2")
+        local bossEvent = { Builder:New():FromPlayer("Игрок1"):ToEnemy("Халион"):SpellDamage(12345, "Удар", 100):Build() }
+        bossEvent[7] = npcGuid(39863)
 
         RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(bossEvent))
 
+        assert.is_true(RLHelper.currentCombat.isBoss)
+        assert.are.equal("Халион", RLHelper.currentCombat.firstEnemy)
+    end)
+
+    it("не использует boss1 для определения боссового боя", function()
+        M.UnitAffectingCombat1 = false
+        RLHelper.currentInstanceId = 631
+        M:SetUnitGUID("boss1", npcGuid(37955))
+        M:SetUnitName("boss1", "Кровавая королева Лана'тель")
+        setBossModules({
+            {
+                name = "BloodQueenTracker",
+                receivesCombatEvents = true,
+                zoneGateInstanceId = 631,
+                bossIds = {
+                    [37955] = "Кровавая королева Лана'тель"
+                }
+            }
+        })
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Адд"):ToPlayer("Игрок1"):Damage(100):Build())
+
         assert.is_false(RLHelper.currentCombat.isBoss)
+        assert.are.equal("Адд", RLHelper.currentCombat.firstEnemy)
     end)
 
     it("игнорирует World Invisible Trigger как название боя", function()
@@ -162,11 +222,23 @@ describe("Боевая система", function()
     it("сохраняет боссовый бой когда включена история только боссов", function()
         RLHelper.db.profile.bossOnlyHistory = true
         M.UnitAffectingCombat1 = false
+        RLHelper.currentInstanceId = 631
+        setBossModules({
+            {
+                name = "BloodPrincesTracker",
+                receivesCombatEvents = true,
+                zoneGateInstanceId = 631,
+                bossIds = {
+                    [37970] = "Кровавый совет",
+                    [37972] = "Кровавый совет",
+                    [37973] = "Кровавый совет"
+                }
+            }
+        })
 
         RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Адд"):ToPlayer("Игрок1"):Damage(100):Build())
-        local bossEvent = { Builder:New():FromEnemy("Адд2"):ToPlayer("Игрок1"):Damage(100):Build() }
-        M:SetUnitGUID("boss1", "0xF130000000000001")
-        M:SetUnitName("boss1", "Босс")
+        local bossEvent = { Builder:New():FromEnemy("Принц Валанар"):ToPlayer("Игрок1"):Damage(100):Build() }
+        bossEvent[4] = npcGuid(37970)
 
         RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(bossEvent))
         RLHelper:OnCombatLogEvent("test message")
@@ -180,7 +252,7 @@ describe("Боевая система", function()
         assert.is_true(RLHelper:EvaluateCombatEnd("test"))
         assert.are.equal(1, #RLHelper.combatHistory)
         assert.is_true(RLHelper.combatHistory[1].isBoss)
-        assert.are.equal("Босс", RLHelper.combatHistory[1].firstEnemy)
-        assert.are.equal("Босс", RLHelper.db.profile.combatHistory[1].firstEnemy)
+        assert.are.equal("Кровавый совет", RLHelper.combatHistory[1].firstEnemy)
+        assert.are.equal("Кровавый совет", RLHelper.db.profile.combatHistory[1].firstEnemy)
     end)
 end)

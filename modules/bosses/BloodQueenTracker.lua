@@ -2,6 +2,9 @@ local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local BloodQueenTracker = RLHelper:NewModule("BloodQueenTracker", "AceEvent-3.0")
 BloodQueenTracker.receivesCombatEvents = true
 BloodQueenTracker.zoneGateInstanceId = 631 -- Icecrown Citadel
+BloodQueenTracker.bossIds = {
+    [37955] = "Кровавая королева Лана'тель"
+}
 
 local BLOODBOLT_SPLASH_SPELLS = {
     [71483] = true,

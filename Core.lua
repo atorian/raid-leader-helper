@@ -291,16 +291,20 @@ local function shouldIgnoreCombatEnemy(name)
     return IGNORED_COMBAT_ENEMIES[name] == true
 end
 
-local function getBoss1Name()
-    if type(UnitExists) == "function" and not UnitExists("boss1") then
+local function creatureIdFromGuid(guid)
+    if type(RLHelper.GetCreatureId) == "function" then
+        return RLHelper.GetCreatureId(guid)
+    end
+
+    return type(guid) == "string" and tonumber(guid:sub(9, 12), 16) or nil
+end
+
+local function bossNameFromModule(module, npcId)
+    if type(module) ~= "table" or type(module.bossIds) ~= "table" or type(npcId) ~= "number" then
         return nil
     end
 
-    if type(UnitName) == "function" then
-        return UnitName("boss1")
-    end
-
-    return nil
+    return module.bossIds[npcId]
 end
 
 local LADY_KONTROL = 71289
@@ -592,12 +596,32 @@ function affectingGroup(event)
     return isPlayer(sourceFlags) or isPlayer(destFlags)
 end
 
+function RLHelper:GetKnownBossNameFromCombatEvent(event)
+    if type(self.IterateModules) ~= "function" then
+        return nil
+    end
+
+    local sourceNpcId = creatureIdFromGuid(event.sourceGUID)
+    local destNpcId = creatureIdFromGuid(event.destGUID)
+
+    for _, module in self:IterateModules() do
+        if self:ShouldDispatchCombatEventToModule(module) then
+            local bossName = bossNameFromModule(module, sourceNpcId) or bossNameFromModule(module, destNpcId)
+            if bossName then
+                return bossName
+            end
+        end
+    end
+
+    return nil
+end
+
 function RLHelper:MarkBossCombat(event)
     if not self.currentCombat or self.currentCombat.isBoss or not affectingGroup(event) then
         return false
     end
 
-    local bossName = getBoss1Name()
+    local bossName = self:GetKnownBossNameFromCombatEvent(event)
     if not bossName then
         return false
     end

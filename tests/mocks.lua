@@ -51,6 +51,7 @@ local unitNames = {}
 local raidRoster = {}
 local glyphSockets = {}
 local threatStates = {}
+local addons = {}
 
 -- Функция для установки GUID'а определенному юниту
 function M:SetUnitGUID(unitId, guid)
@@ -215,6 +216,10 @@ C_Timer = {
 }
 
 function M:GetAddon(name)
+    if addons[name] then
+        return addons[name]
+    end
+
     local addon = {
         Debug = function()
         end
@@ -245,6 +250,7 @@ function M:GetAddon(name)
             end
         }
     end
+    addons[name] = addon
     return addon
 end
 
@@ -302,6 +308,10 @@ function M:NewAddon(name)
 
     module.IsGroupInCombat = isGroupInCombat
     module.C_Timer = C_Timer
+    function module:NewModule(moduleName, mixins)
+        return M:NewModule(moduleName, mixins)
+    end
+    addons[name] = module
 
     return module
 end

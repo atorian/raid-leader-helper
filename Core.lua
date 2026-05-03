@@ -6,10 +6,6 @@ local GetUnitIdFromGUID = RLHelper.GetUnitIdFromGUID
 local COMBAT_END_CHECK_INTERVAL = 1
 local COMBAT_END_GRACE = 3
 local ENEMY_ACTIVITY_TIMEOUT = 6
-local IGOR_DEATH_COOLDOWN = 10
-local COMBATLOG_OBJECT_TYPE_PLAYER_FLAG = COMBATLOG_OBJECT_TYPE_PLAYER or 0x00000400
-local COMBATLOG_OBJECT_TYPE_PET_FLAG = COMBATLOG_OBJECT_TYPE_PET or 0x00001000
-local COMBATLOG_OBJECT_TYPE_GUARDIAN_FLAG = COMBATLOG_OBJECT_TYPE_GUARDIAN or 0x00002000
 local MODULE_ZONE_ANY = 0
 local ZONE_GATE_INSTANCE_ID_BY_INSTANCE_NAME = {
     ["Trial of the Crusader"] = 649,
@@ -26,37 +22,6 @@ local DBM_PULL_BAR_NAMES = {
     "АТAKA!!",
     "Атака",
     "Pull in"
-}
-
-local IGOR_DEATH_PHRASES = {
-    "Игорь осуждает смерть %s.",
-    "Игорь делает вид, что так и было задумано.",
-    "Игорь записал %s в список слабых.",
-    "Игорь молча смотрит на тело %s.",
-    "Игорь считает, что %s мог бы и пожить.",
-    "Игорь тяжело вздыхает.",
-    "Игорь говорит: минус мораль.",
-    "Игорь делает пометку: %s умер не по плану.",
-    "Игорь не одобряет происходящее.",
-    "Игорь подозревает, что %s нажал не ту кнопку.",
-    "Игорь просит больше так не делать.",
-    "Игорь считает эту смерть обучающим моментом.",
-    "Игорь смотрит на %s с разочарованием.",
-    "Игорь говорит: зато красиво.",
-    "Игорь добавляет смерть %s в отчет."
-}
-
-local IGOR_PET_DEATH_PHRASES = {
-    "Игорь скорбит по питомцу %s.",
-    "Игорь считает, что %s заслуживал большего.",
-    "Игорь делает пометку: %s погиб за чужие ошибки.",
-    "Игорь говорит: минус лапа в рейде.",
-    "Игорь подозревает, что %s просто хотел домой.",
-    "Игорь смотрит на тело %s и молчит.",
-    "Игорь напоминает: питомцев тоже надо лечить.",
-    "Игорь записал смерть %s в отчет о халатности.",
-    "Игорь говорит: зверя жалко.",
-    "Игорь считает, что %s был лучшим из нас."
 }
 
 local IGNORED_COMBAT_ENEMIES = {
@@ -117,7 +82,6 @@ RLHelper.lastCombatActivityAt = nil
 RLHelper.combatEndRequestedAt = nil
 RLHelper.combatTicker = nil
 RLHelper.currentInstanceId = nil
-RLHelper.lastIgorDeathMessageAt = nil
 
 function RLHelper:Debug(...)
     if self.db and self.db.profile and self.db.profile.debug then
@@ -321,16 +285,6 @@ end
 
 local function isPlayer(flags)
     return bit.band(flags or 0, RLHelper.GROUP_AFFILIATION_ANY) > 0
-end
-
-local function isPlayerType(flags)
-    return bit.band(flags or 0, COMBATLOG_OBJECT_TYPE_PLAYER_FLAG) > 0
-end
-
-local function isPetOrGuardianType(flags)
-    local value = flags or 0
-    return bit.band(value, COMBATLOG_OBJECT_TYPE_PET_FLAG) > 0 or
-        bit.band(value, COMBATLOG_OBJECT_TYPE_GUARDIAN_FLAG) > 0
 end
 
 local function shouldIgnoreCombatEnemy(name)
@@ -625,67 +579,6 @@ function RLHelper:DispatchCombatEvent(eventData)
     end
 end
 
-function RLHelper:GetGroupDeathMessagePhrases(event)
-    if not event or event.event ~= "UNIT_DIED" then
-        return nil
-    end
-
-    local destFlags = event.destFlags or 0
-    local groupFlags = bit.bor and bit.bor(self.GROUP_AFFILIATION_PARTY, self.GROUP_AFFILIATION_RAID) or
-        (self.GROUP_AFFILIATION_PARTY + self.GROUP_AFFILIATION_RAID)
-    if bit.band(destFlags, groupFlags) <= 0 then
-        return nil
-    end
-
-    if isPlayerType(destFlags) then
-        return IGOR_DEATH_PHRASES
-    end
-
-    if isPetOrGuardianType(destFlags) then
-        return IGOR_PET_DEATH_PHRASES
-    end
-
-    return nil
-end
-
-function RLHelper:IsGroupMemberDeath(event)
-    return self:GetGroupDeathMessagePhrases(event) ~= nil
-end
-
-function RLHelper:FormatIgorDeathMessage(playerName, phrases)
-    local phraseList = phrases or IGOR_DEATH_PHRASES
-    local phrase = phraseList[math.random(#phraseList)]
-    if phrase:find("%%s") then
-        return string.format(phrase, playerName or "кто-то")
-    end
-
-    return phrase
-end
-
-function RLHelper:MaybeSendIgorDeathMessage(event)
-    if not self.db or not self.db.profile or not self.db.profile.igor then
-        return false
-    end
-
-    local phrases = self:GetGroupDeathMessagePhrases(event)
-    if not phrases then
-        return false
-    end
-
-    local now = self:GetCombatNow()
-    if self.lastIgorDeathMessageAt and now - self.lastIgorDeathMessageAt < IGOR_DEATH_COOLDOWN then
-        return false
-    end
-
-    if type(SendChatMessage) ~= "function" then
-        return false
-    end
-
-    SendChatMessage(self:FormatIgorDeathMessage(event.destName, phrases), "EMOTE")
-    self.lastIgorDeathMessageAt = now
-    return true
-end
-
 function affectingGroup(event)
     local sourceFlags = event.sourceFlags
     local destFlags = event.destFlags
@@ -724,7 +617,6 @@ end
 
 function RLHelper:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     local eventData = blizzardEvent(...)
-    self:MaybeSendIgorDeathMessage(eventData)
     self:DispatchCombatEvent(eventData)
     self:trackCombatants(eventData)
     self:MarkBossCombat(eventData)

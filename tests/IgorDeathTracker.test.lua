@@ -165,7 +165,7 @@ describe("IgorDeathTracker", function()
         })
 
         assert.is_true(sent)
-        assert.are.same({ { message = "Игорь скорбит по питомцу Волк.", channel = "EMOTE" } }, messages)
+        assert.are.same({ { message = "Игорь зажимает нос. Волк воняет.", channel = "EMOTE" } }, messages)
     end)
 
     it("sends a pet emote when a group guardian dies", function()
@@ -184,7 +184,7 @@ describe("IgorDeathTracker", function()
         })
 
         assert.is_true(sent)
-        assert.are.same({ { message = "Игорь скорбит по питомцу Прислужник.", channel = "EMOTE" } }, messages)
+        assert.are.same({ { message = "Игорь зажимает нос. Прислужник воняет.", channel = "EMOTE" } }, messages)
     end)
 
     it("shares cooldown between player and pet death emotes", function()

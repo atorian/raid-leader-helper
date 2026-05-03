@@ -66,6 +66,25 @@ describe('GPAwardButtons', function()
         assert.are.same({ "gp TargetPlayer Каспер 100" }, slashCalls)
     end)
 
+    it('awards GP through the AceConsole slash handler registered by EPGP', function()
+        local slashCalls = {}
+        mocks:SetUnitGUID("target", "0x0001")
+        _G.UnitIsGroupLeader = function(unitId)
+            return unitId == "player"
+        end
+        _G.SlashCmdList = {
+            ACECONSOLE_EPGP = function(command)
+                table.insert(slashCalls, command)
+            end
+        }
+
+        local ok, awardedName = GPAwardButtons:AwardTargetGP("Каспер", 100)
+
+        assert.is_true(ok)
+        assert.are.equal("TargetPlayer", awardedName)
+        assert.are.same({ "gp TargetPlayer Каспер 100" }, slashCalls)
+    end)
+
     it('uses the configured reason phrase when a GP button is clicked', function()
         local slashCalls = {}
         mocks:SetUnitGUID("target", "0x0001")

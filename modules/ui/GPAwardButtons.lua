@@ -19,7 +19,7 @@ end
 
 local function getEPGPSlashCommand()
     local slashCmdList = _G.SlashCmdList or SlashCmdList
-    return slashCmdList and slashCmdList["EPGP"]
+    return slashCmdList and (slashCmdList["ACECONSOLE_EPGP"] or slashCmdList["EPGP"])
 end
 
 function GPAwardButtons:OnInitialize()

@@ -8,6 +8,7 @@ describe('GPAwardButtons', function()
     local originalUnitIsGroupLeader
     local originalUnitIsGroupAssistant
     local originalEPGP
+    local originalSlashCmdList
 
     before_each(function()
         mocks:ClearUnitGUIDs()
@@ -16,6 +17,7 @@ describe('GPAwardButtons', function()
         originalUnitIsGroupLeader = _G.UnitIsGroupLeader
         originalUnitIsGroupAssistant = _G.UnitIsGroupAssistant
         originalEPGP = _G.EPGP
+        originalSlashCmdList = _G.SlashCmdList
 
         _G.UnitIsPlayer = function(unitId)
             return unitId == "target"
@@ -42,30 +44,18 @@ describe('GPAwardButtons', function()
         _G.UnitIsGroupLeader = originalUnitIsGroupLeader
         _G.UnitIsGroupAssistant = originalUnitIsGroupAssistant
         _G.EPGP = originalEPGP
+        _G.SlashCmdList = originalSlashCmdList
     end)
 
-    it('awards GP to the current player target', function()
-        local incCalls = {}
+    it('awards GP to the current player target through the EPGP slash command', function()
+        local slashCalls = {}
         mocks:SetUnitGUID("target", "0x0001")
         _G.UnitIsGroupLeader = function(unitId)
             return unitId == "player"
         end
-        _G.EPGP = {
-            GetEPGP = function(_, name)
-                if name == "TargetPlayer" then
-                    return 100, 200
-                end
-            end,
-            CanIncGPBy = function(_, reason, amount)
-                return reason == "1к" and amount == 1000
-            end,
-            IncGPBy = function(_, name, reason, amount)
-                table.insert(incCalls, {
-                    name = name,
-                    reason = reason,
-                    amount = amount
-                })
-                return name
+        _G.SlashCmdList = {
+            EPGP = function(command)
+                table.insert(slashCalls, command)
             end
         }
 
@@ -73,11 +63,7 @@ describe('GPAwardButtons', function()
 
         assert.is_true(ok)
         assert.are.equal("TargetPlayer", awardedName)
-        assert.are.same({
-            name = "TargetPlayer",
-            reason = "1к",
-            amount = 1000
-        }, incCalls[1])
+        assert.are.same({ "gp TargetPlayer 1к 1000" }, slashCalls)
     end)
 
     it('fails when the target is missing', function()
@@ -105,26 +91,16 @@ describe('GPAwardButtons', function()
         assert.are.equal("Цель должна быть игроком", err)
     end)
 
-    it('fails when EPGP cannot award GP', function()
+    it('fails when the EPGP slash command is unavailable', function()
         mocks:SetUnitGUID("target", "0x0001")
         _G.UnitIsGroupLeader = function(unitId)
             return unitId == "player"
         end
-        _G.EPGP = {
-            GetEPGP = function()
-                return 100, 200
-            end,
-            CanIncGPBy = function()
-                return false
-            end,
-            IncGPBy = function()
-                error("should not be called")
-            end
-        }
+        _G.SlashCmdList = nil
 
         local ok, err = GPAwardButtons:AwardTargetGP("250", 250)
 
         assert.is_false(ok)
-        assert.are.equal("EPGP не позволяет начислить GP: нет прав или данные не готовы", err)
+        assert.are.equal("Slash-команда EPGP недоступна", err)
     end)
 end)

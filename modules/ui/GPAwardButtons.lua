@@ -17,6 +17,11 @@ local function getTargetName()
     return UnitName("target")
 end
 
+local function getEPGPSlashCommand()
+    local slashCmdList = _G.SlashCmdList or SlashCmdList
+    return slashCmdList and slashCmdList["EPGP"]
+end
+
 function GPAwardButtons:OnInitialize()
     self:RegisterMessage("RLHelper_MainFrameCreated", "attachToMainFrame")
 end
@@ -58,28 +63,13 @@ function GPAwardButtons:AwardTargetGP(label, amount)
         return false, "Не удалось определить имя цели"
     end
 
-    if type(EPGP) ~= "table" then
-        return false, "Аддон EPGP не загружен"
+    local epgpSlash = getEPGPSlashCommand()
+    if type(epgpSlash) ~= "function" then
+        return false, "Slash-команда EPGP недоступна"
     end
 
-    if type(EPGP.GetEPGP) ~= "function" or not EPGP:GetEPGP(targetName) then
-        return false, string.format("EPGP не знает игрока %s", targetName)
-    end
-
-    if type(EPGP.CanIncGPBy) ~= "function" or type(EPGP.IncGPBy) ~= "function" then
-        return false, "В EPGP нет API для начисления GP"
-    end
-
-    if not EPGP:CanIncGPBy(label, amount) then
-        return false, "EPGP не позволяет начислить GP: нет прав или данные не готовы"
-    end
-
-    local awardedName = EPGP:IncGPBy(targetName, label, amount)
-    if not awardedName then
-        return false, string.format("Не удалось начислить %s GP игроку %s", label, targetName)
-    end
-
-    return true, awardedName
+    epgpSlash(string.format("gp %s %s %s", targetName, label, amount))
+    return true, targetName
 end
 
 function GPAwardButtons:handleButtonClick(buttonInfo)

@@ -59,11 +59,25 @@ describe('GPAwardButtons', function()
             end
         }
 
-        local ok, awardedName = GPAwardButtons:AwardTargetGP("1к", 1000)
+        local ok, awardedName = GPAwardButtons:AwardTargetGP("Каспер", 100)
 
         assert.is_true(ok)
         assert.are.equal("TargetPlayer", awardedName)
-        assert.are.same({ "gp TargetPlayer 1к 1000" }, slashCalls)
+        assert.are.same({ "gp TargetPlayer Каспер 100" }, slashCalls)
+    end)
+
+    it('uses the configured reason phrase when a GP button is clicked', function()
+        local slashCalls = {}
+        mocks:SetUnitGUID("target", "0x0001")
+        _G.SlashCmdList = {
+            EPGP = function(command)
+                table.insert(slashCalls, command)
+            end
+        }
+
+        GPAwardButtons:handleButtonClick({ label = "200", reason = "Мертвый_Оппосум", amount = 200 })
+
+        assert.are.same({ "gp TargetPlayer Мертвый_Оппосум 200" }, slashCalls)
     end)
 
     it('fails when the target is missing', function()

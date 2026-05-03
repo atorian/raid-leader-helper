@@ -2,11 +2,11 @@ local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local GPAwardButtons = RLHelper:NewModule("GPAwardButtons", "AceEvent-3.0")
 
 local BUTTONS = {
-    { label = "100", amount = 100 },
-    { label = "200", amount = 200 },
-    { label = "250", amount = 250 },
-    { label = "500", amount = 500 },
-    { label = "1к", amount = 1000 }
+    { label = "100", amount = 100, reason = "Каспер" },
+    { label = "200", amount = 200, reason = "Мертвый_Оппосум" },
+    { label = "250", amount = 250, reason = "Бэтмен" },
+    { label = "500", amount = 500, reason = "Копибара" },
+    { label = "1к", amount = 1000, reason = "Banana" }
 }
 
 local function getTargetName()
@@ -49,7 +49,7 @@ function GPAwardButtons:refreshVisibility()
     RLHelper:SetMainFrameBottomPanel(self.footerFrame)
 end
 
-function GPAwardButtons:AwardTargetGP(label, amount)
+function GPAwardButtons:AwardTargetGP(reason, amount)
     if type(UnitExists) ~= "function" or not UnitExists("target") then
         return false, "Нет выбранной цели"
     end
@@ -68,12 +68,12 @@ function GPAwardButtons:AwardTargetGP(label, amount)
         return false, "Slash-команда EPGP недоступна"
     end
 
-    epgpSlash(string.format("gp %s %s %s", targetName, label, amount))
+    epgpSlash(string.format("gp %s %s %s", targetName, reason, amount))
     return true, targetName
 end
 
 function GPAwardButtons:handleButtonClick(buttonInfo)
-    local ok, result = self:AwardTargetGP(buttonInfo.label, buttonInfo.amount)
+    local ok, result = self:AwardTargetGP(buttonInfo.reason, buttonInfo.amount)
     if not ok then
         self:printError(result)
     end

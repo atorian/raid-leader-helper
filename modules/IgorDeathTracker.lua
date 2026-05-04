@@ -2,7 +2,7 @@ local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local IgorDeathTracker = RLHelper:NewModule("IgorDeathTracker")
 IgorDeathTracker.receivesCombatEvents = true
 
-local IGOR_DEATH_COOLDOWN = 10
+local IGOR_DEATH_COOLDOWN = 15
 local COMBATLOG_OBJECT_TYPE_PLAYER_FLAG = COMBATLOG_OBJECT_TYPE_PLAYER or 0x00000400
 local COMBATLOG_OBJECT_TYPE_PET_FLAG = COMBATLOG_OBJECT_TYPE_PET or 0x00001000
 local COMBATLOG_OBJECT_TYPE_GUARDIAN_FLAG = COMBATLOG_OBJECT_TYPE_GUARDIAN or 0x00002000
@@ -19,11 +19,12 @@ local IGOR_DEATH_PHRASES = {
     "Игорь делает пометку: %s умер не по плану.",
     "Игорь не одобряет происходящее.",
     "Игорь подозревает, что %s нажал не ту кнопку.",
-    "Игорь просит больше так не делать.",
+    "Игорь просит %s больше так не делать.",
     "Игорь считает эту смерть обучающим моментом.",
     "Игорь смотрит на %s с разочарованием.",
     "Игорь считает что %s напрашивается в список друзей.",
     "Игорь говорит: зато красиво.",
+    "Игорь говорит: %s, так ты 2800 не возьмешь.",
     "Игорь добавляет смерть %s в отчет."
 }
 
@@ -38,7 +39,8 @@ local IGOR_PET_DEATH_PHRASES = {
     "Игорь записал смерть %s в отчет о халатности.",
     "Игорь говорит: зверя жалко.",
     "Игорь считает, что кто-то должен ответить за жестокое обращение с %s.",
-    "Игорь бормочет под нос: пу-пу-пу...",
+    "Игорь бормочет под нос: пуп-пу-пу...",
+    "Игорь надеется что Спилберг снимет фильм про %s.",
     "Игорь считает, что %s был лучшим из нас."
 }
 

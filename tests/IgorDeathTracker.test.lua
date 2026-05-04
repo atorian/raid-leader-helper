@@ -74,7 +74,7 @@ describe("IgorDeathTracker", function()
         assert.are.same({ { message = "Игорь осуждает смерть Игрок.", channel = "EMOTE" } }, messages)
     end)
 
-    it("does not send more than once every ten seconds", function()
+    it("does not send more than once every fifteen seconds", function()
         local messages = {}
         _G.SendChatMessage = function(message, channel)
             table.insert(messages, { message = message, channel = channel })
@@ -90,9 +90,9 @@ describe("IgorDeathTracker", function()
         }
 
         assert.is_true(IgorDeathTracker:handleEvent(event))
-        now = 109
+        now = 114
         assert.is_false(IgorDeathTracker:handleEvent(event))
-        now = 111
+        now = 116
         assert.is_true(IgorDeathTracker:handleEvent(event))
 
         assert.are.equal(2, #messages)
@@ -202,13 +202,13 @@ describe("IgorDeathTracker", function()
             destName = "Игрок",
             destFlags = 0x514
         }))
-        now = 109
+        now = 114
         assert.is_false(IgorDeathTracker:handleEvent({
             event = "UNIT_DIED",
             destName = "Волк",
             destFlags = 0x1014
         }))
-        now = 111
+        now = 116
         assert.is_true(IgorDeathTracker:handleEvent({
             event = "UNIT_DIED",
             destName = "Волк",

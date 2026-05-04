@@ -8,7 +8,7 @@ describe('BloodPrincesTracker', function()
     local function vortexDamage(sourceName, destName, spellId)
         return {
             event = "SPELL_DAMAGE",
-            spellId = spellId or 72817,
+            spellId = spellId or 73037,
             spellName = "Могучий вихрь",
             timestamp = time(),
             sourceName = sourceName,
@@ -19,7 +19,7 @@ describe('BloodPrincesTracker', function()
     local function vortexMiss(sourceName, destName)
         return {
             event = "SPELL_MISSED",
-            spellId = 72817,
+            spellId = 73037,
             spellName = "Могучий вихрь",
             timestamp = time(),
             sourceName = sourceName,
@@ -51,7 +51,7 @@ describe('BloodPrincesTracker', function()
     end)
 
     it('logs all Powerful Vortex dungeon-version spell ids', function()
-        local spellIds = { 72817, 72816, 72815, 72038 }
+        local spellIds = { 73039, 73037 }
         mocks.raidSize = 1
         mocks:SetRaidRosterInfo(1, "Вольно", 5, "PRIEST")
 

@@ -9,10 +9,8 @@ BloodPrincesTracker.bossIds = {
 }
 
 local POWERFUL_VORTEX_SPELLS = {
-    [72038] = true,
-    [72815] = true,
-    [72816] = true,
-    [72817] = true
+    [73039] = true,
+    [73037] = true,
 }
 local vortexIcon = "Interface\\Icons\\Spell_Shadow_Teleport"
 

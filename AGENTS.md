@@ -21,6 +21,8 @@ When adding a SpellID or UnitID to addon, check if it point to right thing in ht
 
 When adding combat log handling, use only subevents confirmed by real WoW 3.3.5a logs. Do not invent retail or parser-only event names.
 
+Combat log `.txt` files in this addon can be very large. Do not inspect them with Read tool or by dumping broad search output into the model. Use targeted shell scripts (`python`, `bash`) or narrow command-line filters that aggregate and print only the relevant matches, counts, and short samples.
+
 Observed valid combat log subevents from `head -n 2000 *.txt` in this addon folder:
 - `DAMAGE_SHIELD`
 - `DAMAGE_SHIELD_MISSED`
@@ -55,6 +57,11 @@ Observed valid combat log subevents from `head -n 2000 *.txt` in this addon fold
 
 For successful dispels in these logs, use `SPELL_DISPEL`. Example shape:
 `SPELL_DISPEL,sourceGUID,sourceName,sourceFlags,destGUID,destName,destFlags,spellId,spellName,spellSchool,extraSpellId,extraSpellName,extraSpellSchool,auraType`.
+
+
+## Solutions
+
+Prefer Architecturally correct solutions, which keep modules cohesive and reduce coupling.
 
 ## 1. Think Before Coding
 

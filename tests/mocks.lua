@@ -68,11 +68,12 @@ function M:ClearUnitGUIDs()
     wipe(unitNames)
 end
 
-function M:SetRaidRosterInfo(index, name, subgroup, class)
+function M:SetRaidRosterInfo(index, name, subgroup, class, classFileName)
     raidRoster[index] = {
         name = name,
         subgroup = subgroup,
-        class = class
+        class = class,
+        classFileName = classFileName
     }
 end
 
@@ -149,7 +150,7 @@ GetRaidRosterInfo = function(index)
         return nil
     end
 
-    return member.name, nil, member.subgroup, nil, member.class
+    return member.name, nil, member.subgroup, nil, member.class, member.classFileName
 end
 
 GetNumPartyMembers = function()

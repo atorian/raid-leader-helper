@@ -8,7 +8,7 @@ describe('BloodPrincesTracker', function()
     local function vortexDamage(sourceName, destName, spellId)
         return {
             event = "SPELL_DAMAGE",
-            spellId = spellId or 73037,
+            spellId = spellId or 72817,
             spellName = "Могучий вихрь",
             timestamp = time(),
             sourceName = sourceName,
@@ -19,7 +19,7 @@ describe('BloodPrincesTracker', function()
     local function vortexMiss(sourceName, destName)
         return {
             event = "SPELL_MISSED",
-            spellId = 73037,
+            spellId = 72817,
             spellName = "Могучий вихрь",
             timestamp = time(),
             sourceName = sourceName,
@@ -42,7 +42,7 @@ describe('BloodPrincesTracker', function()
 
     it('logs vortex damage to a group 5 priest', function()
         mocks.raidSize = 1
-        mocks:SetRaidRosterInfo(1, "Вольно", 5, "PRIEST")
+        mocks:SetRaidRosterInfo(1, "Вольно", 5, "Жрец", "PRIEST")
 
         BloodPrincesTracker:handleEvent(vortexDamage("Заблудшый", "Вольно"))
 
@@ -50,10 +50,10 @@ describe('BloodPrincesTracker', function()
             "SOME DATE |cFFFFFFFFЗаблудшый|r |TInterface\\Icons\\Spell_Shadow_Teleport:24:24:0:0|t |cFFFFFFFFВольно|r")
     end)
 
-    it('logs all Powerful Vortex dungeon-version spell ids', function()
-        local spellIds = { 73039, 73037 }
+    it('logs all Powerful Vortex knockback spell ids', function()
+        local spellIds = { 72038, 72815, 72816, 72817 }
         mocks.raidSize = 1
-        mocks:SetRaidRosterInfo(1, "Вольно", 5, "PRIEST")
+        mocks:SetRaidRosterInfo(1, "Вольно", 5, "Жрец", "PRIEST")
 
         for _, spellId in ipairs(spellIds) do
             log:clear()
@@ -61,6 +61,20 @@ describe('BloodPrincesTracker', function()
             BloodPrincesTracker:handleEvent(vortexDamage("Источник", "Вольно", spellId))
 
             assert.spy(log).was_called()
+        end
+    end)
+
+    it('ignores boss cast Powerful Vortex spell ids', function()
+        local spellIds = { 72039, 73037, 73038, 73039 }
+        mocks.raidSize = 1
+        mocks:SetRaidRosterInfo(1, "Вольно", 5, "Жрец", "PRIEST")
+
+        for _, spellId in ipairs(spellIds) do
+            log:clear()
+
+            BloodPrincesTracker:handleEvent(vortexDamage("Источник", "Вольно", spellId))
+
+            assert.spy(log).was_not_called()
         end
     end)
 
@@ -76,7 +90,7 @@ describe('BloodPrincesTracker', function()
             log:clear()
             mocks:ClearRaidRoster()
             mocks.raidSize = 1
-            mocks:SetRaidRosterInfo(1, name, 5, class)
+            mocks:SetRaidRosterInfo(1, name, 5, "Localized", class)
 
             BloodPrincesTracker:handleEvent(vortexDamage("Источник", name))
 
@@ -86,7 +100,7 @@ describe('BloodPrincesTracker', function()
 
     it('ignores a group 5 warlock', function()
         mocks.raidSize = 1
-        mocks:SetRaidRosterInfo(1, "Варлок", 5, "WARLOCK")
+        mocks:SetRaidRosterInfo(1, "Варлок", 5, "Чернокнижник", "WARLOCK")
 
         BloodPrincesTracker:handleEvent(vortexDamage("Источник", "Варлок"))
 
@@ -95,7 +109,7 @@ describe('BloodPrincesTracker', function()
 
     it('ignores an allowed healer class outside group 5', function()
         mocks.raidSize = 1
-        mocks:SetRaidRosterInfo(1, "Прист", 4, "PRIEST")
+        mocks:SetRaidRosterInfo(1, "Прист", 4, "Жрец", "PRIEST")
 
         BloodPrincesTracker:handleEvent(vortexDamage("Источник", "Прист"))
 
@@ -104,7 +118,7 @@ describe('BloodPrincesTracker', function()
 
     it('logs vortex misses to a group 5 healer', function()
         mocks.raidSize = 1
-        mocks:SetRaidRosterInfo(1, "Прист", 5, "PRIEST")
+        mocks:SetRaidRosterInfo(1, "Прист", 5, "Жрец", "PRIEST")
 
         BloodPrincesTracker:handleEvent(vortexMiss("Источник", "Прист"))
 
@@ -114,8 +128,8 @@ describe('BloodPrincesTracker', function()
 
     it('does not filter the source player', function()
         mocks.raidSize = 2
-        mocks:SetRaidRosterInfo(1, "ХилИсточник", 5, "PRIEST")
-        mocks:SetRaidRosterInfo(2, "ХилЦель", 5, "DRUID")
+        mocks:SetRaidRosterInfo(1, "ХилИсточник", 5, "Жрец", "PRIEST")
+        mocks:SetRaidRosterInfo(2, "ХилЦель", 5, "Друид", "DRUID")
 
         BloodPrincesTracker:handleEvent(vortexDamage("ХилИсточник", "ХилЦель"))
 

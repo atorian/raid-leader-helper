@@ -9,8 +9,10 @@ BloodPrincesTracker.bossIds = {
 }
 
 local POWERFUL_VORTEX_SPELLS = {
-    [73039] = true,
-    [73037] = true,
+    [72038] = true,
+    [72815] = true,
+    [72816] = true,
+    [72817] = true,
 }
 local vortexIcon = "Interface\\Icons\\Spell_Shadow_Teleport"
 
@@ -39,7 +41,7 @@ local function isGroupFiveHealer(playerName)
 
     local raidSize = type(GetNumRaidMembers) == "function" and GetNumRaidMembers() or 40
     for i = 1, raidSize do
-        local name, _, subgroup, _, class = GetRaidRosterInfo(i)
+        local name, _, subgroup, _, _, class = GetRaidRosterInfo(i)
         if name == playerName then
             return subgroup == 5 and HEALER_CLASSES[class] == true
         end

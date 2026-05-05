@@ -5,7 +5,6 @@ IgorDeathTracker.receivesCombatEvents = true
 local IGOR_DEATH_COOLDOWN = 15
 local COMBATLOG_OBJECT_TYPE_PLAYER_FLAG = COMBATLOG_OBJECT_TYPE_PLAYER or 0x00000400
 local COMBATLOG_OBJECT_TYPE_PET_FLAG = COMBATLOG_OBJECT_TYPE_PET or 0x00001000
-local COMBATLOG_OBJECT_TYPE_GUARDIAN_FLAG = COMBATLOG_OBJECT_TYPE_GUARDIAN or 0x00002000
 
 local IGOR_DEATH_PHRASES = {
     "Игорь осуждает смерть %s.",
@@ -48,10 +47,8 @@ local function isPlayerType(flags)
     return bit.band(flags or 0, COMBATLOG_OBJECT_TYPE_PLAYER_FLAG) > 0
 end
 
-local function isPetOrGuardianType(flags)
-    local value = flags or 0
-    return bit.band(value, COMBATLOG_OBJECT_TYPE_PET_FLAG) > 0 or
-        bit.band(value, COMBATLOG_OBJECT_TYPE_GUARDIAN_FLAG) > 0
+local function isPetType(flags)
+    return bit.band(flags or 0, COMBATLOG_OBJECT_TYPE_PET_FLAG) > 0
 end
 
 function IgorDeathTracker:GetGroupDeathMessagePhrases(event)
@@ -70,7 +67,7 @@ function IgorDeathTracker:GetGroupDeathMessagePhrases(event)
         return IGOR_DEATH_PHRASES
     end
 
-    if isPetOrGuardianType(destFlags) then
+    if isPetType(destFlags) then
         return IGOR_PET_DEATH_PHRASES
     end
 

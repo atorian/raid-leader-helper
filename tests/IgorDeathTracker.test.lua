@@ -168,10 +168,10 @@ describe("IgorDeathTracker", function()
         assert.are.same({ { message = "Игорь зажимает нос. Волк воняет.", channel = "EMOTE" } }, messages)
     end)
 
-    it("sends a pet emote when a group guardian dies", function()
-        local messages = {}
-        _G.SendChatMessage = function(message, channel)
-            table.insert(messages, { message = message, channel = channel })
+    it("ignores a group guardian death", function()
+        local sentCount = 0
+        _G.SendChatMessage = function()
+            sentCount = sentCount + 1
         end
         RLHelper.GetCombatNow = function()
             return 100
@@ -179,12 +179,12 @@ describe("IgorDeathTracker", function()
 
         local sent = IgorDeathTracker:handleEvent({
             event = "UNIT_DIED",
-            destName = "Прислужник",
+            destName = "Тотем",
             destFlags = 0x2014
         })
 
-        assert.is_true(sent)
-        assert.are.same({ { message = "Игорь зажимает нос. Прислужник воняет.", channel = "EMOTE" } }, messages)
+        assert.is_false(sent)
+        assert.are.equal(0, sentCount)
     end)
 
     it("shares cooldown between player and pet death emotes", function()

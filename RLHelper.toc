@@ -15,6 +15,7 @@ Libs\Libs.xml
 
 lib\blizzardEvent.lua
 lib\RingBuffer.lua
+lib\CombatFilters.lua
 
 # Core files
 Core.lua

@@ -1,13 +1,17 @@
 local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local SppellTracker = RLHelper:NewModule("SppellTracker", "AceEvent-3.0")
 SppellTracker.receivesCombatEvents = true
+local CombatFilters = RLHelperCombatFilters
 
 -- Флаг для отслеживания первого урона
 local firstDamageDone = false
+local firstValithriaHealDone = false
 local HAND_OF_RECKONING = 62124
+local VALITHRIA_DREAMWALKER = "Валитрия Сноходица"
 function SppellTracker:OnEnable()
     RLHelper:Debug("RL Быдло: TauntTracker включен")
     firstDamageDone = false
+    firstValithriaHealDone = false
 end
 
 -- Список отслеживаемых способностей
@@ -63,6 +67,7 @@ end
 
 function SppellTracker:reset()
     firstDamageDone = false
+    firstValithriaHealDone = false
     self.pendingHandOfReckonings = {}
 end
 
@@ -79,6 +84,11 @@ end
 
 local function formatFirstHit(ts, source, dest)
     return string.format("%s |cFFFFFFFF%s|r Первый урон по |cFFFFFFFF%s|r", date("%H:%M:%S", ts), source,
+        dest)
+end
+
+local function formatFirstHeal(ts, source, dest)
+    return string.format("%s |cFFFFFFFF%s|r Первый хил по |cFFFFFFFF%s|r", date("%H:%M:%S", ts), source,
         dest)
 end
 
@@ -139,8 +149,17 @@ end
 function SppellTracker:handleEvent(eventData)
     if not firstDamageDone and (eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE") then
         if isPlayer(eventData.sourceFlags) and isEnemy(eventData.destFlags) then
-            firstDamageDone = true
-            self.log(formatFirstHit(eventData.timestamp, eventData.sourceName, eventData.destName))
+            if not CombatFilters or not CombatFilters:IsIgnoredCombatEnemy(eventData.destName) then
+                firstDamageDone = true
+                self.log(formatFirstHit(eventData.timestamp, eventData.sourceName, eventData.destName))
+            end
+        end
+    end
+
+    if not firstValithriaHealDone and (eventData.event == "SPELL_HEAL" or eventData.event == "SPELL_PERIODIC_HEAL") then
+        if isPlayer(eventData.sourceFlags) and eventData.destName == VALITHRIA_DREAMWALKER and (eventData.amount or 0) > 0 then
+            firstValithriaHealDone = true
+            self.log(formatFirstHeal(eventData.timestamp, eventData.sourceName, eventData.destName))
         end
     end
 

@@ -1,5 +1,6 @@
 local M = require('tests.mocks')
 require('../lib/blizzardEvent')
+require('../lib/CombatFilters')
 local RLHelper = require('../Core')
 local Builder = require('../utils/CombatEventBuilder')
 

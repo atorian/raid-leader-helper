@@ -149,6 +149,22 @@ function CombatEventBuilder:SpellDamage(spellId, spellName, amount)
     return self
 end
 
+function CombatEventBuilder:SpellHeal(spellId, spellName, amount)
+    self.event = "SPELL_HEAL"
+    self.spell.id = spellId
+    self.spell.name = spellName
+    self.amount = amount
+    return self
+end
+
+function CombatEventBuilder:PeriodicHeal(spellId, spellName, amount)
+    self.event = "SPELL_PERIODIC_HEAL"
+    self.spell.id = spellId
+    self.spell.name = spellName
+    self.amount = amount
+    return self
+end
+
 function CombatEventBuilder:Death()
     self.event = "UNIT_DIED"
     return self
@@ -238,6 +254,10 @@ function CombatEventBuilder:Build()
             false, -- critical
             false, -- glancing
             false -- crushing
+    elseif self.event == "SPELL_HEAL" or self.event == "SPELL_PERIODIC_HEAL" then
+        return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event, self.source.guid, self.source.name,
+            self.source.flags, self.target.guid, self.target.name, self.target.flags, self.spell.id, self.spell.name,
+            self.spell.school, self.amount, 0, 0, nil
     elseif self.event == "UNIT_DIED" then
         -- 4/22 20:33:49.642  UNIT_DIED,0x0000000000000000,nil,0x80000000,0x0000000000327B39,"Zippo",0x514
         return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event, "0x0000000000000000", nil, 0x80000000,

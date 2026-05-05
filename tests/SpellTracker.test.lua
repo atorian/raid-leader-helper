@@ -1,5 +1,6 @@
 require('tests.mocks')
 require("../lib/blizzardEvent")
+require("../lib/CombatFilters")
 local SpellTracker = require("../modules/SpellTracker")
 local Builder = require("../utils/CombatEventBuilder")
 local mocks = require('tests.mocks')
@@ -26,6 +27,45 @@ describe('SpellTracker', function()
 
             assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r Первый урон по |cFFFFFFFF%s|r",
                 date("%H:%M:%S", GetTime()), "TestPlayer", "TestTarget"))
+        end)
+
+        it('does not log first damage to ignored combat enemy', function()
+            dispatch(SpellTracker, Builder:New():FromPlayer("TestPlayer"):ToEnemy('Робот "Бей-Молоти"')
+                :SpellDamage(12345, "Test Spell", 100):Build())
+
+            assert.spy(log).was_not_called()
+        end)
+
+        it('logs first direct heal to Valithria', function()
+            dispatch(SpellTracker, Builder:New():FromPlayer("Всёпадаем"):ToEnemy("Валитрия Сноходица")
+                :SpellHeal(54968, "Символ Света небес", 6038):Build())
+
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r Первый хил по |cFFFFFFFF%s|r",
+                date("%H:%M:%S", GetTime()), "Всёпадаем", "Валитрия Сноходица"))
+        end)
+
+        it('logs first periodic heal to Valithria', function()
+            dispatch(SpellTracker, Builder:New():FromPlayer("Bultuzor"):ToEnemy("Валитрия Сноходица")
+                :PeriodicHeal(61301, "Быстрина", 1674):Build())
+
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r Первый хил по |cFFFFFFFF%s|r",
+                date("%H:%M:%S", GetTime()), "Bultuzor", "Валитрия Сноходица"))
+        end)
+
+        it('ignores zero amount Valithria heals', function()
+            dispatch(SpellTracker, Builder:New():FromPlayer("Всёпадаем"):ToEnemy("Валитрия Сноходица")
+                :SpellHeal(54968, "Символ Света небес", 0):Build())
+
+            assert.spy(log).was_not_called()
+        end)
+
+        it('logs Valithria first heal only once per reset', function()
+            dispatch(SpellTracker, Builder:New():FromPlayer("Всёпадаем"):ToEnemy("Валитрия Сноходица")
+                :SpellHeal(54968, "Символ Света небес", 6038):Build())
+            dispatch(SpellTracker, Builder:New():FromPlayer("Bultuzor"):ToEnemy("Валитрия Сноходица")
+                :SpellHeal(61301, "Быстрина", 5205):Build())
+
+            assert.spy(log).was_called(1)
         end)
 
         it('logs taunt spell cast', function()

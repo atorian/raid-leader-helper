@@ -1,0 +1,10 @@
+local CombatFilters = require('../lib/CombatFilters')
+
+describe('CombatFilters', function()
+    it('identifies ignored combat enemies', function()
+        assert.is_true(CombatFilters:IsIgnoredCombatEnemy('World Invisible Trigger'))
+        assert.is_true(CombatFilters:IsIgnoredCombatEnemy('Огрская пиньята'))
+        assert.is_true(CombatFilters:IsIgnoredCombatEnemy('Робот "Бей-Молоти"'))
+        assert.is_false(CombatFilters:IsIgnoredCombatEnemy("Ануб'арак"))
+    end)
+end)

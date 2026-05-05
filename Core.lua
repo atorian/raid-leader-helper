@@ -2,6 +2,7 @@ local RLHelper = LibStub("AceAddon-3.0"):NewAddon("RLHelper", "AceConsole-3.0", 
 local callbacks = LibStub("CallbackHandler-1.0"):New(RLHelper)
 local IsGroupInCombat, InCombatLockdown = RLHelper.IsGroupInCombat, InCombatLockdown
 local GetUnitIdFromGUID = RLHelper.GetUnitIdFromGUID
+local CombatFilters = RLHelperCombatFilters
 
 local COMBAT_END_CHECK_INTERVAL = 1
 local COMBAT_END_GRACE = 3
@@ -22,12 +23,6 @@ local DBM_PULL_BAR_NAMES = {
     "АТAKA!!",
     "Атака",
     "Pull in"
-}
-
-local IGNORED_COMBAT_ENEMIES = {
-    ["World Invisible Trigger"] = true,
-    ["Огрская пиньята"] = true,
-    ["Робот \"Бей-Молоти\""] = true
 }
 
 -- Utility functions
@@ -288,7 +283,7 @@ local function isPlayer(flags)
 end
 
 local function shouldIgnoreCombatEnemy(name)
-    return IGNORED_COMBAT_ENEMIES[name] == true
+    return CombatFilters and CombatFilters:IsIgnoredCombatEnemy(name) or false
 end
 
 local function creatureIdFromGuid(guid)

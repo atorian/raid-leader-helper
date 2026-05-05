@@ -192,6 +192,19 @@ function CombatEventBuilder:SpellMissed(spellId, spellName, missType)
     return self
 end
 
+function CombatEventBuilder:Dispel(spellId, spellName, extraSpellId, extraSpellName, extraSpellSchool, auraType)
+    self.event = "SPELL_DISPEL"
+    self.spell.id = spellId
+    self.spell.name = spellName
+    self.extraSpell = {
+        id = extraSpellId,
+        name = extraSpellName,
+        school = extraSpellSchool
+    }
+    self.type = auraType or "BUFF"
+    return self
+end
+
 function CombatEventBuilder:DamageShieldMissed(spellId, spellName, missType)
     self.event = "DAMAGE_SHIELD_MISSED"
     self.spell.id = spellId
@@ -243,6 +256,10 @@ function CombatEventBuilder:Build()
         return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event, self.source.guid, self.source.name,
             self.source.flags, self.target.guid, self.target.name, self.target.flags, self.spell.id, self.spell.name,
             self.spell.school, self.missType -- missType
+    elseif self.event == "SPELL_DISPEL" then
+        return "COMBAT_LOG_EVENT_UNFILTERED", self.timestamp, self.event, self.source.guid, self.source.name,
+            self.source.flags, self.target.guid, self.target.name, self.target.flags, self.spell.id, self.spell.name,
+            self.spell.school, self.extraSpell.id, self.extraSpell.name, self.extraSpell.school, self.type
     end
 end
 

@@ -86,6 +86,31 @@ describe('SpellTracker', function()
             assert.spy(log).was_not_called()
         end)
 
+        it('logs successful Dispel Magic dispel', function()
+            dispatch(SpellTracker, Builder:New():FromPlayer("Вольнож"):ToPlayer("Valgallaa")
+                :Dispel(988, "Рассеивание заклинаний", 74792, "Пожирание души", 32, "BUFF"):Build())
+
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "Вольнож", "Interface\\Icons\\Spell_Holy_DispelMagic",
+                "Valgallaa"))
+        end)
+
+        it('logs successful Remove Curse dispel', function()
+            dispatch(SpellTracker, Builder:New():FromPlayer("Волыно"):ToPlayer("Биполярник")
+                :Dispel(2782, "Снятие проклятия", 74795, "Метка пожирания", 32, "BUFF"):Build())
+
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "Волыно", "Interface\\Icons\\Spell_Nature_RemoveCurse",
+                "Биполярник"))
+        end)
+
+        it('ignores non-whitelisted dispels', function()
+            dispatch(SpellTracker, Builder:New():FromPlayer("Охотник"):ToEnemy("Леди Смертный Шепот")
+                :Dispel(19801, "Усмиряющий выстрел", 33206, "Подавление боли", 2, "BUFF"):Build())
+
+            assert.spy(log).was_not_called()
+        end)
+
         it('does not log hand of reckoning on aura applied alone', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget")
                 :ApplyAura(62124, "Hand of Reckoning"):Build())

@@ -65,11 +65,8 @@ local function blizzardEvent(timestamp, event, sourceGUID, sourceName, sourceFla
             args.extraSpellId, args.extraSpellName, args.extraSpellSchool = select(4, ...)
         elseif event == "SPELL_EXTRA_ATTACKS" then
             args.amount = select(4, ...)
-        elseif event == "SPELL_DISPEL_FAILED" then
-            args.extraSpellId, args.extraSpellName, args.extraSpellSchool = select(4, ...)
-        elseif event == "SPELL_AURA_DISPELLED" then
-            args.extraSpellId, args.extraSpellName, args.extraSpellSchool = select(4, ...)
-            args.auraType = select(7, ...)
+        elseif event == "SPELL_DISPEL" then
+            args.extraSpellId, args.extraSpellName, args.extraSpellSchool, args.auraType = select(4, ...)
         elseif event == "SPELL_AURA_STOLEN" then
             args.extraSpellId, args.extraSpellName, args.extraSpellSchool = select(4, ...)
             args.auraType = select(7, ...)

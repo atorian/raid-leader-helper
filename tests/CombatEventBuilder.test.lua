@@ -1,4 +1,5 @@
 require('tests.mocks')
+require('../lib/blizzardEvent')
 local Builder = require('../utils/CombatEventBuilder')
 
 local BOSS_FLAGS = 0x60a48
@@ -87,5 +88,18 @@ describe("Combat Event Builder", function()
         assert.equals("Леди Смертный Шепот", destName)
         assert.equals(ENEMY_FLAGS, destFlags)
         assert.equals("0xF130000000000001", destGUID)
+    end)
+
+    it("parses successful dispel combat log events", function()
+        local eventData = blizzardEvent(select(2, Builder:New():FromPlayer("Диспеллер"):ToPlayer("Цель")
+            :Dispel(988, "Рассеивание заклинаний", 74562, "Пылающий огонь", 4, "BUFF"):Build()))
+
+        assert.equals("SPELL_DISPEL", eventData.event)
+        assert.equals(988, eventData.spellId)
+        assert.equals("Рассеивание заклинаний", eventData.spellName)
+        assert.equals(74562, eventData.extraSpellId)
+        assert.equals("Пылающий огонь", eventData.extraSpellName)
+        assert.equals(4, eventData.extraSpellSchool)
+        assert.equals("BUFF", eventData.auraType)
     end)
 end)

@@ -35,6 +35,22 @@ local TRACKED_CAST_SUCCESS_SPELLS = {
     [31789] = true -- Праведная защита
 }
 
+local TRACKED_DISPEL_SPELLS = {
+    [475] = "Interface\\Icons\\Spell_Nature_RemoveCurse", -- Mage: Remove Curse
+    [526] = "Interface\\Icons\\Spell_Nature_NullifyPoison", -- Shaman: Cure Toxins
+    [527] = "Interface\\Icons\\Spell_Holy_DispelMagic", -- Priest: Dispel Magic
+    [528] = "Interface\\Icons\\Spell_Holy_NullifyDisease", -- Priest: Cure Disease
+    [552] = "Interface\\Icons\\Spell_Nature_NullifyDisease", -- Priest: Abolish Disease
+    [988] = "Interface\\Icons\\Spell_Holy_DispelMagic", -- Priest: Dispel Magic
+    [1152] = "Interface\\Icons\\Spell_Holy_Purify", -- Paladin: Purify
+    [2782] = "Interface\\Icons\\Spell_Nature_RemoveCurse", -- Druid: Remove Curse
+    [4987] = "Interface\\Icons\\Spell_Holy_Renew", -- Paladin: Cleanse
+    [10872] = "Interface\\Icons\\Spell_Nature_NullifyDisease", -- Priest: Abolish Disease Effect
+    [32375] = "Interface\\Icons\\Spell_Arcane_MassDispel", -- Priest: Mass Dispel
+    [32592] = "Interface\\Icons\\Spell_Arcane_MassDispel", -- Priest: Mass Dispel triggered
+    [51886] = "Interface\\Icons\\Ability_Shaman_CleanseSpirit" -- Shaman: Cleanse Spirit
+}
+
 function SppellTracker:OnInitialize()
     self:RegisterEvent("UNIT_TARGET")
     self:RegisterMessage("RLHelper_CombatEnded", "reset")
@@ -130,6 +146,12 @@ function SppellTracker:handleEvent(eventData)
 
     if eventData.event and eventData.event:sub(1, 5) == "SPELL" and eventData.spellId ~= HAND_OF_RECKONING then
         self:clearPendingHandOfReckoningBySource(eventData.sourceGUID)
+    end
+
+    if eventData.event == "SPELL_DISPEL" and TRACKED_DISPEL_SPELLS[eventData.spellId] then
+        self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_DISPEL_SPELLS[eventData.spellId],
+            eventData.destName))
+        return
     end
 
     if eventData.event == "SPELL_RESURRECT" and TRACKED_SPELLS[eventData.spellId] then

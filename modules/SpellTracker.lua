@@ -7,7 +7,9 @@ local CombatFilters = RLHelperCombatFilters
 local firstDamageDone = false
 local firstValithriaHealDone = false
 local HAND_OF_RECKONING = 62124
+local HOLY_WRATH = 48817
 local VALITHRIA_DREAMWALKER = "Валитрия Сноходица"
+local LICH_KING = "Король-лич"
 function SppellTracker:OnEnable()
     RLHelper:Debug("RL Быдло: TauntTracker включен")
     firstDamageDone = false
@@ -29,6 +31,8 @@ local TRACKED_SPELLS = {
     [10278] = "Interface\\Icons\\Spell_Holy_SealOfProtection", -- Paladin: Корона
     [19752] = "Interface\\Icons\\Spell_Nature_TimeStop", -- Paladin: Диван
     [6940] = "Interface\\Icons\\Spell_Holy_SealOfSacrifice", -- Paladin: Длань жертвенности
+    [31821] = "Interface\\Icons\\Spell_Holy_AuraMastery", -- Paladin: Мастер аур
+    [48817] = "Interface\\Icons\\Spell_Holy_Excorcism", -- Paladin: Гнев небес
     
     [26994] = "Interface\\Icons\\spell_nature_reincarnation", -- Друид БР
     [48477] = "Interface\\Icons\\spell_nature_reincarnation" -- Друид БР
@@ -36,7 +40,9 @@ local TRACKED_SPELLS = {
 
 local TRACKED_CAST_SUCCESS_SPELLS = {
     [19752] = true, -- Божественное вмешательство
-    [31789] = true -- Праведная защита
+    [31789] = true, -- Праведная защита
+    [31821] = true, -- Мастер аур
+    [48817] = true -- Гнев небес
 }
 
 local TRACKED_DISPEL_SPELLS = {
@@ -93,7 +99,15 @@ local function formatFirstHeal(ts, source, dest)
 end
 
 local function formatSpellCast(ts, source, spellIcon, dest)
+    if not dest then
+        return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t", date("%H:%M:%S", ts), source, spellIcon)
+    end
+
     return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", ts), source, spellIcon, dest)
+end
+
+local function isLichKingCombat()
+    return RLHelper.currentCombat and RLHelper.currentCombat.firstEnemy == LICH_KING
 end
 
 function SppellTracker:clearPendingHandOfReckoning(destGUID)
@@ -181,6 +195,10 @@ function SppellTracker:handleEvent(eventData)
 
     if eventData.event == "SPELL_CAST_SUCCESS" and TRACKED_CAST_SUCCESS_SPELLS[eventData.spellId] and
         TRACKED_SPELLS[eventData.spellId] then
+        if eventData.spellId == HOLY_WRATH and not isLichKingCombat() then
+            return
+        end
+
         self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
             eventData.destName))
         return

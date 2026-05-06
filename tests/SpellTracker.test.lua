@@ -1,6 +1,7 @@
 require('tests.mocks')
 require("../lib/blizzardEvent")
 require("../lib/CombatFilters")
+local RLHelper = require("../Core")
 local SpellTracker = require("../modules/SpellTracker")
 local Builder = require("../utils/CombatEventBuilder")
 local mocks = require('tests.mocks')
@@ -19,6 +20,7 @@ describe('SpellTracker', function()
             SpellTracker.log = log
             SpellTracker:reset()
             mocks:ClearUnitGUIDs()
+            RLHelper.currentCombat.firstEnemy = nil
         end)
 
         it('logs first damage to enemy', function()
@@ -108,6 +110,36 @@ describe('SpellTracker', function()
 
             assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
                 date("%H:%M:%S", GetTime()), "Julian", "Interface\\Icons\\inv_shoulder_37", "Soxen"))
+        end)
+
+        it('logs Aura Mastery on spell cast success without target', function()
+            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
+                "0x0000000000000001", "Palanessa", 0x512, "0x0000000000000000", nil, 0x80000000,
+                31821, "Мастер аур", 0x1)
+
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t",
+                date("%H:%M:%S", GetTime()), "Palanessa", "Interface\\Icons\\Spell_Holy_AuraMastery"))
+        end)
+
+        it('logs Holy Wrath on spell cast success without target', function()
+            RLHelper.currentCombat.firstEnemy = "Король-лич"
+
+            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
+                "0x0000000000000001", "Tilasha", 0x511, "0x0000000000000000", nil, 0x80000000,
+                48817, "Гнев небес", 0x2)
+
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t",
+                date("%H:%M:%S", GetTime()), "Tilasha", "Interface\\Icons\\Spell_Holy_Excorcism"))
+        end)
+
+        it('does not log Holy Wrath outside Lich King combat', function()
+            RLHelper.currentCombat.firstEnemy = "Халион"
+
+            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
+                "0x0000000000000001", "Tilasha", 0x511, "0x0000000000000000", nil, 0x80000000,
+                48817, "Гнев небес", 0x2)
+
+            assert.spy(log).was_not_called()
         end)
 
         it('logs Hand of Sacrifice on aura applied', function()

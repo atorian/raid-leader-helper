@@ -51,6 +51,10 @@ local function isPetType(flags)
     return bit.band(flags or 0, COMBATLOG_OBJECT_TYPE_PET_FLAG) > 0
 end
 
+local function isTotemName(name)
+    return type(name) == "string" and name:match("^Тотем") ~= nil
+end
+
 function IgorDeathTracker:GetGroupDeathMessagePhrases(event)
     if not event or event.event ~= "UNIT_DIED" then
         return nil
@@ -65,6 +69,10 @@ function IgorDeathTracker:GetGroupDeathMessagePhrases(event)
 
     if isPlayerType(destFlags) then
         return IGOR_DEATH_PHRASES
+    end
+
+    if isTotemName(event.destName) then
+        return nil
     end
 
     if isPetType(destFlags) then

@@ -168,6 +168,25 @@ describe("IgorDeathTracker", function()
         assert.are.same({ { message = "Игорь зажимает нос. Волк воняет.", channel = "EMOTE" } }, messages)
     end)
 
+    it("ignores group pet deaths with totem name prefix", function()
+        local sentCount = 0
+        _G.SendChatMessage = function()
+            sentCount = sentCount + 1
+        end
+        RLHelper.GetCombatNow = function()
+            return 100
+        end
+
+        local sent = IgorDeathTracker:handleEvent({
+            event = "UNIT_DIED",
+            destName = "Тотем исцеляющего потока IX",
+            destFlags = 0x1114
+        })
+
+        assert.is_false(sent)
+        assert.are.equal(0, sentCount)
+    end)
+
     it("ignores a group guardian death", function()
         local sentCount = 0
         _G.SendChatMessage = function()

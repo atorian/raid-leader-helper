@@ -538,6 +538,9 @@ describe("RLHelper settings helpers", function()
     local originalOpenOptionsPanel
     local originalGetRealNumRaidMembers
     local originalGetRealNumPartyMembers
+    local originalCreateFrame
+    local originalUIParent
+    local originalAddCategory
 
     before_each(function()
         originalDb = RLHelper.db
@@ -546,6 +549,9 @@ describe("RLHelper settings helpers", function()
         originalOpenOptionsPanel = RLHelper.OpenOptionsPanel
         originalGetRealNumRaidMembers = _G.GetRealNumRaidMembers
         originalGetRealNumPartyMembers = _G.GetRealNumPartyMembers
+        originalCreateFrame = _G.CreateFrame
+        originalUIParent = _G.UIParent
+        originalAddCategory = _G.InterfaceOptions_AddCategory
         RLHelper.db = {
             profile = {
                 displayOnlyInGroup = true
@@ -560,6 +566,82 @@ describe("RLHelper settings helpers", function()
         _G.InterfaceOptionsFrame_OpenToCategory = originalOpenToCategory
         _G.GetRealNumRaidMembers = originalGetRealNumRaidMembers
         _G.GetRealNumPartyMembers = originalGetRealNumPartyMembers
+        _G.CreateFrame = originalCreateFrame
+        _G.UIParent = originalUIParent
+        _G.InterfaceOptions_AddCategory = originalAddCategory
+    end)
+
+    it("creates options panel with Russian setting labels", function()
+        local texts = {}
+
+        local function newFrame(frameType, name, parent, template)
+            local frame = {
+                frameType = frameType,
+                name = name,
+                parent = parent,
+                template = template,
+                scripts = {}
+            }
+
+            function frame:GetName()
+                return self.name
+            end
+
+            function frame:CreateFontString()
+                return newFrame("FontString", nil, self)
+            end
+
+            function frame:SetText(text)
+                self.text = text
+                table.insert(texts, text)
+            end
+
+            function frame:SetPoint()
+            end
+
+            function frame:SetSize()
+            end
+
+            function frame:SetAutoFocus()
+            end
+
+            function frame:SetScript(event, callback)
+                self.scripts[event] = callback
+            end
+
+            function frame:GetText()
+                return self.text or ""
+            end
+
+            function frame:ClearFocus()
+            end
+
+            function frame:SetChecked(value)
+                self.checked = value
+            end
+
+            if frameType == "CheckButton" and name then
+                _G[name .. "Text"] = {
+                    SetText = function(_, text)
+                        table.insert(texts, text)
+                    end
+                }
+            end
+
+            return frame
+        end
+
+        _G.UIParent = newFrame("Frame", "UIParent")
+        _G.CreateFrame = newFrame
+        _G.InterfaceOptions_AddCategory = function()
+        end
+
+        RLHelper:CreateOptionsPanel()
+
+        assert.is_nil(table.concat(texts, " "):find("Pull Cancel", 1, true))
+        assert.is_nil(table.concat(texts, " "):find("Display only", 1, true))
+        assert.is_true(table.concat(texts, " "):find("Текст сообщения отмены пула", 1, true) ~= nil)
+        assert.is_true(table.concat(texts, " "):find("Показывать только в группе", 1, true) ~= nil)
     end)
 
     it("opens the registered options panel", function()

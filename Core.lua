@@ -1221,7 +1221,7 @@ function RLHelper:CreateOptionsPanel()
 
     local cancelLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     cancelLabel:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -24)
-    cancelLabel:SetText("Pull Cancel message text")
+    cancelLabel:SetText("Текст сообщения отмены пула")
 
     local cancelEditBox = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
     cancelEditBox:SetSize(320, 24)
@@ -1238,7 +1238,7 @@ function RLHelper:CreateOptionsPanel()
     local displayOnlyInGroup = CreateFrame("CheckButton", "RLHelperDisplayOnlyInGroupCheckButton", panel,
         "InterfaceOptionsCheckButtonTemplate")
     displayOnlyInGroup:SetPoint("TOPLEFT", cancelEditBox, "BOTTOMLEFT", -4, -18)
-    _G[displayOnlyInGroup:GetName() .. "Text"]:SetText("Display only in Group")
+    _G[displayOnlyInGroup:GetName() .. "Text"]:SetText("Показывать только в группе")
     displayOnlyInGroup:SetScript("OnClick", function(self)
         RLHelper.db.profile.displayOnlyInGroup = self:GetChecked() and true or false
         RLHelper:RefreshMainFrameVisibility()

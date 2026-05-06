@@ -14,6 +14,7 @@ local aimedshot = "Interface\\Icons\\INV_Spear_07"
 local chimera = "Interface\\Icons\\Ability_Hunter_ChimeraShot2"
 local steady = "Interface\\Icons\\Ability_Hunter_SteadyShot"
 local charming = "Interface\\Icons\\Ability_Hunter_ImpalingBolt"
+local arcaneShot = "Interface\\Icons\\Ability_ImpalingBolt"
 
 describe("Misdirection Tracker", function()
     local log
@@ -43,6 +44,21 @@ describe("Misdirection Tracker", function()
         assert.spy(MisdirectionTracker.log).was_called_with(string.format(
             "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк |TInterface\\Icons\\INV_Spear_07:24:24:0:-2|t",
             date("%H:%M:%S", GetTime()), misdirect))
+    end)
+
+    it("показывает Чародейский выстрел правильной иконкой", function()
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
+            :CastSuccess(34477, "Перенаправление"):Build())
+
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToEnemy("Враг")
+            :SpellDamage(49045, "Чародейский выстрел", 1000):Build())
+
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
+            :RemoveAura(35079, "Перенаправление"):Build())
+
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк |T%s:24:24:0:-2|t",
+            date("%H:%M:%S", GetTime()), misdirect, arcaneShot))
     end)
 
     it("отслеживает урон во время активного напула Роги", function()

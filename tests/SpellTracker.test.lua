@@ -123,6 +123,7 @@ describe('SpellTracker', function()
 
         it('logs Holy Wrath on spell cast success without target', function()
             RLHelper.currentCombat.firstEnemy = "Король-лич"
+            RLHelper.currentInstanceId = 631
 
             dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
                 "0x0000000000000001", "Tilasha", 0x511, "0x0000000000000000", nil, 0x80000000,
@@ -134,6 +135,18 @@ describe('SpellTracker', function()
 
         it('does not log Holy Wrath outside Lich King combat', function()
             RLHelper.currentCombat.firstEnemy = "Халион"
+            RLHelper.currentInstanceId = 631
+
+            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
+                "0x0000000000000001", "Tilasha", 0x511, "0x0000000000000000", nil, 0x80000000,
+                48817, "Гнев небес", 0x2)
+
+            assert.spy(log).was_not_called()
+        end)
+
+        it('does not log Holy Wrath outside Icecrown Citadel', function()
+            RLHelper.currentCombat.firstEnemy = "Король-лич"
+            RLHelper.currentInstanceId = 724
 
             dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
                 "0x0000000000000001", "Tilasha", 0x511, "0x0000000000000000", nil, 0x80000000,

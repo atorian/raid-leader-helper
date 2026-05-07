@@ -31,6 +31,7 @@ describe("Боевая система", function()
         RLHelper.inCombat = false
         RLHelper.lastCombatActivityAt = nil
         RLHelper.combatEndRequestedAt = nil
+        RLHelper.combatEndRequiresRegen = false
         RLHelper.currentCombat = {
             startTime = nil,
             messages = {},
@@ -88,6 +89,16 @@ describe("Боевая система", function()
         assert.are.equal(1, count(RLHelper.activeEnemies))
         assert.are.equal(1, count(RLHelper.activePlayers))
         assert.are.equal("Враг1", RLHelper.currentCombat.firstEnemy)
+    end)
+
+    it("запрещает прямое добавление сообщения до начала боя", function()
+        assert.has.errors(function()
+            RLHelper:OnCombatLogEvent("test message")
+        end)
+
+        assert.is_false(RLHelper.inCombat)
+        assert.is_nil(RLHelper.currentCombat.startTime)
+        assert.are.equal(0, #RLHelper.currentCombat.messages)
     end)
 
     it("переименовывает бой в имя босса по известному npc id без boss1", function()
@@ -171,6 +182,17 @@ describe("Боевая система", function()
         assert.are.equal("Ануб'арак", RLHelper.currentCombat.firstEnemy)
     end)
 
+    it("не отслеживает игнорируемых врагов как участников боя", function()
+        M.UnitAffectingCombat1 = false
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("World Invisible Trigger"):ToPlayer("Игрок1")
+            :Damage(100):Build())
+
+        assert.is_false(RLHelper.inCombat)
+        assert.are.equal(0, count(RLHelper.activeEnemies))
+        assert.is_nil(RLHelper.currentCombat.firstEnemy)
+    end)
+
     it("не завершает бой сразу по PLAYER_REGEN_ENABLED", function()
         RLHelper:PLAYER_REGEN_DISABLED()
         RLHelper:PLAYER_REGEN_ENABLED()
@@ -204,6 +226,106 @@ describe("Боевая система", function()
         assert.is_true(RLHelper:EvaluateCombatEnd("test"))
         assert.is_false(RLHelper.inCombat)
         assert.are.equal(1, #RLHelper.combatHistory)
+    end)
+
+    it("не завершает бой по тикеру до PLAYER_REGEN_ENABLED", function()
+        M.UnitAffectingCombat1 = false
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Враг1"):ToPlayer("Игрок1"):Damage(100):Build())
+        RLHelper:PLAYER_REGEN_DISABLED()
+
+        for guid in pairs(RLHelper.activeEnemies) do
+            RLHelper.activeEnemies[guid] = RLHelper:GetCombatNow() - 10
+        end
+        RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
+        RLHelper.combatEndRequestedAt = nil
+
+        assert.is_false(RLHelper:EvaluateCombatEnd("ticker"))
+        assert.is_true(RLHelper.inCombat)
+        assert.is_nil(RLHelper.combatEndRequestedAt)
+        assert.are.equal("Враг1", RLHelper.currentCombat.firstEnemy)
+    end)
+
+    it("завершает бой по таймауту если не было PLAYER_REGEN_DISABLED", function()
+        M.UnitAffectingCombat1 = false
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Враг1"):ToPlayer("Игрок1"):Damage(100):Build())
+
+        for guid in pairs(RLHelper.activeEnemies) do
+            RLHelper.activeEnemies[guid] = RLHelper:GetCombatNow() - 10
+        end
+        RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
+        RLHelper.combatEndRequestedAt = nil
+
+        assert.is_false(RLHelper:EvaluateCombatEnd("ticker"))
+        assert.is_not_nil(RLHelper.combatEndRequestedAt)
+        RLHelper.combatEndRequestedAt = RLHelper:GetCombatNow() - 5
+
+        assert.is_true(RLHelper:EvaluateCombatEnd("ticker"))
+        assert.is_false(RLHelper.inCombat)
+        assert.is_nil(RLHelper.currentCombat.firstEnemy)
+    end)
+
+    it("сбрасывает имя первого врага после таймаута боя", function()
+        M.UnitAffectingCombat1 = false
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Король-лич"):ToPlayer("Игрок1"):Damage(100):Build())
+
+        assert.are.equal("Король-лич", RLHelper.currentCombat.firstEnemy)
+
+        for guid in pairs(RLHelper.activeEnemies) do
+            RLHelper.activeEnemies[guid] = RLHelper:GetCombatNow() - 10
+        end
+        RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
+        RLHelper.combatEndRequestedAt = RLHelper:GetCombatNow() - 5
+
+        assert.is_true(RLHelper:EvaluateCombatEnd("test"))
+        assert.is_false(RLHelper.inCombat)
+        assert.is_nil(RLHelper.currentCombat.firstEnemy)
+    end)
+
+    it("тикер завершает бой и сбрасывает имя первого врага после PLAYER_REGEN_ENABLED", function()
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Король-лич"):ToPlayer("Игрок1"):Damage(100):Build())
+        RLHelper:PLAYER_REGEN_DISABLED()
+
+        assert.are.equal("Король-лич", RLHelper.currentCombat.firstEnemy)
+
+        M.UnitAffectingCombat1 = false
+        RLHelper:PLAYER_REGEN_ENABLED()
+
+        assert.is_true(RLHelper.inCombat)
+        assert.is_not_nil(RLHelper.combatTicker)
+        assert.is_not_nil(RLHelper.combatEndRequestedAt)
+
+        for guid in pairs(RLHelper.activeEnemies) do
+            RLHelper.activeEnemies[guid] = RLHelper:GetCombatNow() - 10
+        end
+        RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
+        RLHelper.combatEndRequestedAt = RLHelper:GetCombatNow() - 5
+
+        RLHelper.combatTicker.callback()
+
+        assert.is_false(RLHelper.inCombat)
+        assert.is_nil(RLHelper.currentCombat.firstEnemy)
+    end)
+
+    it("разрешает повторный запрос завершения после PLAYER_REGEN_ENABLED и новой активности", function()
+        M.UnitAffectingCombat1 = false
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Враг1"):ToPlayer("Игрок1"):Damage(100):Build())
+        RLHelper:PLAYER_REGEN_DISABLED()
+        RLHelper:PLAYER_REGEN_ENABLED()
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Враг2"):ToPlayer("Игрок1"):Damage(100):Build())
+        assert.is_nil(RLHelper.combatEndRequestedAt)
+
+        for guid in pairs(RLHelper.activeEnemies) do
+            RLHelper.activeEnemies[guid] = RLHelper:GetCombatNow() - 10
+        end
+        RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
+
+        assert.is_false(RLHelper:EvaluateCombatEnd("ticker"))
+        assert.is_not_nil(RLHelper.combatEndRequestedAt)
     end)
 
     it("не сохраняет обычный бой когда включена история только боссов", function()

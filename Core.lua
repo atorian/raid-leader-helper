@@ -38,6 +38,7 @@ RLHelper.GROUP_AFFILIATION_PLAYER = 0x1 -- Игрок
 RLHelper.GROUP_AFFILIATION_PARTY = 0x2 -- Член группы
 RLHelper.GROUP_AFFILIATION_RAID = 0x4 -- Член рейда
 RLHelper.GROUP_AFFILIATION_ANY = 0x7 -- Принадлежность к любой группе (игрок/группа/рейд)
+local COMBATLOG_OBJECT_TYPE_PLAYER_FLAG = COMBATLOG_OBJECT_TYPE_PLAYER or 0x00000400
 
 -- Enemy flags
 RLHelper.ENEMY_FLAGS = 0xa48 -- Маска для проверки враждебных NPC (OUTSIDER | HOSTILE | NPC | NPC_TYPE)
@@ -75,6 +76,7 @@ RLHelper.activePlayers = {}
 RLHelper.enemyEvents = {} -- Structure to track enemies and their events
 RLHelper.lastCombatActivityAt = nil
 RLHelper.combatEndRequestedAt = nil
+RLHelper.combatEndRequiresRegen = false
 RLHelper.combatTicker = nil
 RLHelper.currentInstanceId = nil
 
@@ -282,6 +284,14 @@ local function isPlayer(flags)
     return bit.band(flags or 0, RLHelper.GROUP_AFFILIATION_ANY) > 0
 end
 
+local function isPlayerType(flags)
+    return bit.band(flags or 0, COMBATLOG_OBJECT_TYPE_PLAYER_FLAG) > 0
+end
+
+local function isOutsidePlayer(flags)
+    return isPlayerType(flags) and not isPlayer(flags)
+end
+
 local function shouldIgnoreCombatEnemy(name)
     return CombatFilters and CombatFilters:IsIgnoredCombatEnemy(name) or false
 end
@@ -337,6 +347,18 @@ end
 
 local function involvesEnemy(event)
     return isEnemy(event.sourceFlags) or isEnemy(event.destFlags)
+end
+
+local function isTrackableEnemy(flags, name)
+    return isEnemy(flags) and not shouldIgnoreCombatEnemy(name)
+end
+
+local function involvesTrackableEnemy(event)
+    return isTrackableEnemy(event.sourceFlags, event.sourceName) or isTrackableEnemy(event.destFlags, event.destName)
+end
+
+local function involvesOutsidePlayer(event)
+    return isOutsidePlayer(event.sourceFlags) or isOutsidePlayer(event.destFlags)
 end
 
 function RLHelper:MarkEnemyInactive(guid)
@@ -410,6 +432,7 @@ function RLHelper:ResetCombatState()
     self.inCombat = false
     self.lastCombatActivityAt = nil
     self.combatEndRequestedAt = nil
+    self.combatEndRequiresRegen = false
 
     self.currentCombat = {
         startTime = nil,
@@ -450,7 +473,7 @@ function RLHelper:FinishCombat(reason)
 end
 
 function RLHelper:trackCombatants(event)
-    if event.spellId == LADY_KONTROL or not affectingGroup(event) or not involvesEnemy(event) then
+    if event.spellId == LADY_KONTROL or not affectingGroup(event) or not involvesTrackableEnemy(event) then
         return false
     end
 
@@ -465,10 +488,10 @@ function RLHelper:trackCombatants(event)
         self.activePlayers[event.destGUID] = true
     end
 
-    if isEnemy(event.sourceFlags) then
+    if isTrackableEnemy(event.sourceFlags, event.sourceName) then
         self:MarkEnemyActivity(event.sourceGUID, event.sourceName, event.event, now)
     end
-    if isEnemy(event.destFlags) then
+    if isTrackableEnemy(event.destFlags, event.destName) then
         self:MarkEnemyActivity(event.destGUID, event.destName, event.event, now)
     end
 
@@ -511,11 +534,13 @@ function RLHelper:PLAYER_REGEN_ENABLED()
     end
 
     self.combatEndRequestedAt = self:GetCombatNow()
+    self.combatEndRequiresRegen = false
     self:EnsureCombatTicker()
     self:EvaluateCombatEnd("PLAYER_REGEN_ENABLED")
 end
 
 function RLHelper:PLAYER_REGEN_DISABLED()
+    self.combatEndRequiresRegen = true
     self:StartCombat("PLAYER_REGEN_DISABLED")
 end
 
@@ -636,35 +661,33 @@ end
 
 function RLHelper:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     local eventData = blizzardEvent(...)
-    self:DispatchCombatEvent(eventData)
-    self:trackCombatants(eventData)
-    self:MarkBossCombat(eventData)
 
-    if self.currentCombat.firstEnemy or not affectingGroup(eventData) then
+    if involvesOutsidePlayer(eventData) then
         return
     end
 
-    -- Save first enemy name if not set yet
-    if isEnemy(eventData.sourceFlags) and not shouldIgnoreCombatEnemy(eventData.sourceName) then
-        if not self.currentCombat.firstEnemy then
-            self.currentCombat.firstEnemy = eventData.sourceName
-        end
-    end
-    if isEnemy(eventData.destFlags) and not shouldIgnoreCombatEnemy(eventData.destName) then
+    self:trackCombatants(eventData)
+    self:MarkBossCombat(eventData)
 
-        if not self.currentCombat.firstEnemy then
+    if not self.currentCombat.firstEnemy and affectingGroup(eventData) then
+        -- Save first enemy name if not set yet
+        if isEnemy(eventData.sourceFlags) and not shouldIgnoreCombatEnemy(eventData.sourceName) then
+            self.currentCombat.firstEnemy = eventData.sourceName
+        elseif isEnemy(eventData.destFlags) and not shouldIgnoreCombatEnemy(eventData.destName) then
             self.currentCombat.firstEnemy = eventData.destName
         end
     end
+
+    if not self.inCombat then
+        return
+    end
+
+    self:DispatchCombatEvent(eventData)
 end
 
 function RLHelper:OnCombatLogEvent(message)
     if not self.inCombat then
-        self:StartCombat("message")
-    end
-
-    if not self.currentCombat.startTime then
-        self.currentCombat.startTime = time()
+        error("OnCombatLogEvent called before combat started", 2)
     end
 
     table.insert(self.currentCombat.messages, message)
@@ -704,6 +727,10 @@ function RLHelper:EvaluateCombatEnd(reason)
     end
 
     if not self.combatEndRequestedAt then
+        if self.combatEndRequiresRegen then
+            return false
+        end
+
         self.combatEndRequestedAt = now
     end
 
@@ -1349,20 +1376,11 @@ function RLHelper:HandleSlashCommand(input)
         print("/rlh config|options - открыть настройки")
         print("/rlh debug - включить/выключить режим отладки")
         print("/rlh zone - вывести текущую зону и активность модулей")
-        print("/rlh fill - включить/выключить режим отладки")
         print("/rlh hist - показать историю боев")
         print("/rlh clear - очистить историю боев")
         print("/rlh demo - show all messages")
         print("/rlh meters - вручную сбросить сегменты урона")
         print("/rlh b # - показать бой по номеру")
-    elseif input == "fill" then
-        for i = 1, 50 do
-            self:OnCombatLogEvent(string.format(
-                "Test message %d: |T%s:24:24:0:0|t |T%s:24:24:0:0|t |T%s:24:24:0:0|t |T%s:24:24:0:0|t |T%s:24:24:0:0|t",
-                i, "Interface\\Icons\\INV_Misc_QuestionMark", "Interface\\Icons\\INV_Misc_QuestionMark",
-                "Interface\\Icons\\INV_Misc_QuestionMark", "Interface\\Icons\\INV_Misc_QuestionMark",
-                "Interface\\Icons\\INV_Misc_QuestionMark"))
-        end
     elseif input == "debug" then
         self.db.profile.debug = not self.db.profile.debug
         print("Режим отладки: " .. (self.db.profile.debug and "включен" or "выключен"))
@@ -1377,7 +1395,9 @@ function RLHelper:HandleSlashCommand(input)
     elseif input == "clear" then
         self:ClearCombatHistory()
     elseif input == "demo" then
+        self:StartCombat("demo")
         self:SendMessage("RLHelper_Demo")
+        self.combatEndRequestedAt = self:GetCombatNow()
     elseif input == "meters" then
         self:TriggerDamageMeterReset()
     elseif input:match("^b%s+(%d+)$") then

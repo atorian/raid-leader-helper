@@ -390,15 +390,30 @@ end)
 describe("RLHelper combat event dispatch", function()
     local originalIterateModules
     local originalShouldDispatchCombatEventToModule
+    local originalDispatchCombatEvent
+    local originalTrackCombatants
+    local originalMarkBossCombat
+    local originalFirstEnemy
+    local originalInCombat
 
     before_each(function()
         originalIterateModules = RLHelper.IterateModules
         originalShouldDispatchCombatEventToModule = RLHelper.ShouldDispatchCombatEventToModule
+        originalDispatchCombatEvent = RLHelper.DispatchCombatEvent
+        originalTrackCombatants = RLHelper.trackCombatants
+        originalMarkBossCombat = RLHelper.MarkBossCombat
+        originalFirstEnemy = RLHelper.currentCombat.firstEnemy
+        originalInCombat = RLHelper.inCombat
     end)
 
     after_each(function()
         RLHelper.IterateModules = originalIterateModules
         RLHelper.ShouldDispatchCombatEventToModule = originalShouldDispatchCombatEventToModule
+        RLHelper.DispatchCombatEvent = originalDispatchCombatEvent
+        RLHelper.trackCombatants = originalTrackCombatants
+        RLHelper.MarkBossCombat = originalMarkBossCombat
+        RLHelper.currentCombat.firstEnemy = originalFirstEnemy
+        RLHelper.inCombat = originalInCombat
     end)
 
     it("skips UI modules that do not handle combat events", function()
@@ -426,6 +441,97 @@ describe("RLHelper combat event dispatch", function()
             RLHelper:DispatchCombatEvent(eventData)
         end)
         assert.are.equal(1, handled)
+    end)
+
+    it("does not dispatch events from outside players", function()
+        local dispatchCount = 0
+        RLHelper.DispatchCombatEvent = function()
+            dispatchCount = dispatchCount + 1
+        end
+        RLHelper.trackCombatants = function()
+        end
+        RLHelper.MarkBossCombat = function()
+        end
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_DAMAGE",
+            "0x0000000000000001", "Чужой", 0x510, "0xF130009BB75AF023", "Халион", 0x10a48,
+            12345, "Удар", 0x1, 1000, 0, 1, 0, 0, 0, nil, nil, nil)
+
+        assert.are.equal(0, dispatchCount)
+    end)
+
+    it("does not dispatch events to outside players", function()
+        local dispatchCount = 0
+        RLHelper.DispatchCombatEvent = function()
+            dispatchCount = dispatchCount + 1
+        end
+        RLHelper.trackCombatants = function()
+        end
+        RLHelper.MarkBossCombat = function()
+        end
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_DAMAGE",
+            "0xF130009BB75AF023", "Халион", 0x10a48, "0x0000000000000001", "Чужой", 0x510,
+            12345, "Удар", 0x1, 1000, 0, 1, 0, 0, 0, nil, nil, nil)
+
+        assert.are.equal(0, dispatchCount)
+    end)
+
+    it("dispatches events from raid players", function()
+        local dispatchCount = 0
+        RLHelper.DispatchCombatEvent = function()
+            dispatchCount = dispatchCount + 1
+        end
+        RLHelper.trackCombatants = function()
+        end
+        RLHelper.MarkBossCombat = function()
+        end
+        RLHelper.inCombat = true
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_DAMAGE",
+            "0x0000000000000001", "Свой", 0x514, "0xF130009BB75AF023", "Халион", 0x10a48,
+            12345, "Удар", 0x1, 1000, 0, 1, 0, 0, 0, nil, nil, nil)
+
+        assert.are.equal(1, dispatchCount)
+    end)
+
+    it("does not dispatch non-combat events before combat starts", function()
+        local dispatchCount = 0
+        RLHelper.DispatchCombatEvent = function()
+            dispatchCount = dispatchCount + 1
+        end
+        RLHelper.trackCombatants = function()
+            return false
+        end
+        RLHelper.MarkBossCombat = function()
+        end
+        RLHelper.inCombat = false
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
+            "0x0000000000000001", "Palanessa", 0x514, "0x0000000000000000", nil, 0x80000000,
+            31821, "Мастер аур", 0x1)
+
+        assert.are.equal(0, dispatchCount)
+    end)
+
+    it("updates first enemy before dispatching events to modules", function()
+        local firstEnemyDuringDispatch
+        RLHelper.DispatchCombatEvent = function()
+            firstEnemyDuringDispatch = RLHelper.currentCombat.firstEnemy
+        end
+        RLHelper.trackCombatants = function()
+        end
+        RLHelper.MarkBossCombat = function()
+            return false
+        end
+        RLHelper.currentCombat.firstEnemy = nil
+        RLHelper.inCombat = true
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_DAMAGE",
+            "0x0000000000000001", "Свой", 0x514, "0xF130009BB75AF023", "Новый моб", 0x10a48,
+            12345, "Удар", 0x1, 1000, 0, 1, 0, 0, 0, nil, nil, nil)
+
+        assert.are.equal("Новый моб", firstEnemyDuringDispatch)
     end)
 end)
 
@@ -541,6 +647,11 @@ describe("RLHelper settings helpers", function()
     local originalCreateFrame
     local originalUIParent
     local originalAddCategory
+    local originalGlobalPrint
+    local originalStartCombat
+    local originalSendMessage
+    local originalInCombat
+    local originalCombatEndRequestedAt
 
     before_each(function()
         originalDb = RLHelper.db
@@ -552,6 +663,11 @@ describe("RLHelper settings helpers", function()
         originalCreateFrame = _G.CreateFrame
         originalUIParent = _G.UIParent
         originalAddCategory = _G.InterfaceOptions_AddCategory
+        originalGlobalPrint = _G.print
+        originalStartCombat = RLHelper.StartCombat
+        originalSendMessage = RLHelper.SendMessage
+        originalInCombat = RLHelper.inCombat
+        originalCombatEndRequestedAt = RLHelper.combatEndRequestedAt
         RLHelper.db = {
             profile = {
                 displayOnlyInGroup = true
@@ -569,6 +685,11 @@ describe("RLHelper settings helpers", function()
         _G.CreateFrame = originalCreateFrame
         _G.UIParent = originalUIParent
         _G.InterfaceOptions_AddCategory = originalAddCategory
+        _G.print = originalGlobalPrint
+        RLHelper.StartCombat = originalStartCombat
+        RLHelper.SendMessage = originalSendMessage
+        RLHelper.inCombat = originalInCombat
+        RLHelper.combatEndRequestedAt = originalCombatEndRequestedAt
     end)
 
     it("creates options panel with Russian setting labels", function()
@@ -665,6 +786,51 @@ describe("RLHelper settings helpers", function()
         RLHelper:HandleSlashCommand("config")
 
         assert.is_true(opened)
+    end)
+
+    it("does not advertise the removed fill slash command", function()
+        local printed = {}
+        _G.print = function(message)
+            table.insert(printed, message)
+        end
+
+        RLHelper:HandleSlashCommand("help")
+
+        assert.is_nil(table.concat(printed, "\n"):find("/rlh fill", 1, true))
+    end)
+
+    it("starts demo combat before sending demo messages", function()
+        local startReason
+        local sentWhileInCombat = false
+        RLHelper.inCombat = false
+        RLHelper.StartCombat = function(_, reason)
+            startReason = reason
+            RLHelper.inCombat = true
+        end
+        RLHelper.SendMessage = function(_, message)
+            if message == "RLHelper_Demo" then
+                sentWhileInCombat = RLHelper.inCombat
+            end
+        end
+
+        RLHelper:HandleSlashCommand("demo")
+
+        assert.are.equal("demo", startReason)
+        assert.is_true(sentWhileInCombat)
+    end)
+
+    it("requests demo combat end after sending demo messages", function()
+        RLHelper.inCombat = false
+        RLHelper.combatEndRequestedAt = nil
+        RLHelper.StartCombat = function()
+            RLHelper.inCombat = true
+        end
+        RLHelper.SendMessage = function()
+        end
+
+        RLHelper:HandleSlashCommand("demo")
+
+        assert.is_not_nil(RLHelper.combatEndRequestedAt)
     end)
 
     it("allows manual show outside a group when displayOnlyInGroup is enabled", function()

@@ -8,6 +8,7 @@ local firstDamageDone = false
 local firstValithriaHealDone = false
 local HAND_OF_RECKONING = 62124
 local HOLY_WRATH = 48817
+local ICECROWN_CITADEL = 631
 local VALITHRIA_DREAMWALKER = "Валитрия Сноходица"
 local LICH_KING = "Король-лич"
 function SppellTracker:OnEnable()
@@ -107,7 +108,8 @@ local function formatSpellCast(ts, source, spellIcon, dest)
 end
 
 local function isLichKingCombat()
-    return RLHelper.currentCombat and RLHelper.currentCombat.firstEnemy == LICH_KING
+    return RLHelper.currentInstanceId == ICECROWN_CITADEL and RLHelper.currentCombat and
+        RLHelper.currentCombat.firstEnemy == LICH_KING
 end
 
 function SppellTracker:clearPendingHandOfReckoning(destGUID)

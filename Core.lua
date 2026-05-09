@@ -3,6 +3,7 @@ local callbacks = LibStub("CallbackHandler-1.0"):New(RLHelper)
 local IsGroupInCombat, InCombatLockdown = RLHelper.IsGroupInCombat, InCombatLockdown
 local GetUnitIdFromGUID = RLHelper.GetUnitIdFromGUID
 local CombatFilters = RLHelperCombatFilters
+local BossIds = RLHelperBossIds
 
 local COMBAT_END_CHECK_INTERVAL = 1
 local COMBAT_END_GRACE = 3
@@ -17,7 +18,9 @@ local ZONE_GATE_INSTANCE_ID_BY_INSTANCE_NAME = {
     ["Ruby Sanctum"] = 724,
     ["Рубиновое святилище"] = 724,
     ["Icecrown Citadel"] = 631,
-    ["Цитадель Ледяной Короны"] = 631
+    ["Цитадель Ледяной Короны"] = 631,
+    ["Ulduar"] = 603,
+    ["Ульдуар"] = 603
 }
 local DBM_PULL_BAR_NAMES = {
     "АТAKA!!",
@@ -310,6 +313,29 @@ local function bossNameFromModule(module, npcId)
     end
 
     return module.bossIds[npcId]
+end
+
+local function bossNameFromRegistry(instanceId, npcId)
+    if type(BossIds) ~= "table" or type(BossIds.BY_INSTANCE) ~= "table" or type(npcId) ~= "number" then
+        return nil
+    end
+
+    local instanceBossIds = BossIds.BY_INSTANCE[instanceId]
+    if type(instanceBossIds) ~= "table" then
+        return nil
+    end
+
+    return instanceBossIds[npcId]
+end
+
+local function isValithriaHealTrigger(event, npcId)
+    local valithriaId = BossIds and BossIds.NPCS and BossIds.NPCS.VALITHRIA_DREAMWALKER
+    if npcId ~= valithriaId then
+        return true
+    end
+
+    return (event.event == "SPELL_HEAL" or event.event == "SPELL_PERIODIC_HEAL") and isPlayer(event.sourceFlags) and
+        (event.amount or 0) > 0
 end
 
 local LADY_KONTROL = 71289
@@ -617,18 +643,33 @@ function affectingGroup(event)
 end
 
 function RLHelper:GetKnownBossNameFromCombatEvent(event)
+    local sourceNpcId = creatureIdFromGuid(event.sourceGUID)
+    local destNpcId = creatureIdFromGuid(event.destGUID)
+
+    local sourceRegistryBossName = bossNameFromRegistry(self.currentInstanceId, sourceNpcId)
+    if sourceRegistryBossName and isValithriaHealTrigger(event, sourceNpcId) then
+        return sourceRegistryBossName
+    end
+
+    local destRegistryBossName = bossNameFromRegistry(self.currentInstanceId, destNpcId)
+    if destRegistryBossName and isValithriaHealTrigger(event, destNpcId) then
+        return destRegistryBossName
+    end
+
     if type(self.IterateModules) ~= "function" then
         return nil
     end
 
-    local sourceNpcId = creatureIdFromGuid(event.sourceGUID)
-    local destNpcId = creatureIdFromGuid(event.destGUID)
-
     for _, module in self:IterateModules() do
         if self:ShouldDispatchCombatEventToModule(module) then
-            local bossName = bossNameFromModule(module, sourceNpcId) or bossNameFromModule(module, destNpcId)
-            if bossName then
-                return bossName
+            local sourceBossName = bossNameFromModule(module, sourceNpcId)
+            if sourceBossName and isValithriaHealTrigger(event, sourceNpcId) then
+                return sourceBossName
+            end
+
+            local destBossName = bossNameFromModule(module, destNpcId)
+            if destBossName and isValithriaHealTrigger(event, destNpcId) then
+                return destBossName
             end
         end
     end

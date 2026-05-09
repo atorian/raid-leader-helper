@@ -1,6 +1,7 @@
 local M = require('tests.mocks')
 require('../lib/blizzardEvent')
 require('../lib/CombatFilters')
+require('../data/BossIds')
 local RLHelper = require('../Core')
 local Builder = require('../utils/CombatEventBuilder')
 
@@ -124,6 +125,83 @@ describe("Боевая система", function()
 
         assert.is_true(RLHelper.currentCombat.isBoss)
         assert.are.equal("Кровавая королева Лана'тель", RLHelper.currentCombat.firstEnemy)
+    end)
+
+    it("определяет босса по общему реестру npc id", function()
+        M.UnitAffectingCombat1 = false
+        RLHelper.currentInstanceId = 631
+        setBossModules({})
+
+        local bossEvent = { Builder:New():FromEnemy("Лорд Ребрад"):ToPlayer("Игрок1"):Damage(100):Build() }
+        bossEvent[4] = npcGuid(36612)
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(bossEvent))
+
+        assert.is_true(RLHelper.currentCombat.isBoss)
+        assert.are.equal("Лорд Ребрад", RLHelper.currentCombat.firstEnemy)
+    end)
+
+    it("не помечает бой со Свалной как Валитрию от ауры на Валитрии", function()
+        M.UnitAffectingCombat1 = false
+        RLHelper.currentInstanceId = 631
+        setBossModules({})
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Сестра Свална"):ToPlayer("Игрок1")
+            :Damage(100):Build())
+
+        local auraEvent = { Builder:New():FromPlayer("Игрок1"):ToEnemy("Валитрия Сноходица")
+            :ApplyAura(48942, "Аура благочестия", "BUFF"):Build() }
+        auraEvent[7] = npcGuid(36789)
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(auraEvent))
+
+        assert.is_false(RLHelper.currentCombat.isBoss)
+        assert.are.equal("Сестра Свална", RLHelper.currentCombat.firstEnemy)
+    end)
+
+    it("не помечает бой со Свалной как Валитрию через module bossIds", function()
+        M.UnitAffectingCombat1 = false
+        RLHelper.currentInstanceId = 631
+        setBossModules({
+            {
+                name = "ValithriaTracker",
+                receivesCombatEvents = true,
+                zoneGateInstanceId = 631,
+                bossIds = {
+                    [36789] = "Валитрия Сноходица"
+                }
+            }
+        })
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Сестра Свална"):ToPlayer("Игрок1")
+            :Damage(100):Build())
+
+        local auraEvent = { Builder:New():FromPlayer("Игрок1"):ToEnemy("Валитрия Сноходица")
+            :ApplyAura(48942, "Аура благочестия", "BUFF"):Build() }
+        auraEvent[7] = npcGuid(36789)
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(auraEvent))
+
+        assert.is_false(RLHelper.currentCombat.isBoss)
+        assert.are.equal("Сестра Свална", RLHelper.currentCombat.firstEnemy)
+    end)
+
+    it("помечает бой с Валитрией после первого исцеления Валитрии", function()
+        M.UnitAffectingCombat1 = false
+        RLHelper.currentInstanceId = 631
+        setBossModules({})
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Сестра Свална"):ToPlayer("Игрок1")
+            :Damage(100):Build())
+
+        local healEvent = { Builder:New():FromPlayer("Игрок1"):ToEnemy("Валитрия Сноходица")
+            :SpellHeal(54968, "Символ Света небес", 6038):Build() }
+        healEvent[7] = npcGuid(36789)
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(healEvent))
+
+        assert.is_true(RLHelper.currentCombat.isBoss)
+        assert.are.equal("Валитрия Сноходица", RLHelper.currentCombat.firstEnemy)
     end)
 
     it("определяет босса по destGUID если босс является целью события", function()
@@ -378,4 +456,29 @@ describe("Боевая система", function()
         assert.are.equal("Кровавый совет", RLHelper.combatHistory[1].firstEnemy)
         assert.are.equal("Кровавый совет", RLHelper.db.profile.combatHistory[1].firstEnemy)
     end)
+
+    it("сохраняет boss-only бой с боссом из общего реестра", function()
+        RLHelper.db.profile.bossOnlyHistory = true
+        M.UnitAffectingCombat1 = false
+        RLHelper.currentInstanceId = 603
+        setBossModules({})
+
+        local bossEvent = { Builder:New():FromEnemy("Йогг-Сарон"):ToPlayer("Игрок1"):Damage(100):Build() }
+        bossEvent[4] = npcGuid(33288)
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(bossEvent))
+        RLHelper:OnCombatLogEvent("test message")
+
+        for guid in pairs(RLHelper.activeEnemies) do
+            RLHelper.activeEnemies[guid] = RLHelper:GetCombatNow() - 10
+        end
+        RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
+        RLHelper.combatEndRequestedAt = RLHelper:GetCombatNow() - 5
+
+        assert.is_true(RLHelper:EvaluateCombatEnd("test"))
+        assert.are.equal(1, #RLHelper.combatHistory)
+        assert.is_true(RLHelper.combatHistory[1].isBoss)
+        assert.are.equal("Йогг-Сарон", RLHelper.combatHistory[1].firstEnemy)
+    end)
+
 end)

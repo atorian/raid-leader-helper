@@ -249,6 +249,56 @@ describe("RLHelper debug helpers", function()
         _G.GetRealZoneText = originalGetRealZoneText
         _G.GetZoneText = originalGetZoneText
     end)
+
+    it("uses Ulduar zone name before map API ids", function()
+        local originalDb = RLHelper.db
+        local originalPrint = RLHelper.Print
+        local originalIterateModules = RLHelper.IterateModules
+        local originalGetInstanceInfo = _G.GetInstanceInfo
+        local originalGetCurrentMapAreaID = _G.GetCurrentMapAreaID
+        local originalSetMapToCurrentZone = _G.SetMapToCurrentZone
+        local printedMessages = {}
+
+        RLHelper.db = {
+            profile = {
+                debug = true
+            }
+        }
+        RLHelper.Print = function(_, message)
+            table.insert(printedMessages, message)
+        end
+        RLHelper.IterateModules = function()
+            return ipairs({
+                {
+                    name = "UlduarBossRegistry",
+                    receivesCombatEvents = true,
+                    zoneGateInstanceId = 603
+                }
+            })
+        end
+        _G.GetInstanceInfo = function()
+            return "Ульдуар", "raid", 4, "25 Player", 25, 0, false
+        end
+        _G.SetMapToCurrentZone = function()
+            error("SetMapToCurrentZone should not be used when Ulduar instance name is known")
+        end
+        _G.GetCurrentMapAreaID = function()
+            error("GetCurrentMapAreaID should not be used when Ulduar instance name is known")
+        end
+
+        RLHelper:UpdateZoneContext("test")
+
+        assert.are.equal(603, RLHelper.currentInstanceId)
+        assert.are.equal("Зона [test]: name='Ульдуар', mapId=603", printedMessages[1])
+        assert.is_true(printedMessages[2]:find("UlduarBossRegistry:ON gate=603", 1, true) ~= nil)
+
+        RLHelper.db = originalDb
+        RLHelper.Print = originalPrint
+        RLHelper.IterateModules = originalIterateModules
+        _G.GetInstanceInfo = originalGetInstanceInfo
+        _G.GetCurrentMapAreaID = originalGetCurrentMapAreaID
+        _G.SetMapToCurrentZone = originalSetMapToCurrentZone
+    end)
 end)
 
 describe("RLHelper damage meter reset command", function()

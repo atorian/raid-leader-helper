@@ -42,6 +42,10 @@ local TRACKED_SPELLS = {
 local TRACKED_CAST_SUCCESS_SPELLS = {
     [19752] = true, -- Божественное вмешательство
     [31789] = true, -- Праведная защита
+    [31821] = true -- Мастер аур
+}
+
+local IGNORED_AURA_APPLIED_SPELLS = {
     [31821] = true, -- Мастер аур
     [48817] = true -- Гнев небес
 }
@@ -197,16 +201,19 @@ function SppellTracker:handleEvent(eventData)
 
     if eventData.event == "SPELL_CAST_SUCCESS" and TRACKED_CAST_SUCCESS_SPELLS[eventData.spellId] and
         TRACKED_SPELLS[eventData.spellId] then
-        if eventData.spellId == HOLY_WRATH and not isLichKingCombat() then
-            return
-        end
-
         self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
             eventData.destName))
         return
     end
 
-    if eventData.event == "SPELL_AURA_APPLIED" and TRACKED_SPELLS[eventData.spellId] then
+    if eventData.event == "SPELL_DAMAGE" and eventData.spellId == HOLY_WRATH and isLichKingCombat() then
+        self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
+            eventData.destName))
+        return
+    end
+
+    if eventData.event == "SPELL_AURA_APPLIED" and TRACKED_SPELLS[eventData.spellId] and
+        not IGNORED_AURA_APPLIED_SPELLS[eventData.spellId] then
         if eventData.spellId == HAND_OF_RECKONING then
             self:trackHandOfReckoningTarget(eventData)
         else

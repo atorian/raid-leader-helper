@@ -121,20 +121,21 @@ describe('SpellTracker', function()
                 date("%H:%M:%S", GetTime()), "Palanessa", "Interface\\Icons\\Spell_Holy_AuraMastery"))
         end)
 
-        it('logs Holy Wrath on spell cast success without target', function()
-            RLHelper.currentCombat.firstEnemy = "Король-лич"
-            RLHelper.currentInstanceId = 631
-
+        it('logs Aura Mastery only on spell cast success', function()
             dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
-                "0x0000000000000001", "Tilasha", 0x511, "0x0000000000000000", nil, 0x80000000,
-                48817, "Гнев небес", 0x2)
+                "0x0000000000000001", "Palanessa", 0x512, "0x0000000000000000", nil, 0x80000000,
+                31821, "Мастер аур", 0x1)
+            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_AURA_APPLIED",
+                "0x0000000000000001", "Palanessa", 0x512, "0x0000000000000001", "Palanessa", 0x512,
+                31821, "Мастер аур", 0x1, "BUFF")
 
+            assert.spy(log).was_called(1)
             assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t",
-                date("%H:%M:%S", GetTime()), "Tilasha", "Interface\\Icons\\Spell_Holy_Excorcism"))
+                date("%H:%M:%S", GetTime()), "Palanessa", "Interface\\Icons\\Spell_Holy_AuraMastery"))
         end)
 
-        it('does not log Holy Wrath outside Lich King combat', function()
-            RLHelper.currentCombat.firstEnemy = "Халион"
+        it('does not log Holy Wrath on spell cast success', function()
+            RLHelper.currentCombat.firstEnemy = "Король-лич"
             RLHelper.currentInstanceId = 631
 
             dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
@@ -144,13 +145,58 @@ describe('SpellTracker', function()
             assert.spy(log).was_not_called()
         end)
 
-        it('does not log Holy Wrath outside Icecrown Citadel', function()
+        it('logs Holy Wrath damage hits during Lich King combat', function()
+            RLHelper.currentCombat.firstEnemy = "Король-лич"
+            RLHelper.currentInstanceId = 631
+            dispatch(SpellTracker, Builder:New():FromPlayer("Primer"):ToEnemy("PrimerTarget")
+                :SpellDamage(12345, "Primer Spell", 100):Build())
+            log:clear()
+
+            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_DAMAGE",
+                "0x0000000000000001", "Tilasha", 0x511, "0xF13000872F5F75E2", "Нерубский землеглот", 0xa48,
+                48817, "Гнев небес", 0x2, 4166, 0, 2, 0, 0, 0, nil, nil, nil)
+
+            assert.spy(log).was_called(1)
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "Tilasha", "Interface\\Icons\\Spell_Holy_Excorcism",
+                "Нерубский землеглот"))
+        end)
+
+        it('does not log Holy Wrath aura applications', function()
+            RLHelper.currentCombat.firstEnemy = "Король-лич"
+            RLHelper.currentInstanceId = 631
+
+            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_AURA_APPLIED",
+                "0x0000000000000001", "Tilasha", 0x511, "0xF13000872F5F75E2", "Нерубский землеглот", 0xa48,
+                48817, "Гнев небес", 0x2, "DEBUFF")
+
+            assert.spy(log).was_not_called()
+        end)
+
+        it('does not log Holy Wrath damage outside Lich King combat', function()
+            RLHelper.currentCombat.firstEnemy = "Халион"
+            RLHelper.currentInstanceId = 631
+            dispatch(SpellTracker, Builder:New():FromPlayer("Primer"):ToEnemy("PrimerTarget")
+                :SpellDamage(12345, "Primer Spell", 100):Build())
+            log:clear()
+
+            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_DAMAGE",
+                "0x0000000000000001", "Tilasha", 0x511, "0xF13000872F5F75E2", "Нерубский землеглот", 0xa48,
+                48817, "Гнев небес", 0x2, 4166, 0, 2, 0, 0, 0, nil, nil, nil)
+
+            assert.spy(log).was_not_called()
+        end)
+
+        it('does not log Holy Wrath damage outside Icecrown Citadel', function()
             RLHelper.currentCombat.firstEnemy = "Король-лич"
             RLHelper.currentInstanceId = 724
+            dispatch(SpellTracker, Builder:New():FromPlayer("Primer"):ToEnemy("PrimerTarget")
+                :SpellDamage(12345, "Primer Spell", 100):Build())
+            log:clear()
 
-            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
-                "0x0000000000000001", "Tilasha", 0x511, "0x0000000000000000", nil, 0x80000000,
-                48817, "Гнев небес", 0x2)
+            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_DAMAGE",
+                "0x0000000000000001", "Tilasha", 0x511, "0xF13000872F5F75E2", "Нерубский землеглот", 0xa48,
+                48817, "Гнев небес", 0x2, 4166, 0, 2, 0, 0, 0, nil, nil, nil)
 
             assert.spy(log).was_not_called()
         end)

@@ -1355,8 +1355,7 @@ end
 
 function RLHelper:ShowCombatByIndex(index)
     if index < 1 or index > #self.combatHistory then
-        self:Print(
-            "Неверный номер боя. Используйте /rlh history для просмотра списка боев")
+        self:Print("Неверный номер боя")
         return
     end
 
@@ -1416,12 +1415,8 @@ function RLHelper:HandleSlashCommand(input)
         print("/rlh help - показать помощь")
         print("/rlh config|options - открыть настройки")
         print("/rlh debug - включить/выключить режим отладки")
-        print("/rlh zone - вывести текущую зону и активность модулей")
-        print("/rlh hist - показать историю боев")
         print("/rlh clear - очистить историю боев")
         print("/rlh demo - show all messages")
-        print("/rlh meters - вручную сбросить сегменты урона")
-        print("/rlh b # - показать бой по номеру")
     elseif input == "debug" then
         self.db.profile.debug = not self.db.profile.debug
         print("Режим отладки: " .. (self.db.profile.debug and "включен" or "выключен"))
@@ -1430,20 +1425,12 @@ function RLHelper:HandleSlashCommand(input)
         end
     elseif input == "config" or input == "options" then
         self:OpenOptionsPanel()
-    elseif input == "zone" then
-        self:UpdateZoneContext("slash zone", true)
-        self:PrintZoneDebug("slash zone", true)
     elseif input == "clear" then
         self:ClearCombatHistory()
     elseif input == "demo" then
         self:StartCombat("demo")
         self:SendMessage("RLHelper_Demo")
         self.combatEndRequestedAt = self:GetCombatNow()
-    elseif input == "meters" then
-        self:TriggerDamageMeterReset()
-    elseif input:match("^b%s+(%d+)$") then
-        local index = tonumber(input:match("^b%s+(%d+)$"))
-        self:ShowCombatByIndex(index)
     end
 end
 

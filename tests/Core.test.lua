@@ -424,17 +424,6 @@ describe("RLHelper damage meter reset command", function()
         assert.are.same({ "HalionTracker недоступен" }, printedMessages)
     end)
 
-    it("handles the slash meters command", function()
-        local resetCalls = 0
-        RLHelper.TriggerDamageMeterReset = function()
-            resetCalls = resetCalls + 1
-            return true
-        end
-
-        RLHelper:HandleSlashCommand("meters")
-
-        assert.are.equal(1, resetCalls)
-    end)
 end)
 
 describe("RLHelper combat event dispatch", function()

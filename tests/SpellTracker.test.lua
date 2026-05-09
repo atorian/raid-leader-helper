@@ -134,6 +134,30 @@ describe('SpellTracker', function()
                 date("%H:%M:%S", GetTime()), "Palanessa", "Interface\\Icons\\Spell_Holy_AuraMastery"))
         end)
 
+        it('logs Hand of Freedom on spell cast success with target', function()
+            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
+                "0x0000000000000001", "Tilasha", 0x511, "0x000000000016742E", "Sensei", 0x4000514,
+                1044, "Длань свободы", 0x2)
+
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "Tilasha", "Interface\\Icons\\Spell_Holy_SealOfValor",
+                "Sensei"))
+        end)
+
+        it('logs Hand of Freedom only on spell cast success', function()
+            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
+                "0x0000000000000001", "Tilasha", 0x511, "0x000000000016742E", "Sensei", 0x4000514,
+                1044, "Длань свободы", 0x2)
+            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_AURA_APPLIED",
+                "0x0000000000000001", "Tilasha", 0x511, "0x000000000016742E", "Sensei", 0x4000514,
+                1044, "Длань свободы", 0x2, "BUFF")
+
+            assert.spy(log).was_called(1)
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "Tilasha", "Interface\\Icons\\Spell_Holy_SealOfValor",
+                "Sensei"))
+        end)
+
         it('does not log Holy Wrath on spell cast success', function()
             RLHelper.currentCombat.firstEnemy = "Король-лич"
             RLHelper.currentInstanceId = 631

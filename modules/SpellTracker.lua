@@ -30,6 +30,7 @@ local TRACKED_SPELLS = {
     [5209] = "Interface\\Icons\\Ability_Druid_ChallangingRoar", -- Druid: Growl
 
     [10278] = "Interface\\Icons\\Spell_Holy_SealOfProtection", -- Paladin: Корона
+    [1044] = "Interface\\Icons\\Spell_Holy_SealOfValor", -- Paladin: Длань свободы
     [19752] = "Interface\\Icons\\Spell_Nature_TimeStop", -- Paladin: Диван
     [6940] = "Interface\\Icons\\Spell_Holy_SealOfSacrifice", -- Paladin: Длань жертвенности
     [31821] = "Interface\\Icons\\Spell_Holy_AuraMastery", -- Paladin: Мастер аур
@@ -40,12 +41,14 @@ local TRACKED_SPELLS = {
 }
 
 local TRACKED_CAST_SUCCESS_SPELLS = {
+    [1044] = true, -- Длань свободы
     [19752] = true, -- Божественное вмешательство
     [31789] = true, -- Праведная защита
     [31821] = true -- Мастер аур
 }
 
 local IGNORED_AURA_APPLIED_SPELLS = {
+    [1044] = true, -- Длань свободы
     [31821] = true, -- Мастер аур
     [48817] = true -- Гнев небес
 }

@@ -1,4 +1,5 @@
 require('tests.mocks')
+local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local DeathwhisperTracker = require("../modules/bosses/DeathwhisperTracker")
 local spy = require("luassert.spy")
 
@@ -25,11 +26,17 @@ describe('DeathwhisperTracker', function()
 
     describe('handleEvent', function()
         local log
+        local originalCurrentCombat
 
         before_each(function()
+            originalCurrentCombat = RLHelper.currentCombat
             log = spy.new(function()
             end)
             DeathwhisperTracker.log = log
+        end)
+
+        after_each(function()
+            RLHelper.currentCombat = originalCurrentCombat
         end)
 
         it('logs shield broken on mana barrier removed', function()
@@ -52,6 +59,61 @@ describe('DeathwhisperTracker', function()
             })
 
             assert.spy(log).was_called_with("SOME DATE |cFFFFFFFFJatagun|r получил контроль разума")
+        end)
+
+        it('logs successful cyclone during Lady Deathwhisper combat', function()
+            RLHelper.currentCombat = { firstEnemy = "Леди Смертный Шепот" }
+
+            DeathwhisperTracker:handleEvent({
+                event = "SPELL_AURA_APPLIED",
+                spellId = 33786,
+                timestamp = time(),
+                sourceName = "Вольно",
+                destName = "Nudge"
+            })
+
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFВольно|r |TInterface\\Icons\\Spell_Nature_EarthBind:24:24:0:0|t |cFFFFFFFFNudge|r")
+        end)
+
+        it('logs failed cyclone attempts during Lady Deathwhisper combat', function()
+            RLHelper.currentCombat = { firstEnemy = "Леди Смертный Шепот" }
+
+            DeathwhisperTracker:handleEvent({
+                event = "SPELL_MISSED",
+                spellId = 33786,
+                timestamp = time(),
+                sourceName = "Movagorn",
+                destName = "Шафит",
+                missType = "IMMUNE"
+            })
+            DeathwhisperTracker:handleEvent({
+                event = "DAMAGE_SHIELD_MISSED",
+                spellId = 33786,
+                timestamp = time(),
+                sourceName = "Вольно",
+                destName = "Nudge",
+                missType = "RESIST"
+            })
+
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFMovagorn|r |TInterface\\Icons\\Spell_Nature_EarthBind:24:24:0:0|t |cFFFFFFFFШафит|r: IMMUNE")
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFВольно|r |TInterface\\Icons\\Spell_Nature_EarthBind:24:24:0:0|t |cFFFFFFFFNudge|r: RESIST")
+        end)
+
+        it('does not log cyclone outside Lady Deathwhisper combat', function()
+            RLHelper.currentCombat = { firstEnemy = "Король-лич" }
+
+            DeathwhisperTracker:handleEvent({
+                event = "SPELL_AURA_APPLIED",
+                spellId = 33786,
+                timestamp = time(),
+                sourceName = "Вольно",
+                destName = "Nudge"
+            })
+
+            assert.spy(log).was_not_called()
         end)
 
         it('tracks spirit summon without logging it', function()

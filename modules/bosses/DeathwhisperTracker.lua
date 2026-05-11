@@ -10,8 +10,11 @@ local TRACKED_SPELLS = {
 }
 local LADY_DEATHWHISPER_MANA_BARRIER = 70842
 local LADY_DEATHWHISPER_DOMINATE_MIND = 71289
+local CYCLONE = 33786
+local LADY_DEATHWHISPER = "Леди Смертный Шепот"
 
 local icon = "Interface\\Icons\\spell_shadow_deathsembrace"
+local cycloneIcon = "Interface\\Icons\\Spell_Nature_EarthBind"
 
 function DeathwhisperTracker:OnInitialize()
     RLHelper:Debug("DeathwhisperTracker: Инициализация")
@@ -35,6 +38,16 @@ end
 
 local function formatMindControl(ts, dest)
     return string.format("%s |cFFFFFFFF%s|r получил контроль разума", date("%H:%M:%S", ts), dest)
+end
+
+local function formatCyclone(ts, source, dest, missType)
+    local suffix = missType and string.format(": %s", missType) or ""
+    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t |cFFFFFFFF%s|r%s", date("%H:%M:%S", ts),
+        source, cycloneIcon, dest, suffix)
+end
+
+local function isLadyDeathwhisperCombat()
+    return RLHelper.currentCombat and RLHelper.currentCombat.firstEnemy == LADY_DEATHWHISPER
 end
 
 local function buildSpiritHitSummary(report)
@@ -129,6 +142,18 @@ function DeathwhisperTracker:handleEvent(eventData)
         eventData.destName then
         self.log(formatMindControl(eventData.timestamp, eventData.destName))
         return
+    end
+
+    if isLadyDeathwhisperCombat() and eventData.spellId == CYCLONE and eventData.sourceName and eventData.destName then
+        if eventData.event == "SPELL_AURA_APPLIED" then
+            self.log(formatCyclone(eventData.timestamp, eventData.sourceName, eventData.destName))
+            return
+        end
+
+        if eventData.event == "SPELL_MISSED" or eventData.event == "DAMAGE_SHIELD_MISSED" then
+            self.log(formatCyclone(eventData.timestamp, eventData.sourceName, eventData.destName, eventData.missType))
+            return
+        end
     end
 
     if eventData.event == "SPELL_AURA_REMOVED" and eventData.spellId == LADY_DEATHWHISPER_MANA_BARRIER then

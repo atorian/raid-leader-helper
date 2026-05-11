@@ -9,6 +9,7 @@ local TRACKED_SPELLS = {
     [71426] = "spirit_summon" -- Призыв духа
 }
 local LADY_DEATHWHISPER_MANA_BARRIER = 70842
+local LADY_DEATHWHISPER_DOMINATE_MIND = 71289
 
 local icon = "Interface\\Icons\\spell_shadow_deathsembrace"
 
@@ -30,6 +31,10 @@ end
 
 local function formatShieldBroken(ts)
     return string.format("%s Леди: Щит разбит", date("%H:%M:%S", ts))
+end
+
+local function formatMindControl(ts, dest)
+    return string.format("%s |cFFFFFFFF%s|r получил контроль разума", date("%H:%M:%S", ts), dest)
 end
 
 local function buildSpiritHitSummary(report)
@@ -120,6 +125,12 @@ local function consumeTrackedSpirit(self, guid)
 end
 
 function DeathwhisperTracker:handleEvent(eventData)
+    if eventData.event == "SPELL_CAST_SUCCESS" and eventData.spellId == LADY_DEATHWHISPER_DOMINATE_MIND and
+        eventData.destName then
+        self.log(formatMindControl(eventData.timestamp, eventData.destName))
+        return
+    end
+
     if eventData.event == "SPELL_AURA_REMOVED" and eventData.spellId == LADY_DEATHWHISPER_MANA_BARRIER then
         self.log(formatShieldBroken(eventData.timestamp))
         return

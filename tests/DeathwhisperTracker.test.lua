@@ -42,6 +42,18 @@ describe('DeathwhisperTracker', function()
             assert.spy(log).was_called_with("SOME DATE Леди: Щит разбит")
         end)
 
+        it('logs mind controlled player on dominate mind cast', function()
+            DeathwhisperTracker:handleEvent({
+                event = "SPELL_CAST_SUCCESS",
+                spellId = 71289,
+                timestamp = time(),
+                sourceName = "Леди Смертный Шепот",
+                destName = "Jatagun"
+            })
+
+            assert.spy(log).was_called_with("SOME DATE |cFFFFFFFFJatagun|r получил контроль разума")
+        end)
+
         it('tracks spirit summon without logging it', function()
             DeathwhisperTracker:handleEvent({
                 event = "SPELL_SUMMON",

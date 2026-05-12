@@ -17,6 +17,16 @@ local function dispatch(module, ...)
     module:handleEvent(blizzardEvent(select(2, ...)))
 end
 
+local function summarizeCombat(module)
+    assert.is_function(module.summarizeCombat)
+    module:summarizeCombat()
+end
+
+local function reset(module)
+    assert.is_function(module.reset)
+    module:reset()
+end
+
 describe('PutricideTracker', function()
     local log
     local originalCurrentCombat
@@ -24,6 +34,7 @@ describe('PutricideTracker', function()
     before_each(function()
         originalCurrentCombat = RLHelper.currentCombat
         RLHelper.currentCombat = { firstEnemy = "Профессор Мерзоцид" }
+        PutricideTracker.malleableGooReport = {}
         log = spy.new(function()
         end)
         PutricideTracker.log = log
@@ -62,6 +73,16 @@ describe('PutricideTracker', function()
             "SOME DATE |cFFFFFFFFVafli|r |TInterface\\Icons\\INV_Misc_Herb_EvergreenMoss:24:24:0:0|t Вязкая гадость")
     end)
 
+    it('logs Malleable Goo during Festergut combat', function()
+        RLHelper.currentCombat = { firstEnemy = "Тухлопуз" }
+
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
+            :ApplyAura(70853, "Вязкая гадость", "DEBUFF"):Build())
+
+        assert.spy(log).was_called_with(
+            "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\INV_Misc_Herb_EvergreenMoss:24:24:0:0|t Вязкая гадость")
+    end)
+
     it('ignores the no-target Malleable Goo cast trigger', function()
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид")
             :CastSuccess(72295, "Вязкая гадость"):Build())
@@ -81,6 +102,49 @@ describe('PutricideTracker', function()
 
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
             :ApplyAura(70853, "Вязкая гадость", "DEBUFF"):Build())
+
+        assert.spy(log).was_not_called()
+    end)
+
+    it('logs combat-end Malleable Goo summary sorted by count then name', function()
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Player2")
+            :ApplyAura(72550, "Вязкая гадость", "DEBUFF"):Build())
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Player1")
+            :ApplyAura(72550, "Вязкая гадость", "DEBUFF"):Build())
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Player2")
+            :ApplyAura(72550, "Вязкая гадость", "DEBUFF"):Build())
+
+        log:clear()
+        summarizeCombat(PutricideTracker)
+
+        assert.spy(log).was_called_with("SOME DATE Вязкая гадость: всего 3 Player2(2) Player1(1)")
+    end)
+
+    it('counts Malleable Goo summary during Festergut combat', function()
+        RLHelper.currentCombat = { firstEnemy = "Тухлопуз" }
+
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
+            :ApplyAura(70853, "Вязкая гадость", "DEBUFF"):Build())
+
+        log:clear()
+        summarizeCombat(PutricideTracker)
+
+        assert.spy(log).was_called_with("SOME DATE Вязкая гадость: всего 1 Темшамя(1)")
+    end)
+
+    it('does not log Malleable Goo summary when report is empty', function()
+        summarizeCombat(PutricideTracker)
+
+        assert.spy(log).was_not_called()
+    end)
+
+    it('clears Malleable Goo report on reset', function()
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Player1")
+            :ApplyAura(72550, "Вязкая гадость", "DEBUFF"):Build())
+
+        reset(PutricideTracker)
+        log:clear()
+        summarizeCombat(PutricideTracker)
 
         assert.spy(log).was_not_called()
     end)

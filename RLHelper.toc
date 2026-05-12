@@ -28,5 +28,6 @@ modules\ui\GPAwardButtons.lua
 modules\bosses\DeathwhisperTracker.lua
 modules\bosses\BloodPrincesTracker.lua
 modules\bosses\BloodQueenTracker.lua
+modules\bosses\PutricideTracker.lua
 modules\bosses\TrialCrusaderTracker.lua
 modules\bosses\HalionTracker.lua

@@ -35,6 +35,7 @@ describe('PutricideTracker', function()
         originalCurrentCombat = RLHelper.currentCombat
         RLHelper.currentCombat = { firstEnemy = "Профессор Мерзоцид" }
         PutricideTracker.malleableGooReport = {}
+        PutricideTracker.chokingGasReport = {}
         log = spy.new(function()
         end)
         PutricideTracker.log = log
@@ -141,6 +142,71 @@ describe('PutricideTracker', function()
     it('clears Malleable Goo report on reset', function()
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Player1")
             :ApplyAura(72550, "Вязкая гадость", "DEBUFF"):Build())
+
+        reset(PutricideTracker)
+        log:clear()
+        summarizeCombat(PutricideTracker)
+
+        assert.spy(log).was_not_called()
+    end)
+
+    it('logs Choking Gas aura applications', function()
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
+            :ApplyAura(71278, "Удушливый газ", "DEBUFF"):Build())
+
+        assert.spy(log).was_called_with(
+            "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\Ability_Creature_Cursed_01:24:24:0:0|t Удушливый газ")
+    end)
+
+    it('logs heroic 10-player Choking Gas aura applications', function()
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Глорихол")
+            :ApplyAura(72619, "Удушливый газ", "DEBUFF"):Build())
+
+        assert.spy(log).was_called_with(
+            "SOME DATE |cFFFFFFFFГлорихол|r |TInterface\\Icons\\Ability_Creature_Cursed_01:24:24:0:0|t Удушливый газ")
+    end)
+
+    it('ignores Choking Gas outside Professor Putricide combat', function()
+        RLHelper.currentCombat = { firstEnemy = "Король-лич" }
+
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
+            :ApplyAura(71278, "Удушливый газ", "DEBUFF"):Build())
+
+        assert.spy(log).was_not_called()
+    end)
+
+    it('ignores Choking Gas during Festergut combat', function()
+        RLHelper.currentCombat = { firstEnemy = "Тухлопуз" }
+
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
+            :ApplyAura(71278, "Удушливый газ", "DEBUFF"):Build())
+
+        assert.spy(log).was_not_called()
+    end)
+
+    it('logs combat-end Choking Gas summary sorted by count then name', function()
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Player2")
+            :ApplyAura(71278, "Удушливый газ", "DEBUFF"):Build())
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Player1")
+            :ApplyAura(71278, "Удушливый газ", "DEBUFF"):Build())
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Player2")
+            :ApplyAura(71278, "Удушливый газ", "DEBUFF"):Build())
+
+        log:clear()
+        summarizeCombat(PutricideTracker)
+
+        assert.spy(log).was_called_with("SOME DATE Удушливый газ: всего 3 Player2(2) Player1(1)")
+    end)
+
+    it('does not log Choking Gas summary when report is empty', function()
+        summarizeCombat(PutricideTracker)
+
+        assert.spy(log).was_not_called()
+    end)
+
+    it('clears Choking Gas report on reset', function()
+        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Player1")
+            :ApplyAura(71278, "Удушливый газ", "DEBUFF"):Build())
 
         reset(PutricideTracker)
         log:clear()

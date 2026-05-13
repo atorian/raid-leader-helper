@@ -15,11 +15,19 @@ local MALLEABLE_GOO_SPELLS = {
     [72873] = true, -- Heroic 10
     [72874] = true
 }
+local CHOKING_GAS_SPELLS = {
+    [71278] = true, -- Normal 10
+    [72460] = true, -- Normal 25
+    [72619] = true, -- Heroic 10
+    [72620] = true  -- Heroic 25
+}
 local malleableGooIcon = "Interface\\Icons\\INV_Misc_Herb_EvergreenMoss"
+local chokingGasIcon = "Interface\\Icons\\Ability_Creature_Cursed_01"
 
 function PutricideTracker:OnInitialize()
     RLHelper:Debug("PutricideTracker: Инициализация")
     self.malleableGooReport = {}
+    self.chokingGasReport = {}
     self.log = function(...)
         RLHelper:OnCombatLogEvent(...)
     end
@@ -36,9 +44,18 @@ local function isMalleableGooCombat()
         (RLHelper.currentCombat.firstEnemy == PROFESSOR_PUTRICIDE or RLHelper.currentCombat.firstEnemy == FESTERGUT)
 end
 
+local function isProfessorPutricideCombat()
+    return RLHelper.currentCombat and RLHelper.currentCombat.firstEnemy == PROFESSOR_PUTRICIDE
+end
+
 local function formatMalleableGoo(ts, destName)
     return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t Вязкая гадость", date("%H:%M:%S", ts),
         destName, malleableGooIcon)
+end
+
+local function formatChokingGas(ts, destName)
+    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t Удушливый газ", date("%H:%M:%S", ts),
+        destName, chokingGasIcon)
 end
 
 local function buildMalleableGooSummary(report)
@@ -77,21 +94,36 @@ local function formatMalleableGooSummary(ts, summary)
     return string.format("%s Вязкая гадость: всего %s %s", date("%H:%M:%S", ts), summary.total, summary.details)
 end
 
+local function formatChokingGasSummary(ts, summary)
+    return string.format("%s Удушливый газ: всего %s %s", date("%H:%M:%S", ts), summary.total, summary.details)
+end
+
 function PutricideTracker:reset()
     self.malleableGooReport = {}
+    self.chokingGasReport = {}
 end
 
 function PutricideTracker:summarizeCombat()
-    local summary = buildMalleableGooSummary(self.malleableGooReport)
-    if not summary then
-        return
+    local malleableGooSummary = buildMalleableGooSummary(self.malleableGooReport)
+    if malleableGooSummary then
+        self.log(formatMalleableGooSummary(time(), malleableGooSummary))
     end
 
-    self.log(formatMalleableGooSummary(time(), summary))
+    local chokingGasSummary = buildMalleableGooSummary(self.chokingGasReport)
+    if chokingGasSummary then
+        self.log(formatChokingGasSummary(time(), chokingGasSummary))
+    end
 end
 
 function PutricideTracker:handleEvent(event)
     if not isMalleableGooCombat() then
+        return
+    end
+
+    if event.event == "SPELL_AURA_APPLIED" and CHOKING_GAS_SPELLS[event.spellId] and event.destName and
+        isProfessorPutricideCombat() then
+        self.chokingGasReport[event.destName] = (self.chokingGasReport[event.destName] or 0) + 1
+        self.log(formatChokingGas(event.timestamp, event.destName))
         return
     end
 

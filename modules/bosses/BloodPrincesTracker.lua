@@ -28,6 +28,7 @@ function BloodPrincesTracker:OnInitialize()
     self.log = function(...)
         RLHelper:OnCombatLogEvent(...)
     end
+    self:RegisterMessage("RLHelper_Demo", "demo")
 end
 
 function BloodPrincesTracker:OnEnable()
@@ -65,6 +66,10 @@ function BloodPrincesTracker:handleEvent(event)
     end
 
     self.log(formatVortexHealerHit(event.timestamp, event.sourceName or "Unknown", event.destName))
+end
+
+function BloodPrincesTracker:demo()
+    self.log(formatVortexHealerHit(time(), "DemoSource", "DemoHealer"))
 end
 
 return BloodPrincesTracker

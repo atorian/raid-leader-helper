@@ -63,4 +63,13 @@ describe('BloodQueenTracker', function()
 
         assert.spy(log).was_not_called()
     end)
+
+    it('demo logs Bloodbolt Splash hit', function()
+        assert.is_function(BloodQueenTracker.demo)
+
+        BloodQueenTracker:demo()
+
+        assert.spy(log).was_called_with(
+            "SOME DATE |cFFFFFFFFDemoSource|r |TInterface\\Icons\\Spell_Shadow_BloodBoil:24:24:0:0|t |cFFFFFFFFDemoTarget|r")
+    end)
 end)

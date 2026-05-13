@@ -19,6 +19,7 @@ function BloodQueenTracker:OnInitialize()
     self.log = function(...)
         RLHelper:OnCombatLogEvent(...)
     end
+    self:RegisterMessage("RLHelper_Demo", "demo")
 end
 
 function BloodQueenTracker:OnEnable()
@@ -44,6 +45,10 @@ function BloodQueenTracker:handleEvent(event)
     end
 
     self.log(formatSplashHit(event.timestamp, event.sourceName or "Unknown", event.destName or "Unknown"))
+end
+
+function BloodQueenTracker:demo()
+    self.log(formatSplashHit(time(), "DemoSource", "DemoTarget"))
 end
 
 return BloodQueenTracker

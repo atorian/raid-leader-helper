@@ -236,14 +236,20 @@ end
 
 function SppellTracker:demo()
     self.log(formatFirstHit(time(), "CrazyDkPet", "Halion"))
+    self.log(formatFirstHeal(time(), "Healer", VALITHRIA_DREAMWALKER))
 
-    for _, v in pairs({355, 694, 1161, 51399, 56222, 62124, 5209, 31789}) do
+    for _, v in pairs({355, 694, 1161, 49560, 51399, 56222, 62124, 5209, 31789}) do
         self.log(formatSpellCast(time(), "NotTank", TRACKED_SPELLS[v], "Halion"))
     end
 
-    for _, v in pairs({10278, 19752}) do
+    for _, v in pairs({10278, 1044, 19752, 6940}) do
         self.log(formatSpellCast(time(), "Paladin", TRACKED_SPELLS[v], "OtherPlayer"))
     end
+
+    self.log(formatSpellCast(time(), "Paladin", TRACKED_SPELLS[31821]))
+    self.log(formatSpellCast(time(), "Paladin", TRACKED_SPELLS[48817], "Нерубский землеглот"))
+    self.log(formatSpellCast(time(), "Druid", TRACKED_SPELLS[48477], "DeadPlayer"))
+    self.log(formatSpellCast(time(), "Priest", TRACKED_DISPEL_SPELLS[988], "OtherPlayer"))
 end
 
 return SppellTracker

@@ -33,6 +33,7 @@ function PutricideTracker:OnInitialize()
     end
     self:RegisterMessage("RLHelper_CombatEnding", "summarizeCombat")
     self:RegisterMessage("RLHelper_CombatEnded", "reset")
+    self:RegisterMessage("RLHelper_Demo", "demo")
 end
 
 function PutricideTracker:OnEnable()
@@ -113,6 +114,17 @@ function PutricideTracker:summarizeCombat()
     if chokingGasSummary then
         self.log(formatChokingGasSummary(time(), chokingGasSummary))
     end
+end
+
+function PutricideTracker:demo()
+    local demoReport = {
+        DemoPlayer = 1
+    }
+
+    self.log(formatMalleableGoo(time(), "DemoPlayer"))
+    self.log(formatChokingGas(time(), "DemoPlayer"))
+    self.log(formatMalleableGooSummary(time(), buildMalleableGooSummary(demoReport)))
+    self.log(formatChokingGasSummary(time(), buildMalleableGooSummary(demoReport)))
 end
 
 function PutricideTracker:handleEvent(event)

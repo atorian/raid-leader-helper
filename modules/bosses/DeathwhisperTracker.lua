@@ -195,6 +195,9 @@ end
 
 function DeathwhisperTracker:demo()
     self.log(formatShieldBroken(time()))
+    self.log(formatMindControl(time(), "DemoPlayer"))
+    self.log(formatCyclone(time(), "DemoDruid", "DemoTarget"))
+    self.log(formatCyclone(time(), "DemoDruid", "ImmuneTarget", "IMMUNE"))
     self.log(formatSpiritHit(time(), "Player"))
     self.log(formatSpiritMiss(time(), "Lucky"))
     self.report = {

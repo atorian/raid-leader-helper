@@ -292,4 +292,25 @@ describe('DeathwhisperTracker', function()
             assert.spy(sendChatMessageSpy).was_not.called()
         end)
     end)
+
+    describe("demo", function()
+        it("logs all visible Deathwhisper mechanics", function()
+            local log = spy.new(function()
+            end)
+            DeathwhisperTracker.log = log
+
+            DeathwhisperTracker:demo()
+
+            assert.spy(log).was_called_with("SOME DATE Леди: Щит разбит")
+            assert.spy(log).was_called_with("SOME DATE |cFFFFFFFFDemoPlayer|r получил контроль разума")
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFDemoDruid|r |TInterface\\Icons\\Spell_Nature_EarthBind:24:24:0:0|t |cFFFFFFFFDemoTarget|r")
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFDemoDruid|r |TInterface\\Icons\\Spell_Nature_EarthBind:24:24:0:0|t |cFFFFFFFFImmuneTarget|r: IMMUNE")
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFPlayer|r |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t взорвал духа")
+            assert.spy(log).was_called_with("SOME DATE Дух автоатачил |cFFFFFFFFLucky|r")
+            assert.spy(log).was_called_with("SOME DATE Духов взорвали: всего 2 Player(2)")
+        end)
+    end)
 end)

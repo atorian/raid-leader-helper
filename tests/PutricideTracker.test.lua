@@ -214,4 +214,17 @@ describe('PutricideTracker', function()
 
         assert.spy(log).was_not_called()
     end)
+
+    it('demo logs Putricide visible mechanics and summaries', function()
+        assert.is_function(PutricideTracker.demo)
+
+        PutricideTracker:demo()
+
+        assert.spy(log).was_called_with(
+            "SOME DATE |cFFFFFFFFDemoPlayer|r |TInterface\\Icons\\INV_Misc_Herb_EvergreenMoss:24:24:0:0|t Вязкая гадость")
+        assert.spy(log).was_called_with(
+            "SOME DATE |cFFFFFFFFDemoPlayer|r |TInterface\\Icons\\Ability_Creature_Cursed_01:24:24:0:0|t Удушливый газ")
+        assert.spy(log).was_called_with("SOME DATE Вязкая гадость: всего 1 DemoPlayer(1)")
+        assert.spy(log).was_called_with("SOME DATE Удушливый газ: всего 1 DemoPlayer(1)")
+    end)
 end)

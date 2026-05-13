@@ -319,4 +319,36 @@ describe('SpellTracker', function()
             assert.spy(log).was_not_called()
         end)
     end)
+
+    describe('demo', function()
+        local log
+
+        before_each(function()
+            log = spy.new(function()
+            end)
+            SpellTracker.log = log
+            SpellTracker:reset()
+        end)
+
+        it('logs representative spell tracker features', function()
+            SpellTracker:demo()
+
+            assert.spy(log).was_called_with("SOME DATE |cFFFFFFFFCrazyDkPet|r Первый урон по |cFFFFFFFFHalion|r")
+            assert.spy(log).was_called_with("SOME DATE |cFFFFFFFFHealer|r Первый хил по |cFFFFFFFFВалитрия Сноходица|r")
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFNotTank|r |TInterface\\Icons\\Spell_DeathKnight_Strangulate:24:24:0:0|t Halion")
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFPaladin|r |TInterface\\Icons\\Spell_Holy_SealOfValor:24:24:0:0|t OtherPlayer")
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFPaladin|r |TInterface\\Icons\\Spell_Holy_SealOfSacrifice:24:24:0:0|t OtherPlayer")
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFPaladin|r |TInterface\\Icons\\Spell_Holy_AuraMastery:24:24:0:0|t")
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFPaladin|r |TInterface\\Icons\\Spell_Holy_Excorcism:24:24:0:0|t Нерубский землеглот")
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFDruid|r |TInterface\\Icons\\spell_nature_reincarnation:24:24:0:0|t DeadPlayer")
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFPriest|r |TInterface\\Icons\\Spell_Holy_DispelMagic:24:24:0:0|t OtherPlayer")
+        end)
+    end)
 end)

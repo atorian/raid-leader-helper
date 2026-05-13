@@ -108,6 +108,7 @@ function TrialCrusaderTracker:OnInitialize()
     end
     self:reset()
     self:RegisterMessage("RLHelper_CombatEnded", "reset")
+    self:RegisterMessage("RLHelper_Demo", "demo")
     self:RegisterEvent("CHAT_MSG_MONSTER_YELL")
     self:RegisterEvent("CHAT_MSG_RAID_BOSS_EMOTE")
 end
@@ -379,6 +380,10 @@ end
 
 function TrialCrusaderTracker:CHAT_MSG_RAID_BOSS_EMOTE(eventName, message, sender)
     return self:handleBossMessage(eventName, message, sender, false)
+end
+
+function TrialCrusaderTracker:demo()
+    self.log(formatIcehowlTrample(time(), "DemoPlayer"))
 end
 
 function TrialCrusaderTracker:handleEvent(event)

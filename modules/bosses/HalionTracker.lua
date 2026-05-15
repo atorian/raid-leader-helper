@@ -34,6 +34,20 @@ local BLOODLUST = 2825
 local MAX_DMG_EVENTS_PER_PLAYER = 10
 -- 74792 - metka
 
+local MATERIALITY_AURAS = {
+    [74826] = "50% баланс",
+    [74827] = "60% физический мир",
+    [74828] = "70% физический мир",
+    [74829] = "80% физический мир",
+    [74830] = "90% физический мир",
+    [74831] = "100% физический мир",
+    [74832] = "40% во тьме",
+    [74833] = "30% во тьме",
+    [74834] = "20% во тьме",
+    [74835] = "10% во тьме",
+    [74836] = "0% во тьме"
+}
+
 local meteor_icon = "Interface\\Icons\\spell_fire_meteorstorm"
 local meteor_burn_icon = "Interface\\Icons\\spell_fire_fire"
 local lezvia_icon = "Interface\\Icons\\Spell_Shadow_ShadowMend"
@@ -227,6 +241,15 @@ function HalionTracker:tryResetDamageMetersOnHeroism(event)
     self:resetDamageMeters()
 end
 
+function HalionTracker:debugMateriality(event)
+    local materiality = MATERIALITY_AURAS[event.spellId]
+    if event.event ~= "SPELL_AURA_APPLIED" or not materiality then
+        return
+    end
+
+    RLHelper:Debug(string.format("HalionTracker: Материальность %s (spellId=%s)", materiality, event.spellId))
+end
+
 function HalionTracker:logDmg(playerName, event)
     if not self.dmgEvents[playerName] then
         self.dmgEvents[playerName] = {}
@@ -268,6 +291,7 @@ end
 
 function HalionTracker:handleEvent(event, log)
     self:RememberBossName(event)
+    self:debugMateriality(event)
 
     if isPlayer(event.destFlags) then
         self:tryResetDamageMetersOnHeroism(event)

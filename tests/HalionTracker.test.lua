@@ -1,5 +1,6 @@
 require('tests.mocks')
 require("../lib/blizzardEvent")
+local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local HalionTracker = require("../modules/bosses/HalionTracker")
 local Builder = require("../utils/CombatEventBuilder")
 
@@ -12,6 +13,7 @@ describe('HalionTracker', function()
     local originalDetails
     local originalSkada
     local originalRecount
+    local originalDebug
 
     before_each(function()
         HalionTracker:reset()
@@ -21,6 +23,7 @@ describe('HalionTracker', function()
         originalDetails = _G._detalhes
         originalSkada = _G.Skada
         originalRecount = _G.Recount
+        originalDebug = RLHelper.Debug
         _G._detalhes = nil
         _G.Skada = nil
         _G.Recount = nil
@@ -30,6 +33,7 @@ describe('HalionTracker', function()
         _G._detalhes = originalDetails
         _G.Skada = originalSkada
         _G.Recount = originalRecount
+        RLHelper.Debug = originalDebug
     end)
 
     it('logs player death with last damage from meteor', function()
@@ -300,5 +304,33 @@ describe('HalionTracker', function()
 
         assert.are.equal("Халион", endedSegment.mobname)
         assert.are.equal("Халион Burst", _G.Skada.current.mobname)
+    end)
+
+    it('debug logs applied Halion materiality aura percentage', function()
+        local debug = spy.new(function()
+        end)
+        RLHelper.Debug = debug
+
+        dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+            :ApplyAura(74835, "Материальность", "DEBUFF"):Build())
+
+        assert.spy(debug).was_called_with(RLHelper, "HalionTracker: Материальность 10% во тьме (spellId=74835)")
+    end)
+
+    it('debug logs every known Halion materiality aura', function()
+        local debug = spy.new(function()
+        end)
+        RLHelper.Debug = debug
+
+        local spellIds = { 74826, 74827, 74828, 74829, 74830, 74831, 74832, 74833, 74834, 74835, 74836 }
+        for _, spellId in ipairs(spellIds) do
+            dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+                :ApplyAura(spellId, "Материальность", "DEBUFF"):Build())
+        end
+
+        assert.spy(debug).was_called(11)
+        assert.spy(debug).was_called_with(RLHelper, "HalionTracker: Материальность 50% баланс (spellId=74826)")
+        assert.spy(debug).was_called_with(RLHelper, "HalionTracker: Материальность 100% физический мир (spellId=74831)")
+        assert.spy(debug).was_called_with(RLHelper, "HalionTracker: Материальность 0% во тьме (spellId=74836)")
     end)
 end)

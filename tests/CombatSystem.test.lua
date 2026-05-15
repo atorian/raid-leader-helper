@@ -272,10 +272,34 @@ describe("Боевая система", function()
     end)
 
     it("не завершает бой сразу по PLAYER_REGEN_ENABLED", function()
-        RLHelper:PLAYER_REGEN_DISABLED()
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Леди Смертный Шепот"):ToPlayer("Игрок1"):Damage(100):Build())
         RLHelper:PLAYER_REGEN_ENABLED()
 
         assert.is_true(RLHelper.inCombat)
+    end)
+
+    it("завершает бой по PLAYER_REGEN_ENABLED если живых врагов нет", function()
+        RLHelper:PLAYER_REGEN_DISABLED()
+        RLHelper:OnCombatLogEvent("test message")
+
+        M.UnitAffectingCombat1 = false
+        RLHelper:PLAYER_REGEN_ENABLED()
+
+        assert.is_false(RLHelper.inCombat)
+        assert.are.equal(1, #RLHelper.combatHistory)
+    end)
+
+    it("не завершает бой по PLAYER_REGEN_ENABLED если группа еще в бою", function()
+        RLHelper:PLAYER_REGEN_DISABLED()
+        RLHelper:OnCombatLogEvent("test message")
+
+        M.partySize = 1
+        M.UnitAffectingCombat1 = false
+        M.UnitAffectingCombat2 = true
+        RLHelper:PLAYER_REGEN_ENABLED()
+
+        assert.is_true(RLHelper.inCombat)
+        assert.are.equal(0, #RLHelper.combatHistory)
     end)
 
     it("не завершает бой пока группа еще в бою", function()
@@ -342,6 +366,22 @@ describe("Боевая система", function()
         assert.is_true(RLHelper:EvaluateCombatEnd("ticker"))
         assert.is_false(RLHelper.inCombat)
         assert.is_nil(RLHelper.currentCombat.firstEnemy)
+    end)
+
+    it("не обнуляет список врагов от смерти без участия группы", function()
+        M.UnitAffectingCombat1 = false
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Саурфанг"):ToPlayer("Игрок1"):Damage(100):Build())
+        RLHelper:OnCombatLogEvent("test message")
+        RLHelper.combatEndRequestedAt = RLHelper:GetCombatNow() - 5
+        RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 5
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():ToEnemy("Саурфанг"):Death():Build())
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Друид"):ToPlayer("Игрок1")
+            :PeriodicHeal(48441, "Омоложение", 100):Build())
+
+        assert.is_false(RLHelper:EvaluateCombatEnd("ticker"))
+        assert.is_true(RLHelper.inCombat)
     end)
 
     it("сбрасывает имя первого врага после таймаута боя", function()

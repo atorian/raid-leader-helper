@@ -383,6 +383,10 @@ local function involvesTrackableEnemy(event)
     return isTrackableEnemy(event.sourceFlags, event.sourceName) or isTrackableEnemy(event.destFlags, event.destName)
 end
 
+local function isEnemyDeathEvent(event)
+    return event.event == "UNIT_DIED" or event.event == "UNIT_DESTROYED" or event.event == "PARTY_KILL"
+end
+
 local function involvesOutsidePlayer(event)
     return isOutsidePlayer(event.sourceFlags) or isOutsidePlayer(event.destFlags)
 end
@@ -406,6 +410,16 @@ function RLHelper:MarkEnemyActivity(guid, name, eventName, now)
         event = eventName,
         seenAt = now
     }
+end
+
+function RLHelper:HasActiveEnemies()
+    for _, seenAt in pairs(self.activeEnemies) do
+        if seenAt ~= 0 then
+            return true
+        end
+    end
+
+    return false
 end
 
 function RLHelper:HasRecentEnemyActivity(now)
@@ -521,7 +535,7 @@ function RLHelper:trackCombatants(event)
         self:MarkEnemyActivity(event.destGUID, event.destName, event.event, now)
     end
 
-    if event.event == "UNIT_DIED" or event.event == "UNIT_DESTROYED" or event.event == "PARTY_KILL" then
+    if isEnemyDeathEvent(event) then
         if isEnemy(event.destFlags) then
             self:MarkEnemyInactive(event.destGUID)
         end
@@ -559,8 +573,14 @@ function RLHelper:PLAYER_REGEN_ENABLED()
         return
     end
 
-    self.combatEndRequestedAt = self:GetCombatNow()
+    local now = self:GetCombatNow()
+    self.combatEndRequestedAt = now
     self.combatEndRequiresRegen = false
+    if not self:HasActiveEnemies() and not self:IsCombatOngoing(now) then
+        self:FinishCombat("PLAYER_REGEN_ENABLED")
+        return
+    end
+
     self:EnsureCombatTicker()
     self:EvaluateCombatEnd("PLAYER_REGEN_ENABLED")
 end

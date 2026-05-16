@@ -48,6 +48,14 @@ local MATERIALITY_AURAS = {
     [74836] = "0% во тьме"
 }
 
+local DARKNESS_MATERIALITY_DROPS = {
+    [74832] = true,
+    [74833] = true,
+    [74834] = true,
+    [74835] = true,
+    [74836] = true
+}
+
 local meteor_icon = "Interface\\Icons\\spell_fire_meteorstorm"
 local meteor_burn_icon = "Interface\\Icons\\spell_fire_fire"
 local lezvia_icon = "Interface\\Icons\\Spell_Shadow_ShadowMend"
@@ -64,6 +72,14 @@ local HEROISM_SPELLS = {
     [HEROISM] = true,
     [BLOODLUST] = true
 }
+
+local function isHalionBurstPullEnabled()
+    return type(RLHelper.IsHalionBurstPullEnabled) == "function" and RLHelper:IsHalionBurstPullEnabled()
+end
+
+local function isHalionBurstResetEnabled()
+    return type(RLHelper.IsHalionBurstResetEnabled) ~= "function" or RLHelper:IsHalionBurstResetEnabled()
+end
 
 local function isEnemy(flags)
     return bit.band(flags or 0, RLHelper.ENEMY_FLAGS or 0xa48) > 0
@@ -127,6 +143,7 @@ function HalionTracker:reset()
     self.healEvents = {}
     self.firstEntered = false
     self.damageMetersReset = false
+    self.materialityPullStarted = false
     self.bossName = nil
 end
 
@@ -233,7 +250,7 @@ function HalionTracker:resetDamageMeters()
 end
 
 function HalionTracker:tryResetDamageMetersOnHeroism(event)
-    if self.damageMetersReset or event.event ~= "SPELL_AURA_APPLIED" or not HEROISM_SPELLS[event.spellId] then
+    if not isHalionBurstResetEnabled() or self.damageMetersReset or event.event ~= "SPELL_AURA_APPLIED" or not HEROISM_SPELLS[event.spellId] then
         return
     end
 
@@ -248,6 +265,15 @@ function HalionTracker:debugMateriality(event)
     end
 
     RLHelper:Debug(string.format("HalionTracker: Материальность %s (spellId=%s)", materiality, event.spellId))
+end
+
+function HalionTracker:tryStartPullOnMaterialityDrop(event)
+    if type(RLHelper.StartDBMPullCommand) ~= "function" or not isHalionBurstPullEnabled() or self.materialityPullStarted or event.event ~= "SPELL_AURA_APPLIED" or not DARKNESS_MATERIALITY_DROPS[event.spellId] then
+        return
+    end
+
+    self.materialityPullStarted = true
+    RLHelper:StartDBMPullCommand(15)
 end
 
 function HalionTracker:logDmg(playerName, event)
@@ -292,6 +318,7 @@ end
 function HalionTracker:handleEvent(event, log)
     self:RememberBossName(event)
     self:debugMateriality(event)
+    self:tryStartPullOnMaterialityDrop(event)
 
     if isPlayer(event.destFlags) then
         self:tryResetDamageMetersOnHeroism(event)

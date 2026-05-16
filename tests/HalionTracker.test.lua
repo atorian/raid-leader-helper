@@ -14,6 +14,10 @@ describe('HalionTracker', function()
     local originalSkada
     local originalRecount
     local originalDebug
+    local originalIsHalionBurstPullEnabled
+    local originalIsHalionBurstResetEnabled
+    local originalStartPullCountdown
+    local originalStartDBMPullCommand
 
     before_each(function()
         HalionTracker:reset()
@@ -24,6 +28,10 @@ describe('HalionTracker', function()
         originalSkada = _G.Skada
         originalRecount = _G.Recount
         originalDebug = RLHelper.Debug
+        originalIsHalionBurstPullEnabled = RLHelper.IsHalionBurstPullEnabled
+        originalIsHalionBurstResetEnabled = RLHelper.IsHalionBurstResetEnabled
+        originalStartPullCountdown = RLHelper.StartPullCountdown
+        originalStartDBMPullCommand = RLHelper.StartDBMPullCommand
         _G._detalhes = nil
         _G.Skada = nil
         _G.Recount = nil
@@ -34,6 +42,10 @@ describe('HalionTracker', function()
         _G.Skada = originalSkada
         _G.Recount = originalRecount
         RLHelper.Debug = originalDebug
+        RLHelper.IsHalionBurstPullEnabled = originalIsHalionBurstPullEnabled
+        RLHelper.IsHalionBurstResetEnabled = originalIsHalionBurstResetEnabled
+        RLHelper.StartPullCountdown = originalStartPullCountdown
+        RLHelper.StartDBMPullCommand = originalStartDBMPullCommand
     end)
 
     it('logs player death with last damage from meteor', function()
@@ -168,6 +180,48 @@ describe('HalionTracker', function()
         assert.are.equal(1, detailsEnterCalls)
         assert.are.equal(1, skadaNewSegmentCalls)
         assert.are.equal(1, recountResetFightCalls)
+    end)
+
+    it('does not reset damage meters when Halion burst reset option is disabled', function()
+        local detailsEnterCalls = 0
+        RLHelper.IsHalionBurstResetEnabled = function()
+            return false
+        end
+        _G._detalhes = {
+            in_combat = true,
+            SairDoCombate = function()
+            end,
+            EntrarEmCombate = function()
+                detailsEnterCalls = detailsEnterCalls + 1
+            end
+        }
+
+        dispatch(HalionTracker, Builder:New():FromPlayer("Шаман"):ToPlayer("Игрок1")
+            :ApplyAura(32182, "Heroism"):Build())
+
+        assert.are.equal(0, detailsEnterCalls)
+    end)
+
+    it('keeps Halion logging active when Halion burst option is disabled', function()
+        RLHelper.IsHalionBurstPullEnabled = function()
+            return false
+        end
+        RLHelper.IsHalionBurstResetEnabled = function()
+            return false
+        end
+
+        dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToPlayer("Игрок1")
+            :ApplyAura(75483, "Пелена Тени"):Build())
+        dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToPlayer("Игрок1")
+            :SpellDamage(75879, "Метеорит", 1000):Build())
+        dispatch(HalionTracker, Builder:New():ToPlayer("Игрок1"):Death():Build())
+
+        assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r зашел во тьму первый",
+            date("%H:%M:%S", GetTime()), "Игрок1"))
+        assert.spy(log).was_called_with(string.format(
+            "%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t от метеорита |T%s:24:24:0:0|t",
+            date("%H:%M:%S", deathTimestamp), "Игрок1", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8",
+            "Interface\\Icons\\spell_fire_meteorstorm"))
     end)
 
     it('resets damage meters only once per fight', function()
@@ -332,5 +386,57 @@ describe('HalionTracker', function()
         assert.spy(debug).was_called_with(RLHelper, "HalionTracker: Материальность 50% баланс (spellId=74826)")
         assert.spy(debug).was_called_with(RLHelper, "HalionTracker: Материальность 100% физический мир (spellId=74831)")
         assert.spy(debug).was_called_with(RLHelper, "HalionTracker: Материальность 0% во тьме (spellId=74836)")
+    end)
+
+    it('starts a 15 second pull once when Halion materiality drops into darkness', function()
+        local pullDurations = {}
+        RLHelper.IsHalionBurstPullEnabled = function()
+            return true
+        end
+        RLHelper.StartPullCountdown = function(_, duration)
+            error("StartPullCountdown should not be used for materiality drop")
+        end
+        RLHelper.StartDBMPullCommand = function(_, duration)
+            table.insert(pullDurations, duration)
+        end
+
+        dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+            :ApplyAura(74832, "Материальность", "DEBUFF"):Build())
+        dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+            :ApplyAura(74835, "Материальность", "DEBUFF"):Build())
+
+        assert.are.same({ 15 }, pullDurations)
+    end)
+
+    it('does not start a pull when Halion burst pull option is disabled', function()
+        local pullDurations = {}
+        RLHelper.IsHalionBurstPullEnabled = function()
+            return false
+        end
+        RLHelper.StartPullCountdown = function(_, duration)
+            table.insert(pullDurations, duration)
+        end
+
+        dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+            :ApplyAura(74832, "Материальность", "DEBUFF"):Build())
+
+        assert.are.same({}, pullDurations)
+    end)
+
+    it('does not start a pull for non-darkness materiality', function()
+        local pullDurations = {}
+        RLHelper.IsHalionBurstPullEnabled = function()
+            return true
+        end
+        RLHelper.StartPullCountdown = function(_, duration)
+            table.insert(pullDurations, duration)
+        end
+
+        dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+            :ApplyAura(74826, "Материальность", "DEBUFF"):Build())
+        dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+            :ApplyAura(74831, "Материальность", "DEBUFF"):Build())
+
+        assert.are.same({}, pullDurations)
     end)
 end)

@@ -56,6 +56,8 @@ local defaults = {
         displayOnlyInGroup = false,
         bossOnlyHistory = false,
         igor = false,
+        halionBurstPull = false,
+        halionBurstReset = true,
         minimap = {
             hide = false
         },
@@ -111,6 +113,14 @@ end
 
 function RLHelper:ShouldShowMainFrame()
     return not (self.db and self.db.profile and self.db.profile.displayOnlyInGroup) or self:IsInGroup()
+end
+
+function RLHelper:IsHalionBurstPullEnabled()
+    return self.db and self.db.profile and self.db.profile.halionBurstPull == true or false
+end
+
+function RLHelper:IsHalionBurstResetEnabled()
+    return not (self.db and self.db.profile and self.db.profile.halionBurstReset == false)
 end
 
 function RLHelper:RefreshMainFrameVisibility()
@@ -995,6 +1005,10 @@ function RLHelper:StartPullCountdown(duration)
     end
 end
 
+function RLHelper:StartDBMPullCommand(duration)
+    return self:InvokeDBMPullCommand(duration)
+end
+
 function RLHelper:BeginPullCountdown(duration)
     local timerApi = self.C_Timer or C_Timer
     self:CancelPullResetTimer()
@@ -1347,11 +1361,29 @@ function RLHelper:CreateOptionsPanel()
         RLHelper.db.profile.igor = self:GetChecked() and true or false
     end)
 
+    local halionBurst = CreateFrame("CheckButton", "RLHelperHalionBurstCheckButton", panel,
+        "InterfaceOptionsCheckButtonTemplate")
+    halionBurst:SetPoint("TOPLEFT", igor, "BOTTOMLEFT", 0, -8)
+    _G[halionBurst:GetName() .. "Text"]:SetText("РС Бурст")
+    halionBurst:SetScript("OnClick", function(self)
+        RLHelper.db.profile.halionBurstPull = self:GetChecked() and true or false
+    end)
+
+    local halionBurstReset = CreateFrame("CheckButton", "RLHelperHalionBurstResetCheckButton", panel,
+        "InterfaceOptionsCheckButtonTemplate")
+    halionBurstReset:SetPoint("TOPLEFT", halionBurst, "BOTTOMLEFT", 0, -8)
+    _G[halionBurstReset:GetName() .. "Text"]:SetText("Сброс Бурста")
+    halionBurstReset:SetScript("OnClick", function(self)
+        RLHelper.db.profile.halionBurstReset = self:GetChecked() and true or false
+    end)
+
     panel:SetScript("OnShow", function()
         cancelEditBox:SetText(RLHelper.db.profile.pullCancelMessage or "")
         displayOnlyInGroup:SetChecked(RLHelper.db.profile.displayOnlyInGroup)
         bossOnlyHistory:SetChecked(RLHelper.db.profile.bossOnlyHistory)
         igor:SetChecked(RLHelper.db.profile.igor)
+        halionBurst:SetChecked(RLHelper:IsHalionBurstPullEnabled())
+        halionBurstReset:SetChecked(RLHelper:IsHalionBurstResetEnabled())
     end)
 
     self.optionsPanel = panel

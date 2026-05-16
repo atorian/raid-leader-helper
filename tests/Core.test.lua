@@ -731,6 +731,34 @@ describe("RLHelper settings helpers", function()
         RLHelper.combatEndRequestedAt = originalCombatEndRequestedAt
     end)
 
+    it("treats Halion burst pull as disabled when the saved value is missing", function()
+        RLHelper.db = {
+            profile = {}
+        }
+
+        assert.is_false(RLHelper:IsHalionBurstPullEnabled())
+    end)
+
+    it("treats Halion burst reset as enabled when the saved value is missing", function()
+        RLHelper.db = {
+            profile = {}
+        }
+
+        assert.is_true(RLHelper:IsHalionBurstResetEnabled())
+    end)
+
+    it("reads enabled Halion burst pull and disabled reset from profile", function()
+        RLHelper.db = {
+            profile = {
+                halionBurstPull = true,
+                halionBurstReset = false
+            }
+        }
+
+        assert.is_true(RLHelper:IsHalionBurstPullEnabled())
+        assert.is_false(RLHelper:IsHalionBurstResetEnabled())
+    end)
+
     it("creates options panel with Russian setting labels", function()
         local texts = {}
 
@@ -802,6 +830,8 @@ describe("RLHelper settings helpers", function()
         assert.is_nil(table.concat(texts, " "):find("Display only", 1, true))
         assert.is_true(table.concat(texts, " "):find("Текст сообщения отмены пула", 1, true) ~= nil)
         assert.is_true(table.concat(texts, " "):find("Показывать только в группе", 1, true) ~= nil)
+        assert.is_true(table.concat(texts, " "):find("РС Бурст", 1, true) ~= nil)
+        assert.is_true(table.concat(texts, " "):find("Сброс Бурста", 1, true) ~= nil)
     end)
 
     it("opens the registered options panel", function()
@@ -1262,6 +1292,9 @@ describe("RLHelper pull controls", function()
     local originalGetRealNumRaidMembers
     local originalGetRealNumPartyMembers
     local originalDb
+    local originalBeginPullCountdown
+    local originalInvokeDBMPullCommand
+    local originalMinimizeWindow
 
     local function newVisibilityProbe(initiallyVisible)
         return {
@@ -1287,6 +1320,9 @@ describe("RLHelper pull controls", function()
         originalGetRealNumRaidMembers = _G.GetRealNumRaidMembers
         originalGetRealNumPartyMembers = _G.GetRealNumPartyMembers
         originalDb = RLHelper.db
+        originalBeginPullCountdown = RLHelper.BeginPullCountdown
+        originalInvokeDBMPullCommand = RLHelper.InvokeDBMPullCommand
+        originalMinimizeWindow = RLHelper.MinimizeWindow
         _G.IsInInstance = function()
             return false, "raid"
         end
@@ -1338,6 +1374,9 @@ describe("RLHelper pull controls", function()
         _G.GetRealNumRaidMembers = originalGetRealNumRaidMembers
         _G.GetRealNumPartyMembers = originalGetRealNumPartyMembers
         RLHelper.db = originalDb
+        RLHelper.BeginPullCountdown = originalBeginPullCountdown
+        RLHelper.InvokeDBMPullCommand = originalInvokeDBMPullCommand
+        RLHelper.MinimizeWindow = originalMinimizeWindow
     end)
 
     it("restores pull buttons automatically when the countdown finishes", function()
@@ -1389,6 +1428,35 @@ describe("RLHelper pull controls", function()
 
         assert.is_true(ok)
         assert.are.same({ "15" }, slashCalls)
+    end)
+
+    it("starts DBM-only pull without touching pull controls, window, or log", function()
+        local invokedDuration
+        RLHelper.BeginPullCountdown = function()
+            error("BeginPullCountdown should not be used")
+        end
+        RLHelper.MinimizeWindow = function()
+            error("MinimizeWindow should not be used")
+        end
+        RLHelper.InvokeDBMPullCommand = function(_, duration)
+            invokedDuration = duration
+            return true
+        end
+        RLHelper.mainFrame.logText = {
+            Clear = function()
+                error("log should not be cleared")
+            end
+        }
+
+        local ok = RLHelper:StartDBMPullCommand(15)
+
+        assert.is_true(ok)
+        assert.are.equal(15, invokedDuration)
+        assert.is_nil(RLHelper.pullResetTimer)
+        assert.is_true(RLHelper.mainFrame.pullButtons[1].visible)
+        assert.is_true(RLHelper.mainFrame.pullButtons[2].visible)
+        assert.is_true(RLHelper.mainFrame.pullButtons[3].visible)
+        assert.is_false(RLHelper.mainFrame.cancelBtn.visible)
     end)
 
     it("cancels pull through DBM scheduled messages, sounds, and bars", function()

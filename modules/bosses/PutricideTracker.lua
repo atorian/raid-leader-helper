@@ -7,12 +7,14 @@ PutricideTracker.bossIds = {
     [36678] = "Профессор Мерзоцид"
 }
 
-local PROFESSOR_PUTRICIDE = "Профессор Мерзоцид"
-local FESTERGUT = "Тухлопуз"
 local MALLEABLE_GOO_SPELLS = {
-    [70853] = true, -- Normal 10
+    [70853] = true,
+    [72297] = true,
+    [72458] = true,
+    [72548] = true,
+    [72549] = true,
     [72550] = true,
-    [72873] = true, -- Heroic 10
+    [72873] = true,
     [72874] = true
 }
 local CHOKING_GAS_SPELLS = {
@@ -38,15 +40,6 @@ end
 
 function PutricideTracker:OnEnable()
     RLHelper:Debug("PutricideTracker: Включен")
-end
-
-local function isMalleableGooCombat()
-    return RLHelper.currentCombat and
-        (RLHelper.currentCombat.firstEnemy == PROFESSOR_PUTRICIDE or RLHelper.currentCombat.firstEnemy == FESTERGUT)
-end
-
-local function isProfessorPutricideCombat()
-    return RLHelper.currentCombat and RLHelper.currentCombat.firstEnemy == PROFESSOR_PUTRICIDE
 end
 
 local function formatMalleableGoo(ts, destName)
@@ -128,12 +121,7 @@ function PutricideTracker:demo()
 end
 
 function PutricideTracker:handleEvent(event)
-    if not isMalleableGooCombat() then
-        return
-    end
-
-    if event.event == "SPELL_AURA_APPLIED" and CHOKING_GAS_SPELLS[event.spellId] and event.destName and
-        isProfessorPutricideCombat() then
+    if event.event == "SPELL_AURA_APPLIED" and CHOKING_GAS_SPELLS[event.spellId] and event.destName then
         self.chokingGasReport[event.destName] = (self.chokingGasReport[event.destName] or 0) + 1
         self.log(formatChokingGas(event.timestamp, event.destName))
         return

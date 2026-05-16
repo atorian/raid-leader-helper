@@ -50,35 +50,21 @@ describe('PutricideTracker', function()
         assert.are.equal(631, PutricideTracker.zoneGateInstanceId)
     end)
 
-    it('logs normal 10-player Malleable Goo aura applications', function()
-        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
-            :ApplyAura(70853, "Вязкая гадость", "DEBUFF"):Build())
+    for _, spellId in ipairs({ 70853, 72297, 72458, 72548, 72549, 72550, 72873, 72874 }) do
+        it('logs Malleable Goo aura applications for spell ' .. spellId, function()
+            dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
+                :ApplyAura(spellId, "Вязкая гадость", "DEBUFF"):Build())
 
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\INV_Misc_Herb_EvergreenMoss:24:24:0:0|t Вязкая гадость")
-    end)
-
-    it('logs heroic 10-player Malleable Goo aura applications', function()
-        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Глорихол")
-            :ApplyAura(72873, "Вязкая гадость", "DEBUFF"):Build())
-
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFГлорихол|r |TInterface\\Icons\\INV_Misc_Herb_EvergreenMoss:24:24:0:0|t Вязкая гадость")
-    end)
-
-    it('logs observed 25-player Malleable Goo aura applications', function()
-        dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Vafli")
-            :ApplyAura(72550, "Вязкая гадость", "DEBUFF"):Build())
-
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFVafli|r |TInterface\\Icons\\INV_Misc_Herb_EvergreenMoss:24:24:0:0|t Вязкая гадость")
-    end)
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\INV_Misc_Herb_EvergreenMoss:24:24:0:0|t Вязкая гадость")
+        end)
+    end
 
     it('logs Malleable Goo during Festergut combat', function()
         RLHelper.currentCombat = { firstEnemy = "Тухлопуз" }
 
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
-            :ApplyAura(70853, "Вязкая гадость", "DEBUFF"):Build())
+            :ApplyAura(72297, "Вязкая гадость", "DEBUFF"):Build())
 
         assert.spy(log).was_called_with(
             "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\INV_Misc_Herb_EvergreenMoss:24:24:0:0|t Вязкая гадость")
@@ -93,18 +79,19 @@ describe('PutricideTracker', function()
 
     it('ignores Malleable Goo ids not observed from Professor Putricide', function()
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Фанатик")
-            :ApplyAura(72549, "Вязкая гадость", "DEBUFF"):Build())
+            :ApplyAura(72551, "Вязкая гадость", "DEBUFF"):Build())
 
         assert.spy(log).was_not_called()
     end)
 
-    it('ignores Malleable Goo outside Professor Putricide combat', function()
+    it('logs Malleable Goo by spell id without checking current combat enemy', function()
         RLHelper.currentCombat = { firstEnemy = "Король-лич" }
 
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
-            :ApplyAura(70853, "Вязкая гадость", "DEBUFF"):Build())
+            :ApplyAura(72297, "Вязкая гадость", "DEBUFF"):Build())
 
-        assert.spy(log).was_not_called()
+        assert.spy(log).was_called_with(
+            "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\INV_Misc_Herb_EvergreenMoss:24:24:0:0|t Вязкая гадость")
     end)
 
     it('logs combat-end Malleable Goo summary sorted by count then name', function()
@@ -125,7 +112,7 @@ describe('PutricideTracker', function()
         RLHelper.currentCombat = { firstEnemy = "Тухлопуз" }
 
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
-            :ApplyAura(70853, "Вязкая гадость", "DEBUFF"):Build())
+            :ApplyAura(72297, "Вязкая гадость", "DEBUFF"):Build())
 
         log:clear()
         summarizeCombat(PutricideTracker)
@@ -166,22 +153,24 @@ describe('PutricideTracker', function()
             "SOME DATE |cFFFFFFFFГлорихол|r |TInterface\\Icons\\Ability_Creature_Cursed_01:24:24:0:0|t Удушливый газ")
     end)
 
-    it('ignores Choking Gas outside Professor Putricide combat', function()
+    it('logs Choking Gas by spell id without checking current combat enemy', function()
         RLHelper.currentCombat = { firstEnemy = "Король-лич" }
 
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
             :ApplyAura(71278, "Удушливый газ", "DEBUFF"):Build())
 
-        assert.spy(log).was_not_called()
+        assert.spy(log).was_called_with(
+            "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\Ability_Creature_Cursed_01:24:24:0:0|t Удушливый газ")
     end)
 
-    it('ignores Choking Gas during Festergut combat', function()
+    it('logs Choking Gas during Festergut combat', function()
         RLHelper.currentCombat = { firstEnemy = "Тухлопуз" }
 
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
             :ApplyAura(71278, "Удушливый газ", "DEBUFF"):Build())
 
-        assert.spy(log).was_not_called()
+        assert.spy(log).was_called_with(
+            "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\Ability_Creature_Cursed_01:24:24:0:0|t Удушливый газ")
     end)
 
     it('logs combat-end Choking Gas summary sorted by count then name', function()

@@ -4,6 +4,12 @@ WoW 3.3.5a only addon for Raid Leader support.
 Provides visual persistend battle log and quick actions.
 Other versions of WOW are out of scope.
 
+## Branching
+
+- Use Trunk Based Development: make changes directly on the `main` branch. Do not create or switch to feature branches unless explicitly requested.
+- If work needs to diverge from `main` and is incomplete, keep it behind a feature flag so `main` remains releasable.
+
+
 ## Release Process
 
 - To release, update `## Version` in `RLHelper.toc` first.
@@ -11,9 +17,14 @@ Other versions of WOW are out of scope.
 - Create the git tag on the version bump commit and push the commit and tag to GitHub.
 - GitHub automation creates a draft release after the tag is pushed.
 - Do not create GitHub releases unless explicitly requested.
-- After publishing new git tag prepare release message in russian. It should inculde what changed since last published release:
-    - Что нового 
-    - Что исправлено
+- After publishing new git tag prepare release message in russian. Release messge must include diff between last published release and current version. Use this format and include what changed since last published release:
+```markdown
+## Что нового
+- <new features>
+
+## Что исправлено
+- <bug fixes>
+```
 
 ## Valid Data Source
 

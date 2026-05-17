@@ -1332,10 +1332,43 @@ describe("RLHelper main frame raid check button", function()
 
         RLHelper:RefreshCombatListOverlay()
 
-        assert.equals("> Текущий", RLHelper.mainFrame.combatListRows[1].label.text)
-        assert.equals("  01. Король-лич: " .. date("%H:%M", startTime - 60), RLHelper.mainFrame.combatListRows[2].label.text)
-        assert.equals("  02. Валитрия Сноходица: " .. date("%H:%M", startTime - 120), RLHelper.mainFrame.combatListRows[3].label.text)
+        assert.equals("|cffffff00> Текущий|r", RLHelper.mainFrame.combatListRows[1].label.text)
+        assert.equals("|cff808080  01. |r|cffffffffКороль-лич|r|cff808080: " .. date("%H:%M", startTime - 60) .. "|r", RLHelper.mainFrame.combatListRows[2].label.text)
+        assert.equals("|cff808080  02. |r|cffffffffВалитрия Сноходица|r|cff808080: " .. date("%H:%M", startTime - 120) .. "|r", RLHelper.mainFrame.combatListRows[3].label.text)
         assert.equals("Interface\\QuestFrame\\UI-QuestTitleHighlight", RLHelper.mainFrame.combatListRows[2].highlightTexture)
+    end)
+
+    it("sizes the combat list overlay to long row text", function()
+        RLHelper.combatHistory = {
+            {
+                startTime = 1710000000,
+                messages = {},
+                firstEnemy = "Очень Длинное Название Босса Для Проверки Ширины"
+            }
+        }
+        RLHelper:CreateMainFrame()
+
+        RLHelper:RefreshCombatListOverlay()
+
+        assert.is_true(RLHelper.mainFrame.combatListFrame.width > 280)
+        assert.equals(RLHelper.mainFrame.combatListFrame.width - 16, RLHelper.mainFrame.combatListRows[2].width)
+    end)
+
+    it("does not double-count Cyrillic bytes when sizing the combat list overlay", function()
+        RLHelper.combatHistory = {
+            {
+                startTime = 1710000000,
+                messages = {},
+                firstEnemy = "Профессор Мерзоцид"
+            }
+        }
+        RLHelper:CreateMainFrame()
+        RLHelper.selectedCombatKind = "history"
+        RLHelper.selectedCombatIndex = 1
+
+        RLHelper:RefreshCombatListOverlay()
+
+        assert.is_true(RLHelper.mainFrame.combatListFrame.width <= 320)
     end)
 
     it("marks selected history row, handles row click, and hides the overlay", function()
@@ -1359,7 +1392,7 @@ describe("RLHelper main frame raid check button", function()
         RLHelper:ToggleCombatListOverlay()
         RLHelper.mainFrame.combatListRows[2].scripts.OnClick()
 
-        assert.equals("> 01. Король-лич: " .. date("%H:%M", 1710000000), RLHelper.mainFrame.combatListRows[2].label.text)
+        assert.equals("|cffffff00> 01. Король-лич: " .. date("%H:%M", 1710000000) .. "|r", RLHelper.mainFrame.combatListRows[2].label.text)
         assert.equals(1, shownIndex)
         assert.is_false(RLHelper.mainFrame.combatListFrame.visible)
         assert.is_false(RLHelper.mainFrame.combatListClickCatcher.visible)

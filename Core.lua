@@ -1038,10 +1038,50 @@ function RLHelper:BeginPullCountdown(duration)
     self.pullResetTimer = handle
 end
 
-function RLHelper:FormatCombatListRow(index, combat)
+local COMBAT_LIST_GRAY = "|cff808080"
+local COMBAT_LIST_WHITE = "|cffffffff"
+local COMBAT_LIST_YELLOW = "|cffffff00"
+local COLOR_END = "|r"
+
+local function getVisibleCharacterCount(text)
+    local count = 0
+    for i = 1, string.len(text) do
+        local byte = string.byte(text, i)
+        if byte < 128 or byte >= 192 then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function getCombatListTextWidth(text)
+    local plainText = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    return math.max(260, (getVisibleCharacterCount(plainText) * 7) + 16)
+end
+
+function RLHelper:FormatCombatListRow(index, combat, prefix, selected)
     local name = combat and combat.firstEnemy or "Бой"
     local startTime = combat and combat.startTime or 0
-    return string.format("%02d. %s: %s", index, name, date("%H:%M", startTime))
+    if selected then
+        return string.format("%s%s%02d. %s: %s%s",
+            COMBAT_LIST_YELLOW,
+            prefix or "",
+            index,
+            name,
+            date("%H:%M", startTime),
+            COLOR_END)
+    end
+
+    return string.format("%s%s%02d. %s%s%s%s: %s%s",
+        COMBAT_LIST_GRAY,
+        prefix or "",
+        index,
+        COLOR_END,
+        COMBAT_LIST_WHITE,
+        name,
+        COLOR_END .. COMBAT_LIST_GRAY,
+        date("%H:%M", startTime),
+        COLOR_END)
 end
 
 function RLHelper:RefreshCombatListOverlay()
@@ -1054,6 +1094,7 @@ function RLHelper:RefreshCombatListOverlay()
     local selectedKind = self.selectedCombatKind or "current"
     local selectedIndex = self.selectedCombatIndex
     local rowIndex = 1
+    local listWidth = 280
 
     local function setRow(text, onClick)
         local row = frame.combatListRows[rowIndex]
@@ -1071,11 +1112,16 @@ function RLHelper:RefreshCombatListOverlay()
         row.label:SetText(text)
         row:SetScript("OnClick", onClick)
         row:Show()
+        listWidth = math.max(listWidth, getCombatListTextWidth(text) + 16)
         rowIndex = rowIndex + 1
     end
 
     local currentPrefix = selectedKind == "current" and "> " or "  "
-    setRow(currentPrefix .. "Текущий", function()
+    local currentText = currentPrefix .. "Текущий"
+    if selectedKind == "current" then
+        currentText = COMBAT_LIST_YELLOW .. currentText .. COLOR_END
+    end
+    setRow(currentText, function()
         RLHelper.selectedCombatKind = "current"
         RLHelper.selectedCombatIndex = nil
         RLHelper:DisplayCombat(RLHelper.currentCombat)
@@ -1083,8 +1129,9 @@ function RLHelper:RefreshCombatListOverlay()
     end)
 
     for i, combat in ipairs(self.combatHistory) do
-        local prefix = selectedKind == "history" and selectedIndex == i and "> " or "  "
-        setRow(prefix .. self:FormatCombatListRow(i, combat), function()
+        local selected = selectedKind == "history" and selectedIndex == i
+        local prefix = selected and "> " or "  "
+        setRow(self:FormatCombatListRow(i, combat, prefix, selected), function()
             RLHelper:ShowCombatByIndex(i)
             RLHelper:HideCombatListOverlay()
         end)
@@ -1094,7 +1141,11 @@ function RLHelper:RefreshCombatListOverlay()
         frame.combatListRows[i]:Hide()
     end
 
-    frame.combatListFrame:SetSize(280, 16 + ((rowIndex - 1) * 18))
+    for i = 1, rowIndex - 1 do
+        frame.combatListRows[i]:SetSize(listWidth - 16, 18)
+    end
+
+    frame.combatListFrame:SetSize(listWidth, 16 + ((rowIndex - 1) * 18))
 end
 
 function RLHelper:HideCombatListOverlay()

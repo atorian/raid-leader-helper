@@ -1361,26 +1361,30 @@ function RLHelper:CreateOptionsPanel()
         RLHelper.db.profile.igor = self:GetChecked() and true or false
     end)
 
-    local halionBurst = CreateFrame("CheckButton", "RLHelperHalionBurstCheckButton", panel,
-        "InterfaceOptionsCheckButtonTemplate")
-    halionBurst:SetPoint("TOPLEFT", igor, "BOTTOMLEFT", 0, -8)
-    _G[halionBurst:GetName() .. "Text"]:SetText("РС Бурст")
-    halionBurst:SetScript("OnClick", function(self)
-        RLHelper.db.profile.halionBurstPull = self:GetChecked() and true or false
-    end)
+    local halionBurstTitle = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    halionBurstTitle:SetPoint("TOPLEFT", igor, "BOTTOMLEFT", 0, -16)
+    halionBurstTitle:SetText("РС Бурст")
 
     local halionBurstReset = CreateFrame("CheckButton", "RLHelperHalionBurstResetCheckButton", panel,
         "InterfaceOptionsCheckButtonTemplate")
-    halionBurstReset:SetPoint("TOPLEFT", halionBurst, "BOTTOMLEFT", 0, -8)
-    _G[halionBurstReset:GetName() .. "Text"]:SetText("Сброс Бурста")
+    halionBurstReset:SetPoint("TOPLEFT", halionBurstTitle, "BOTTOMLEFT", 0, -8)
+    _G[halionBurstReset:GetName() .. "Text"]:SetText("Сброс ДПС")
     halionBurstReset:SetScript("OnClick", function(self)
         RLHelper.db.profile.halionBurstReset = self:GetChecked() and true or false
     end)
 
+    local halionBurst = CreateFrame("CheckButton", "RLHelperHalionBurstCheckButton", panel,
+        "InterfaceOptionsCheckButtonTemplate")
+    halionBurst:SetPoint("TOPLEFT", halionBurstReset, "BOTTOMLEFT", 0, -8)
+    _G[halionBurst:GetName() .. "Text"]:SetText("Отсчет на выход для Ретрика")
+    halionBurst:SetScript("OnClick", function(self)
+        RLHelper.db.profile.halionBurstPull = self:GetChecked() and true or false
+    end)
+
     local halionPhaseTwoEntryTimer = CreateFrame("CheckButton", "RLHelperHalionPhaseTwoEntryTimerCheckButton", panel,
         "InterfaceOptionsCheckButtonTemplate")
-    halionPhaseTwoEntryTimer:SetPoint("TOPLEFT", halionBurstReset, "BOTTOMLEFT", 0, -8)
-    _G[halionPhaseTwoEntryTimer:GetName() .. "Text"]:SetText("РС Бурст - Таймер на вход после 2го метеорита")
+    halionPhaseTwoEntryTimer:SetPoint("TOPLEFT", halionBurst, "BOTTOMLEFT", 0, -8)
+    _G[halionPhaseTwoEntryTimer:GetName() .. "Text"]:SetText("Отсчет на вход после 2го метеорита")
     halionPhaseTwoEntryTimer:SetScript("OnClick", function(self)
         RLHelper.db.profile.halionPhaseTwoEntryTimer = self:GetChecked() and true or false
     end)

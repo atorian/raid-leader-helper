@@ -840,9 +840,17 @@ describe("RLHelper settings helpers", function()
         assert.is_nil(table.concat(texts, " "):find("Display only", 1, true))
         assert.is_true(table.concat(texts, " "):find("Текст сообщения отмены пула", 1, true) ~= nil)
         assert.is_true(table.concat(texts, " "):find("Показывать только в группе", 1, true) ~= nil)
-        assert.is_true(table.concat(texts, " "):find("РС Бурст", 1, true) ~= nil)
-        assert.is_true(table.concat(texts, " "):find("Сброс Бурста", 1, true) ~= nil)
-        assert.is_true(table.concat(texts, " "):find("РС Бурст - Таймер на вход после 2го метеорита", 1, true) ~= nil)
+        assert.are.same({
+            "RL Helper",
+            "Текст сообщения отмены пула",
+            "Показывать только в группе",
+            "Оставлять бои только с боссами",
+            "Игорь",
+            "РС Бурст",
+            "Сброс ДПС",
+            "Отсчет на выход для Ретрика",
+            "Отсчет на вход после 2го метеорита"
+        }, texts)
     end)
 
     it("opens the registered options panel", function()

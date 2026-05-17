@@ -1368,7 +1368,7 @@ function RLHelper:CreateOptionsPanel()
     local halionBurstReset = CreateFrame("CheckButton", "RLHelperHalionBurstResetCheckButton", panel,
         "InterfaceOptionsCheckButtonTemplate")
     halionBurstReset:SetPoint("TOPLEFT", halionBurstTitle, "BOTTOMLEFT", 0, -8)
-    _G[halionBurstReset:GetName() .. "Text"]:SetText("Сброс ДПС")
+    _G[halionBurstReset:GetName() .. "Text"]:SetText("Сброс ДПС под Геру")
     halionBurstReset:SetScript("OnClick", function(self)
         RLHelper.db.profile.halionBurstReset = self:GetChecked() and true or false
     end)

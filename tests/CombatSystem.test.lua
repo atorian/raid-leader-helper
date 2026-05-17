@@ -60,6 +60,9 @@ describe("Боевая система", function()
                 debug = false,
                 combatHistory = {},
                 bossOnlyHistory = false
+            },
+            char = {
+                combatHistory = {}
             }
         }
 
@@ -460,6 +463,66 @@ describe("Боевая система", function()
         assert.are.equal(0, #RLHelper.db.profile.combatHistory)
     end)
 
+    it("сохраняет историю боев в хранилище текущего персонажа", function()
+        RLHelper:PLAYER_REGEN_DISABLED()
+        RLHelper:OnCombatLogEvent("test message")
+
+        M.UnitAffectingCombat1 = false
+        RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
+        RLHelper.combatEndRequestedAt = RLHelper:GetCombatNow() - 5
+
+        assert.is_true(RLHelper:EvaluateCombatEnd("test"))
+        assert.are.equal(1, #RLHelper.combatHistory)
+        assert.are.equal(1, #RLHelper.db.char.combatHistory)
+        assert.are.equal("test message", RLHelper.db.char.combatHistory[1].messages[1])
+        assert.are.equal(0, #RLHelper.db.profile.combatHistory)
+    end)
+
+    it("ограничивает историю текущего персонажа тридцатью боями", function()
+        for i = 1, 31 do
+            RLHelper:SaveCombatToProfile({
+                startTime = i,
+                endTime = i + 1,
+                messages = { "combat " .. i },
+                firstEnemy = "Enemy " .. i,
+                isBoss = false
+            }, RLHelper.db.profile)
+        end
+
+        assert.are.equal(30, #RLHelper.combatHistory)
+        assert.are.equal(30, #RLHelper.db.char.combatHistory)
+        assert.are.equal("Enemy 31", RLHelper.combatHistory[1].firstEnemy)
+        assert.are.equal("Enemy 2", RLHelper.combatHistory[30].firstEnemy)
+    end)
+
+    it("очищает историю только текущего персонажа", function()
+        RLHelper.combatHistory = {
+            {
+                startTime = 1,
+                endTime = 2,
+                messages = { "combat" },
+                firstEnemy = "Enemy",
+                isBoss = false
+            }
+        }
+        RLHelper.db.char.combatHistory = RLHelper.combatHistory
+        RLHelper.db.profile.combatHistory = {
+            {
+                startTime = 10,
+                endTime = 11,
+                messages = { "old shared combat" },
+                firstEnemy = "Old Enemy",
+                isBoss = false
+            }
+        }
+
+        RLHelper:ClearCombatHistory()
+
+        assert.are.equal(0, #RLHelper.combatHistory)
+        assert.are.equal(0, #RLHelper.db.char.combatHistory)
+        assert.are.equal(1, #RLHelper.db.profile.combatHistory)
+    end)
+
     it("сохраняет боссовый бой когда включена история только боссов", function()
         RLHelper.db.profile.bossOnlyHistory = true
         M.UnitAffectingCombat1 = false
@@ -494,7 +557,7 @@ describe("Боевая система", function()
         assert.are.equal(1, #RLHelper.combatHistory)
         assert.is_true(RLHelper.combatHistory[1].isBoss)
         assert.are.equal("Кровавый совет", RLHelper.combatHistory[1].firstEnemy)
-        assert.are.equal("Кровавый совет", RLHelper.db.profile.combatHistory[1].firstEnemy)
+        assert.are.equal("Кровавый совет", RLHelper.db.char.combatHistory[1].firstEnemy)
     end)
 
     it("сохраняет boss-only бой с боссом из общего реестра", function()

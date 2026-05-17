@@ -62,8 +62,10 @@ local defaults = {
         minimap = {
             hide = false
         },
-        combatHistory = {}, -- Add combat history storage
         savedPosition = nil -- Add saved position storage
+    },
+    char = {
+        combatHistory = {}
     }
 }
 
@@ -257,17 +259,16 @@ function RLHelper:OnInitialize()
 
     self.db = LibStub("AceDB-3.0"):New("RLHelperDB", defaults, true)
 
-    -- Load combat history from DB
-    if self.db.profile.combatHistory then
-        for _, combat in ipairs(self.db.profile.combatHistory) do
-            table.insert(self.combatHistory, {
-                startTime = combat.startTime,
-                endTime = combat.endTime,
-                messages = combat.messages,
-                firstEnemy = combat.firstEnemy,
-                isBoss = combat.isBoss
-            })
-        end
+    -- Load combat history from character DB
+    local combatHistory = self.db.char and self.db.char.combatHistory or {}
+    for _, combat in ipairs(combatHistory) do
+        table.insert(self.combatHistory, {
+            startTime = combat.startTime,
+            endTime = combat.endTime,
+            messages = combat.messages,
+            firstEnemy = combat.firstEnemy,
+            isBoss = combat.isBoss
+        })
     end
 
     self:RegisterChatCommand("rlh", "HandleSlashCommand")
@@ -769,18 +770,16 @@ function RLHelper:OnCombatLogEvent(message)
 end
 
 function RLHelper:SaveCombatToProfile(combat, profile)
-    -- Добавляем бой в начало массива
     table.insert(self.combatHistory, 1, combat)
 
-    -- Ограничиваем количество сохраненных боев до 50
-    while #self.combatHistory > 50 do
+    while #self.combatHistory > 30 do
         table.remove(self.combatHistory)
     end
 
-    -- Сохраняем историю боев в профиль
-    profile.combatHistory = {}
+    local charDb = self.db.char
+    charDb.combatHistory = {}
     for _, savedCombat in ipairs(self.combatHistory) do
-        table.insert(profile.combatHistory, savedCombat)
+        table.insert(charDb.combatHistory, savedCombat)
     end
 end
 
@@ -1411,7 +1410,7 @@ end
 
 function RLHelper:ClearCombatHistory()
     self.combatHistory = {}
-    self.db.profile.combatHistory = {}
+    self.db.char.combatHistory = {}
     self:Print("История боев очищена")
 end
 

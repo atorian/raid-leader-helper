@@ -2,7 +2,7 @@
 ## Title: RL Helper
 ## Notes: Quick access to RL controls
 ## Author: Atorian
-## Version: 0.3.20
+## Version: 0.3.21
 ## SavedVariables: RLHelperDB
 ## Dependencies: DBM-Core
 ## OptionalDeps: EPGP, Recount, Skada, Details

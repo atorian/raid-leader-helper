@@ -754,10 +754,6 @@ function RLHelper:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
         end
     end
 
-    if not self.inCombat then
-        return
-    end
-
     self:DispatchCombatEvent(eventData)
 end
 

@@ -534,7 +534,7 @@ describe("RLHelper combat event dispatch", function()
         assert.are.equal(1, dispatchCount)
     end)
 
-    it("does not dispatch non-combat events before combat starts", function()
+    it("dispatches non-combat events before combat starts", function()
         local dispatchCount = 0
         RLHelper.DispatchCombatEvent = function()
             dispatchCount = dispatchCount + 1
@@ -550,7 +550,7 @@ describe("RLHelper combat event dispatch", function()
             "0x0000000000000001", "Palanessa", 0x514, "0x0000000000000000", nil, 0x80000000,
             31821, "Мастер аур", 0x1)
 
-        assert.are.equal(0, dispatchCount)
+        assert.are.equal(1, dispatchCount)
     end)
 
     it("updates first enemy before dispatching events to modules", function()

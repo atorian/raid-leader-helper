@@ -1,4 +1,4 @@
-require('tests.mocks')
+local M = require('tests.mocks')
 require('../lib/blizzardEvent')
 local RLHelper = require('../Core')
 local Builder = require('../utils/CombatEventBuilder')
@@ -18,11 +18,34 @@ local arcaneShot = "Interface\\Icons\\Ability_ImpalingBolt"
 
 describe("Misdirection Tracker", function()
     local log
+    local originalIterateModules
 
     before_each(function()
+        originalIterateModules = RLHelper.IterateModules
+        RLHelper:StopCombatTicker()
+        RLHelper.inCombat = false
+        RLHelper.lastCombatActivityAt = nil
+        RLHelper.combatEndRequestedAt = nil
+        RLHelper.combatEndRequiresRegen = false
+        RLHelper.currentInstanceId = 0
+        RLHelper.currentCombat = {
+            startTime = nil,
+            messages = {},
+            firstEnemy = nil,
+            isBoss = false
+        }
+        wipe(RLHelper.activeEnemies)
+        wipe(RLHelper.activePlayers)
+        wipe(RLHelper.enemyEvents)
+
+        M.UnitAffectingCombat1 = false
         MisdirectionTracker:reset()
         MisdirectionTracker.log = spy.new(function()
         end)
+    end)
+
+    after_each(function()
+        RLHelper.IterateModules = originalIterateModules
     end)
 
     it("отслеживает урон во время активного напула", function()
@@ -99,6 +122,29 @@ describe("Misdirection Tracker", function()
             :RemoveAura(35079, "Перенаправление"):Build())
 
         assert.spy(MisdirectionTracker.log).was_not_called()
+    end)
+
+    it("сохраняет первый напул до начала боя и пишет отчет после пула", function()
+        RLHelper.IterateModules = function()
+            return ipairs({ MisdirectionTracker })
+        end
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
+            :CastSuccess(34477, "Перенаправление"):Build())
+
+        assert.is_false(RLHelper.inCombat)
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Охотник"):ToEnemy("Враг")
+            :SpellDamage(49050, "Прицельный выстрел", 1000):Build())
+
+        assert.is_true(RLHelper.inCombat)
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
+            :RemoveAura(35079, "Перенаправление"):Build())
+
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк |T%s:24:24:0:-2|t",
+            date("%H:%M:%S", GetTime()), misdirect, aimedshot))
     end)
 
     -- it("отслеживает несколько способностей во время напула", function()

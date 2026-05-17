@@ -1059,6 +1059,18 @@ describe("RLHelper main frame raid check button", function()
             table.insert(self.points, { ... })
         end
 
+        function frame:SetAllPoints(parent)
+            self.allPoints = parent
+        end
+
+        function frame:SetFrameStrata(strata)
+            self.frameStrata = strata
+        end
+
+        function frame:ClearAllPoints()
+            self.points = {}
+        end
+
         function frame:SetMovable(value)
             self.movable = value
         end
@@ -1240,6 +1252,8 @@ describe("RLHelper main frame raid check button", function()
         RLHelper.mainFrame = nil
         RLHelper.currentCombat = {}
         RLHelper.combatHistory = {}
+        RLHelper.selectedCombatKind = nil
+        RLHelper.selectedCombatIndex = nil
         RLHelper.LayoutMainFrame = function()
         end
         RLHelper.SendMessage = function()
@@ -1269,11 +1283,138 @@ describe("RLHelper main frame raid check button", function()
         assert.equals(RLHelper.mainFrame.raidCheckBtn, RLHelper.mainFrame.pullButtons[1])
         assert.equals("Пул 15", RLHelper.mainFrame.pullButtons[2].text)
         assert.equals("Пул 70", RLHelper.mainFrame.pullButtons[3].text)
+        assert.are.same({ "TOPLEFT", RLHelper.mainFrame, "TOPLEFT", 2, -2 }, RLHelper.mainFrame.buttonContainer.points[1])
+        assert.are.same({ "TOPRIGHT", -2, -2 }, RLHelper.mainFrame.buttonContainer.points[2])
         assert.are.same({ "LEFT", RLHelper.mainFrame.buttonContainer, "LEFT", 0, 0 }, RLHelper.mainFrame.raidCheckBtn.points[1])
         assert.are.same({ "LEFT", RLHelper.mainFrame.raidCheckBtn, "RIGHT", 4, 0 }, RLHelper.mainFrame.pullButtons[2].points[1])
         assert.are.same({ "LEFT", RLHelper.mainFrame.pullButtons[2], "RIGHT", 4, 0 }, RLHelper.mainFrame.pullButtons[3].points[1])
         assert.is_false(RLHelper.mainFrame.resetBtn.visible)
-        assert.are.same({ "LEFT", RLHelper.mainFrame.pullButtons[3], "RIGHT", -8, -2 }, RLHelper.mainFrame.combatDropdown.points[1])
+        assert.is_nil(RLHelper.mainFrame.combatDropdown)
+        assert.are.same({ "LEFT", RLHelper.mainFrame.pullButtons[3], "RIGHT", 4, 0 }, RLHelper.mainFrame.combatListButton.points[1])
+        assert.equals(25, RLHelper.mainFrame.combatListButton.width)
+        assert.equals(25, RLHelper.mainFrame.combatListButton.height)
+        assert.is_false(RLHelper.mainFrame.combatListFrame.visible)
+        assert.is_false(RLHelper.mainFrame.combatListClickCatcher.visible)
+    end)
+
+    it("toggles the combat list overlay from the list button", function()
+        RLHelper:CreateMainFrame()
+
+        RLHelper.mainFrame.combatListButton.scripts.OnClick()
+        assert.is_true(RLHelper.mainFrame.combatListFrame.visible)
+        assert.is_true(RLHelper.mainFrame.combatListClickCatcher.visible)
+
+        RLHelper.mainFrame.combatListButton.scripts.OnClick()
+        assert.is_false(RLHelper.mainFrame.combatListFrame.visible)
+        assert.is_false(RLHelper.mainFrame.combatListClickCatcher.visible)
+    end)
+
+    it("builds current and numbered combat history rows", function()
+        local startTime = 1710000000
+        RLHelper.currentCombat = {
+            startTime = startTime,
+            messages = {}
+        }
+        RLHelper.combatHistory = {
+            {
+                startTime = startTime - 60,
+                messages = {},
+                firstEnemy = "Король-лич"
+            },
+            {
+                startTime = startTime - 120,
+                messages = {},
+                firstEnemy = "Валитрия Сноходица"
+            }
+        }
+        RLHelper:CreateMainFrame()
+        RLHelper.selectedCombatKind = "current"
+
+        RLHelper:RefreshCombatListOverlay()
+
+        assert.equals("> Текущий", RLHelper.mainFrame.combatListRows[1].label.text)
+        assert.equals("  01. Король-лич: " .. date("%H:%M", startTime - 60), RLHelper.mainFrame.combatListRows[2].label.text)
+        assert.equals("  02. Валитрия Сноходица: " .. date("%H:%M", startTime - 120), RLHelper.mainFrame.combatListRows[3].label.text)
+        assert.equals("Interface\\QuestFrame\\UI-QuestTitleHighlight", RLHelper.mainFrame.combatListRows[2].highlightTexture)
+    end)
+
+    it("marks selected history row, handles row click, and hides the overlay", function()
+        local shownIndex
+        local originalShowCombatByIndex = RLHelper.ShowCombatByIndex
+        RLHelper.ShowCombatByIndex = function(_, index)
+            shownIndex = index
+        end
+        RLHelper.combatHistory = {
+            {
+                startTime = 1710000000,
+                messages = {},
+                firstEnemy = "Король-лич"
+            }
+        }
+        RLHelper:CreateMainFrame()
+        RLHelper.selectedCombatKind = "history"
+        RLHelper.selectedCombatIndex = 1
+
+        RLHelper:RefreshCombatListOverlay()
+        RLHelper:ToggleCombatListOverlay()
+        RLHelper.mainFrame.combatListRows[2].scripts.OnClick()
+
+        assert.equals("> 01. Король-лич: " .. date("%H:%M", 1710000000), RLHelper.mainFrame.combatListRows[2].label.text)
+        assert.equals(1, shownIndex)
+        assert.is_false(RLHelper.mainFrame.combatListFrame.visible)
+        assert.is_false(RLHelper.mainFrame.combatListClickCatcher.visible)
+
+        RLHelper.ShowCombatByIndex = originalShowCombatByIndex
+    end)
+
+    it("hides the combat list overlay when clicking outside it", function()
+        RLHelper:CreateMainFrame()
+        RLHelper:ToggleCombatListOverlay()
+
+        RLHelper.mainFrame.combatListClickCatcher.scripts.OnClick()
+
+        assert.is_false(RLHelper.mainFrame.combatListFrame.visible)
+        assert.is_false(RLHelper.mainFrame.combatListClickCatcher.visible)
+    end)
+
+    it("creates a borderless main frame without changing log row spacing", function()
+        RLHelper:CreateMainFrame()
+
+        assert.equals(300, RLHelper.mainFrame.width)
+        assert.equals(600, RLHelper.mainFrame.height)
+        assert.are.same({ 300, 100 }, RLHelper.mainFrame.minResize)
+        assert.equals("Interface\\DialogFrame\\UI-DialogBox-Background", RLHelper.mainFrame.backdrop.bgFile)
+        assert.is_nil(RLHelper.mainFrame.backdrop.edgeFile)
+        assert.is_nil(RLHelper.mainFrame.logText.spacing)
+    end)
+
+    it("insets the log text from the right edge when laying out the main frame", function()
+        local logText = newFrame("ScrollingMessageFrame", nil, nil)
+        local frame = {
+            buttonContainer = {},
+            logText = logText
+        }
+        RLHelper.mainFrame = frame
+
+        originalLayoutMainFrame(RLHelper)
+
+        assert.are.same({ "TOPLEFT", frame.buttonContainer, "BOTTOMLEFT", 0, -8 }, logText.points[1])
+        assert.are.same({ "BOTTOMRIGHT", frame, "BOTTOMRIGHT", -48, 8 }, logText.points[2])
+    end)
+
+    it("insets the log text from the bottom panel when present", function()
+        local logText = newFrame("ScrollingMessageFrame", nil, nil)
+        local bottomPanel = {}
+        local frame = {
+            bottomPanel = bottomPanel,
+            buttonContainer = {},
+            logText = logText
+        }
+        RLHelper.mainFrame = frame
+
+        originalLayoutMainFrame(RLHelper)
+
+        assert.are.same({ "BOTTOMRIGHT", bottomPanel, "TOPRIGHT", -48, 4 }, logText.points[2])
     end)
 
     it("calls the global DoReadyCheck function", function()

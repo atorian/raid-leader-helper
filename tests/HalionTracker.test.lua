@@ -391,7 +391,7 @@ describe('HalionTracker', function()
         assert.spy(debug).was_called_with(RLHelper, "HalionTracker: Материальность 0% во тьме (spellId=74836)")
     end)
 
-    it('starts a 15 second pull once when Halion materiality drops into darkness', function()
+    it('starts a 15 second pull only when Halion materiality reaches 10 percent darkness', function()
         local pullDurations = {}
         RLHelper.IsHalionBurstPullEnabled = function()
             return true
@@ -406,7 +406,16 @@ describe('HalionTracker', function()
         dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
             :ApplyAura(74832, "Материальность", "DEBUFF"):Build())
         dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+            :ApplyAura(74833, "Материальность", "DEBUFF"):Build())
+        dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+            :ApplyAura(74834, "Материальность", "DEBUFF"):Build())
+
+        assert.are.same({}, pullDurations)
+
+        dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
             :ApplyAura(74835, "Материальность", "DEBUFF"):Build())
+        dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+            :ApplyAura(74836, "Материальность", "DEBUFF"):Build())
 
         assert.are.same({ 15 }, pullDurations)
     end)

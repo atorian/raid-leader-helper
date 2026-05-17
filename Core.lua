@@ -758,6 +758,14 @@ function RLHelper:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     self:DispatchCombatEvent(eventData)
 end
 
+local function formatLogMessageForDisplay(message)
+    if type(message) ~= "string" then
+        return message
+    end
+
+    return message:gsub(":24:24:0:0|t", ":24:24:0:-2|t")
+end
+
 function RLHelper:OnCombatLogEvent(message)
     if not self.inCombat then
         error("OnCombatLogEvent called before combat started", 2)
@@ -765,7 +773,7 @@ function RLHelper:OnCombatLogEvent(message)
 
     table.insert(self.currentCombat.messages, message)
     if self.mainFrame and self.mainFrame.logText then
-        self.mainFrame.logText:AddMessage(message)
+        self.mainFrame.logText:AddMessage(formatLogMessageForDisplay(message))
     end
 end
 
@@ -1030,22 +1038,100 @@ function RLHelper:BeginPullCountdown(duration)
     self.pullResetTimer = handle
 end
 
-function RLHelper:UpdateCombatDropdown()
-    self:Debug("Updating dropdown list")
+function RLHelper:FormatCombatListRow(index, combat)
+    local name = combat and combat.firstEnemy or "Бой"
+    local startTime = combat and combat.startTime or 0
+    return string.format("%02d. %s: %s", index, name, date("%H:%M", startTime))
+end
 
-    local list = {
-        ["current"] = "Текущий бой"
-    }
-
-    for i, combat in ipairs(self.combatHistory) do
-        local startTime = date("%H:%M:%S", combat.startTime)
-        local endTime = date("%H:%M:%S", combat.endTime)
-        local enemyInfo = combat.firstEnemy or ""
-        list[tostring(i)] = string.format("%d. %s (%s - %s)", i, enemyInfo, startTime, endTime)
+function RLHelper:RefreshCombatListOverlay()
+    local frame = self.mainFrame
+    if not frame or not frame.combatListFrame then
+        return
     end
 
-    dropdown:SetList(list)
-    self:Debug("Dropdown list updated with " .. #list .. " items")
+    frame.combatListRows = frame.combatListRows or {}
+    local selectedKind = self.selectedCombatKind or "current"
+    local selectedIndex = self.selectedCombatIndex
+    local rowIndex = 1
+
+    local function setRow(text, onClick)
+        local row = frame.combatListRows[rowIndex]
+        if not row then
+            row = CreateFrame("Button", nil, frame.combatListFrame)
+            row:SetSize(260, 18)
+            row:SetPoint("TOPLEFT", frame.combatListFrame, "TOPLEFT", 8, -8 - ((rowIndex - 1) * 18))
+            row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+            row.label = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            row.label:SetPoint("LEFT", row, "LEFT", 0, 0)
+            row.label:SetJustifyH("LEFT")
+            frame.combatListRows[rowIndex] = row
+        end
+
+        row.label:SetText(text)
+        row:SetScript("OnClick", onClick)
+        row:Show()
+        rowIndex = rowIndex + 1
+    end
+
+    local currentPrefix = selectedKind == "current" and "> " or "  "
+    setRow(currentPrefix .. "Текущий", function()
+        RLHelper.selectedCombatKind = "current"
+        RLHelper.selectedCombatIndex = nil
+        RLHelper:DisplayCombat(RLHelper.currentCombat)
+        RLHelper:HideCombatListOverlay()
+    end)
+
+    for i, combat in ipairs(self.combatHistory) do
+        local prefix = selectedKind == "history" and selectedIndex == i and "> " or "  "
+        setRow(prefix .. self:FormatCombatListRow(i, combat), function()
+            RLHelper:ShowCombatByIndex(i)
+            RLHelper:HideCombatListOverlay()
+        end)
+    end
+
+    for i = rowIndex, #frame.combatListRows do
+        frame.combatListRows[i]:Hide()
+    end
+
+    frame.combatListFrame:SetSize(280, 16 + ((rowIndex - 1) * 18))
+end
+
+function RLHelper:HideCombatListOverlay()
+    local frame = self.mainFrame
+    if not frame then
+        return
+    end
+
+    if frame.combatListFrame then
+        frame.combatListFrame:Hide()
+    end
+
+    if frame.combatListClickCatcher then
+        frame.combatListClickCatcher:Hide()
+    end
+end
+
+function RLHelper:ToggleCombatListOverlay()
+    local frame = self.mainFrame
+    if not frame or not frame.combatListFrame then
+        return
+    end
+
+    if frame.combatListFrame.visible then
+        self:HideCombatListOverlay()
+        return
+    end
+
+    self:RefreshCombatListOverlay()
+    if frame.combatListClickCatcher then
+        frame.combatListClickCatcher:Show()
+    end
+    frame.combatListFrame:Show()
+end
+
+function RLHelper:UpdateCombatDropdown()
+    self:RefreshCombatListOverlay()
 end
 
 function RLHelper:DisplayCombat(combat)
@@ -1053,12 +1139,19 @@ function RLHelper:DisplayCombat(combat)
         return
     end
 
+    if combat == self.currentCombat then
+        self.selectedCombatKind = "current"
+        self.selectedCombatIndex = nil
+    end
+
     self.mainFrame.logText:Clear()
     if combat and combat.messages then
         for _, message in ipairs(combat.messages) do
-            self.mainFrame.logText:AddMessage(message)
+            self.mainFrame.logText:AddMessage(formatLogMessageForDisplay(message))
         end
     end
+
+    self:RefreshCombatListOverlay()
 end
 
 function RLHelper:LayoutMainFrame()
@@ -1071,9 +1164,9 @@ function RLHelper:LayoutMainFrame()
     frame.logText:SetPoint("TOPLEFT", frame.buttonContainer, "BOTTOMLEFT", 0, -8)
 
     if frame.bottomPanel then
-        frame.logText:SetPoint("BOTTOMRIGHT", frame.bottomPanel, "TOPRIGHT", 0, 4)
+        frame.logText:SetPoint("BOTTOMRIGHT", frame.bottomPanel, "TOPRIGHT", -48, 4)
     else
-        frame.logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -32, 8)
+        frame.logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -48, 8)
     end
 end
 
@@ -1101,16 +1194,8 @@ function RLHelper:CreateMainFrame()
 
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
         tile = true,
-        tileSize = 32,
-        edgeSize = 32,
-        insets = {
-            left = 11,
-            right = 12,
-            top = 12,
-            bottom = 11
-        }
+        tileSize = 32
     })
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1124,7 +1209,7 @@ function RLHelper:CreateMainFrame()
     -- Minimize button
     local minimizeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     minimizeButton:SetSize(20, 25)
-    minimizeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -14)
+    minimizeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -2)
     minimizeButton:SetText("_")
     minimizeButton:GetFontString():SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
     minimizeButton:GetFontString():SetPoint("TOP", 0, -2)
@@ -1159,8 +1244,8 @@ function RLHelper:CreateMainFrame()
 
     -- Button container
     local buttonContainer = CreateFrame("Frame", nil, frame)
-    buttonContainer:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -10)
-    buttonContainer:SetPoint("TOPRIGHT", -10, -10)
+    buttonContainer:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
+    buttonContainer:SetPoint("TOPRIGHT", -2, -2)
     buttonContainer:SetHeight(25)
 
     -- Store buttons in frame for access
@@ -1210,7 +1295,7 @@ function RLHelper:CreateMainFrame()
 
     frame.resetBtn = CreateFrame("Button", nil, buttonContainer, "UIPanelButtonTemplate")
     frame.resetBtn:SetSize(25, 25)
-    frame.resetBtn:SetPoint("LEFT", pull75Btn, "RIGHT", 4, 0)
+    frame.resetBtn:SetPoint("LEFT", pull75Btn, "RIGHT", 33, 0)
     frame.resetBtn:SetText("C")
     frame.resetBtn:Hide()
     frame.resetBtn:SetScript("OnClick", function()
@@ -1219,48 +1304,47 @@ function RLHelper:CreateMainFrame()
         self:SendMessage("RLHelper_CombatEnded")
     end)
 
-    -- Create dropdown
-    local dropdown = CreateFrame("Frame", "RLHelperCombatDropdown", buttonContainer, "UIDropDownMenuTemplate")
-    dropdown:SetPoint("LEFT", pull75Btn, "RIGHT", -8, -2)
-    frame.combatDropdown = dropdown
-    UIDropDownMenu_SetWidth(dropdown, 50)
-    dropdown:Show()
+    frame.combatListButton = CreateFrame("Button", nil, buttonContainer)
+    frame.combatListButton:SetSize(25, 25)
+    frame.combatListButton:SetPoint("LEFT", pull75Btn, "RIGHT", 4, 0)
+    frame.combatListButton:SetNormalTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up")
+    frame.combatListButton:SetPushedTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Down")
+    frame.combatListButton:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    frame.combatListButton:SetScript("OnClick", function()
+        RLHelper:ToggleCombatListOverlay()
+    end)
 
-    -- Function to initialize dropdown
-    function dropdown.initialize(self, level)
-        local info = UIDropDownMenu_CreateInfo()
+    frame.combatListClickCatcher = CreateFrame("Button", nil, UIParent)
+    frame.combatListClickCatcher:SetAllPoints(UIParent)
+    frame.combatListClickCatcher:SetFrameStrata("DIALOG")
+    frame.combatListClickCatcher:EnableMouse(true)
+    frame.combatListClickCatcher:SetScript("OnClick", function()
+        RLHelper:HideCombatListOverlay()
+    end)
+    frame.combatListClickCatcher:Hide()
 
-        -- Current combat option
-        info.text = "Текущий бой"
-        info.value = "current"
-        info.disabled = not RLHelper.currentCombat.startTime
-        info.func = function()
-            RLHelper:DisplayCombat(RLHelper.currentCombat)
-            RLHelper.mainFrame:Show()
-        end
-        UIDropDownMenu_AddButton(info, level)
-
-        for i, combat in ipairs(RLHelper.combatHistory) do
-            local startTime = date("%H:%M:%S", combat.startTime)
-            local endTime = date("%H:%M:%S", combat.endTime)
-            local enemyInfo = combat.firstEnemy or ""
-            info.text = string.format("%d. %s (%s - %s)", i, enemyInfo, startTime, endTime)
-            info.value = tostring(i)
-            info.disabled = nil
-            info.func = function()
-                RLHelper:ShowCombatByIndex(i)
-            end
-            UIDropDownMenu_AddButton(info, level)
-        end
-    end
-
-    UIDropDownMenu_Initialize(dropdown, dropdown.initialize)
-    UIDropDownMenu_SetText(dropdown, "Бои")
+    frame.combatListFrame = CreateFrame("Frame", nil, UIParent)
+    frame.combatListFrame:SetPoint("TOPLEFT", frame.combatListButton, "BOTTOMLEFT", 0, -2)
+    frame.combatListFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+    frame.combatListFrame:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true,
+        tileSize = 32,
+        edgeSize = 16,
+        insets = {
+            left = 4,
+            right = 4,
+            top = 4,
+            bottom = 4
+        }
+    })
+    frame.combatListFrame:Hide()
 
     -- Resize button
     local resizeButton = CreateFrame("Button", nil, frame)
     resizeButton:SetSize(16, 16)
-    resizeButton:SetPoint("BOTTOMRIGHT", -5, 5)
+    resizeButton:SetPoint("BOTTOMRIGHT", 0, 0)
     resizeButton:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
     resizeButton:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     resizeButton:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
@@ -1425,7 +1509,10 @@ function RLHelper:ShowCombatByIndex(index)
     end
 
     local combat = self.combatHistory[index]
+    self.selectedCombatKind = "history"
+    self.selectedCombatIndex = index
     self:DisplayCombat(combat)
+    self:RefreshCombatListOverlay()
     self.mainFrame:Show()
 end
 

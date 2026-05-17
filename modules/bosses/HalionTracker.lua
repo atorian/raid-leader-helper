@@ -50,11 +50,7 @@ local MATERIALITY_AURAS = {
 }
 
 local DARKNESS_MATERIALITY_DROPS = {
-    [74832] = true,
-    [74833] = true,
-    [74834] = true,
-    [74835] = true,
-    [74836] = true
+    [74835] = true
 }
 
 local meteor_icon = "Interface\\Icons\\spell_fire_meteorstorm"

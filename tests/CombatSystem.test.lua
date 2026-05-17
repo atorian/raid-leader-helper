@@ -25,9 +25,11 @@ end
 
 describe("Боевая система", function()
     local originalIterateModules
+    local displayedMessages
 
     before_each(function()
         originalIterateModules = RLHelper.IterateModules
+        displayedMessages = {}
         RLHelper:StopCombatTicker()
         RLHelper.inCombat = false
         RLHelper.lastCombatActivityAt = nil
@@ -44,7 +46,8 @@ describe("Боевая система", function()
         end
         RLHelper.mainFrame = {
             logText = {
-                AddMessage = function()
+                AddMessage = function(_, message)
+                    table.insert(displayedMessages, message)
                 end,
                 Clear = function()
                 end
@@ -103,6 +106,18 @@ describe("Боевая система", function()
         assert.is_false(RLHelper.inCombat)
         assert.is_nil(RLHelper.currentCombat.startTime)
         assert.are.equal(0, #RLHelper.currentCombat.messages)
+    end)
+
+    it("shows 24px icons with vertical offset without changing stored combat messages", function()
+        RLHelper.inCombat = true
+        local message = "16:21:44 DemoPlayer |TInterface\\Icons\\Ability_Druid_DemoralizingRoar:24:24:0:0|t размазало"
+
+        RLHelper:OnCombatLogEvent(message)
+
+        assert.are.same({ message }, RLHelper.currentCombat.messages)
+        assert.are.same({
+            "16:21:44 DemoPlayer |TInterface\\Icons\\Ability_Druid_DemoralizingRoar:24:24:0:-2|t размазало"
+        }, displayedMessages)
     end)
 
     it("переименовывает бой в имя босса по известному npc id без boss1", function()

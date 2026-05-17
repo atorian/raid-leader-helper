@@ -32,6 +32,7 @@ local pelena25hm = 75486
 local HEROISM = 32182
 local BLOODLUST = 2825
 local MAX_DMG_EVENTS_PER_PLAYER = 10
+local PHASE_TWO_ENTRY_TIMER_DURATION = 45
 -- 74792 - metka
 
 local MATERIALITY_AURAS = {
@@ -73,12 +74,26 @@ local HEROISM_SPELLS = {
     [BLOODLUST] = true
 }
 
+local PHASE_TWO_YELLS = {
+    ["В мире сумерек вы найдете лишь страдания! Входите, если посмеете!"] = true,
+    ["You will find only suffering within the realm of twilight! Enter if you dare!"] = true
+}
+
+local METEOR_YELLS = {
+    ["Небеса в огне!"] = true,
+    ["The heavens burn!"] = true
+}
+
 local function isHalionBurstPullEnabled()
     return type(RLHelper.IsHalionBurstPullEnabled) == "function" and RLHelper:IsHalionBurstPullEnabled()
 end
 
 local function isHalionBurstResetEnabled()
     return type(RLHelper.IsHalionBurstResetEnabled) ~= "function" or RLHelper:IsHalionBurstResetEnabled()
+end
+
+local function isHalionPhaseTwoEntryTimerEnabled()
+    return type(RLHelper.IsHalionPhaseTwoEntryTimerEnabled) == "function" and RLHelper:IsHalionPhaseTwoEntryTimerEnabled()
 end
 
 local function isEnemy(flags)
@@ -136,6 +151,7 @@ end
 function HalionTracker:OnEnable()
     self:RegisterMessage("RLHelper_CombatEnded", "reset")
     self:RegisterMessage("RLHelper_Demo", "demo")
+    self:RegisterEvent("CHAT_MSG_MONSTER_YELL")
 end
 
 function HalionTracker:reset()
@@ -144,6 +160,8 @@ function HalionTracker:reset()
     self.firstEntered = false
     self.damageMetersReset = false
     self.materialityPullStarted = false
+    self.phaseTwoEntryTimerStarted = false
+    self.meteorYellCount = 0
     self.bossName = nil
 end
 
@@ -274,6 +292,24 @@ function HalionTracker:tryStartPullOnMaterialityDrop(event)
 
     self.materialityPullStarted = true
     RLHelper:StartDBMPullCommand(15)
+end
+
+function HalionTracker:CHAT_MSG_MONSTER_YELL(message)
+    if METEOR_YELLS[message] then
+        self.meteorYellCount = (self.meteorYellCount or 0) + 1
+        return
+    end
+
+    if not PHASE_TWO_YELLS[message] then
+        return
+    end
+
+    if type(RLHelper.StartDBMPullCommand) ~= "function" or not isHalionPhaseTwoEntryTimerEnabled() or self.phaseTwoEntryTimerStarted or (self.meteorYellCount or 0) < 2 then
+        return
+    end
+
+    self.phaseTwoEntryTimerStarted = true
+    RLHelper:StartDBMPullCommand(PHASE_TWO_ENTRY_TIMER_DURATION)
 end
 
 function HalionTracker:logDmg(playerName, event)

@@ -747,16 +747,26 @@ describe("RLHelper settings helpers", function()
         assert.is_true(RLHelper:IsHalionBurstResetEnabled())
     end)
 
-    it("reads enabled Halion burst pull and disabled reset from profile", function()
+    it("treats Halion phase two entry timer as disabled when the saved value is missing", function()
+        RLHelper.db = {
+            profile = {}
+        }
+
+        assert.is_false(RLHelper:IsHalionPhaseTwoEntryTimerEnabled())
+    end)
+
+    it("reads enabled Halion burst pull, disabled reset, and enabled phase two entry timer from profile", function()
         RLHelper.db = {
             profile = {
                 halionBurstPull = true,
-                halionBurstReset = false
+                halionBurstReset = false,
+                halionPhaseTwoEntryTimer = true
             }
         }
 
         assert.is_true(RLHelper:IsHalionBurstPullEnabled())
         assert.is_false(RLHelper:IsHalionBurstResetEnabled())
+        assert.is_true(RLHelper:IsHalionPhaseTwoEntryTimerEnabled())
     end)
 
     it("creates options panel with Russian setting labels", function()
@@ -832,6 +842,7 @@ describe("RLHelper settings helpers", function()
         assert.is_true(table.concat(texts, " "):find("Показывать только в группе", 1, true) ~= nil)
         assert.is_true(table.concat(texts, " "):find("РС Бурст", 1, true) ~= nil)
         assert.is_true(table.concat(texts, " "):find("Сброс Бурста", 1, true) ~= nil)
+        assert.is_true(table.concat(texts, " "):find("РС Бурст - Таймер на вход после 2го метеорита", 1, true) ~= nil)
     end)
 
     it("opens the registered options panel", function()

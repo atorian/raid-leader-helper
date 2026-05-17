@@ -58,6 +58,7 @@ local defaults = {
         igor = false,
         halionBurstPull = false,
         halionBurstReset = true,
+        halionPhaseTwoEntryTimer = false,
         minimap = {
             hide = false
         },
@@ -121,6 +122,10 @@ end
 
 function RLHelper:IsHalionBurstResetEnabled()
     return not (self.db and self.db.profile and self.db.profile.halionBurstReset == false)
+end
+
+function RLHelper:IsHalionPhaseTwoEntryTimerEnabled()
+    return self.db and self.db.profile and self.db.profile.halionPhaseTwoEntryTimer == true or false
 end
 
 function RLHelper:RefreshMainFrameVisibility()
@@ -1377,6 +1382,14 @@ function RLHelper:CreateOptionsPanel()
         RLHelper.db.profile.halionBurstReset = self:GetChecked() and true or false
     end)
 
+    local halionPhaseTwoEntryTimer = CreateFrame("CheckButton", "RLHelperHalionPhaseTwoEntryTimerCheckButton", panel,
+        "InterfaceOptionsCheckButtonTemplate")
+    halionPhaseTwoEntryTimer:SetPoint("TOPLEFT", halionBurstReset, "BOTTOMLEFT", 0, -8)
+    _G[halionPhaseTwoEntryTimer:GetName() .. "Text"]:SetText("РС Бурст - Таймер на вход после 2го метеорита")
+    halionPhaseTwoEntryTimer:SetScript("OnClick", function(self)
+        RLHelper.db.profile.halionPhaseTwoEntryTimer = self:GetChecked() and true or false
+    end)
+
     panel:SetScript("OnShow", function()
         cancelEditBox:SetText(RLHelper.db.profile.pullCancelMessage or "")
         displayOnlyInGroup:SetChecked(RLHelper.db.profile.displayOnlyInGroup)
@@ -1384,6 +1397,7 @@ function RLHelper:CreateOptionsPanel()
         igor:SetChecked(RLHelper.db.profile.igor)
         halionBurst:SetChecked(RLHelper:IsHalionBurstPullEnabled())
         halionBurstReset:SetChecked(RLHelper:IsHalionBurstResetEnabled())
+        halionPhaseTwoEntryTimer:SetChecked(RLHelper:IsHalionPhaseTwoEntryTimerEnabled())
     end)
 
     self.optionsPanel = panel

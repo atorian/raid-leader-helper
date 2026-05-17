@@ -16,6 +16,7 @@ describe('HalionTracker', function()
     local originalDebug
     local originalIsHalionBurstPullEnabled
     local originalIsHalionBurstResetEnabled
+    local originalIsHalionPhaseTwoEntryTimerEnabled
     local originalStartPullCountdown
     local originalStartDBMPullCommand
 
@@ -30,6 +31,7 @@ describe('HalionTracker', function()
         originalDebug = RLHelper.Debug
         originalIsHalionBurstPullEnabled = RLHelper.IsHalionBurstPullEnabled
         originalIsHalionBurstResetEnabled = RLHelper.IsHalionBurstResetEnabled
+        originalIsHalionPhaseTwoEntryTimerEnabled = RLHelper.IsHalionPhaseTwoEntryTimerEnabled
         originalStartPullCountdown = RLHelper.StartPullCountdown
         originalStartDBMPullCommand = RLHelper.StartDBMPullCommand
         _G._detalhes = nil
@@ -44,6 +46,7 @@ describe('HalionTracker', function()
         RLHelper.Debug = originalDebug
         RLHelper.IsHalionBurstPullEnabled = originalIsHalionBurstPullEnabled
         RLHelper.IsHalionBurstResetEnabled = originalIsHalionBurstResetEnabled
+        RLHelper.IsHalionPhaseTwoEntryTimerEnabled = originalIsHalionPhaseTwoEntryTimerEnabled
         RLHelper.StartPullCountdown = originalStartPullCountdown
         RLHelper.StartDBMPullCommand = originalStartDBMPullCommand
     end)
@@ -436,6 +439,54 @@ describe('HalionTracker', function()
             :ApplyAura(74826, "Материальность", "DEBUFF"):Build())
         dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
             :ApplyAura(74831, "Материальность", "DEBUFF"):Build())
+
+        assert.are.same({}, pullDurations)
+    end)
+
+    it('starts a 45 second pull on phase two yell after second meteor when enabled', function()
+        local pullDurations = {}
+        RLHelper.IsHalionPhaseTwoEntryTimerEnabled = function()
+            return true
+        end
+        RLHelper.StartDBMPullCommand = function(_, duration)
+            table.insert(pullDurations, duration)
+        end
+
+        HalionTracker:CHAT_MSG_MONSTER_YELL("Небеса в огне!")
+        HalionTracker:CHAT_MSG_MONSTER_YELL("The heavens burn!")
+        HalionTracker:CHAT_MSG_MONSTER_YELL("В мире сумерек вы найдете лишь страдания! Входите, если посмеете!")
+        HalionTracker:CHAT_MSG_MONSTER_YELL("You will find only suffering within the realm of twilight! Enter if you dare!")
+
+        assert.are.same({ 45 }, pullDurations)
+    end)
+
+    it('does not start phase two entry timer before second meteor', function()
+        local pullDurations = {}
+        RLHelper.IsHalionPhaseTwoEntryTimerEnabled = function()
+            return true
+        end
+        RLHelper.StartDBMPullCommand = function(_, duration)
+            table.insert(pullDurations, duration)
+        end
+
+        HalionTracker:CHAT_MSG_MONSTER_YELL("Небеса в огне!")
+        HalionTracker:CHAT_MSG_MONSTER_YELL("В мире сумерек вы найдете лишь страдания! Входите, если посмеете!")
+
+        assert.are.same({}, pullDurations)
+    end)
+
+    it('does not start phase two entry timer when option is disabled', function()
+        local pullDurations = {}
+        RLHelper.IsHalionPhaseTwoEntryTimerEnabled = function()
+            return false
+        end
+        RLHelper.StartDBMPullCommand = function(_, duration)
+            table.insert(pullDurations, duration)
+        end
+
+        HalionTracker:CHAT_MSG_MONSTER_YELL("Небеса в огне!")
+        HalionTracker:CHAT_MSG_MONSTER_YELL("Небеса в огне!")
+        HalionTracker:CHAT_MSG_MONSTER_YELL("В мире сумерек вы найдете лишь страдания! Входите, если посмеете!")
 
         assert.are.same({}, pullDurations)
     end)

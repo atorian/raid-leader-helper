@@ -70,6 +70,18 @@ local SKIP_SPELLS = {
 local activePulls = {}
 local pullDamage = {}
 
+local HUNTER_DAMAGE_EVENTS = {
+    SPELL_DAMAGE = true,
+    RANGE_DAMAGE = true,
+    SPELL_PERIODIC_DAMAGE = true,
+    SWING_DAMAGE = true
+}
+
+local HUNTER_VISIBLE_SKIP_SPELLS = {
+    [75] = true,
+    [53353] = true
+}
+
 function MisdirectionTracker:OnEnable()
     RLHelper:Debug("RL Быдло: MisdirectionTracker включен")
 end
@@ -95,11 +107,14 @@ function MisdirectionTracker:handleEvent(eventData)
 
     if eventData.event == "SPELL_AURA_REMOVED" and
         (eventData.spellId == MISDIRECTION_SPELL_ID or eventData.spellId == SMALL_TRICKS_SPELL_ID) then
-        self:GenerateReport(eventData.sourceName)
+        self:GenerateReport(eventData.sourceName, eventData.timestamp)
     end
 
     if activePulls[eventData.sourceName] then
-        if eventData.event == "SPELL_DAMAGE" then
+        local activePull = activePulls[eventData.sourceName]
+        if activePull.spellId == MISDIRECTION_START_SPELL_ID and HUNTER_DAMAGE_EVENTS[eventData.event] then
+            self:OnDamage(eventData)
+        elseif eventData.event == "SPELL_DAMAGE" then
             self:OnDamage(eventData)
         end
     end
@@ -109,12 +124,24 @@ function MisdirectionTracker:OnMisdirection(eventData)
     activePulls[eventData.sourceName] = {
         ["time"] = eventData.timestamp,
         ["target"] = eventData.destName,
-        ["spellId"] = eventData.spellId
+        ["spellId"] = eventData.spellId,
+        ["startLogged"] = false,
+        ["totalDamage"] = 0
     }
     pullDamage[eventData.sourceName] = {}
+
+    if eventData.spellId == MISDIRECTION_START_SPELL_ID and RLHelper.inCombat then
+        self:LogHunterMisdirectionStart(eventData.sourceName)
+    end
 end
 
 function MisdirectionTracker:OnDamage(eventData)
+    local activePull = activePulls[eventData.sourceName]
+    if activePull and activePull.spellId == MISDIRECTION_START_SPELL_ID then
+        self:OnHunterDamage(eventData, activePull)
+        return
+    end
+
     if not SKIP_SPELLS[eventData.spellId] then
         if not pullDamage[eventData.sourceName][eventData.timestamp] then
             pullDamage[eventData.sourceName][eventData.timestamp] = {}
@@ -127,6 +154,56 @@ function MisdirectionTracker:OnDamage(eventData)
         local val = pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId]
         pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId] = val + 1
     end
+end
+
+local function formatMissdirectStart(ts, source, missdirectSpellId, dest)
+    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:-2|t %s", date("%H:%M:%S", ts), source,
+        TRACKED_SPELLS[missdirectSpellId], dest)
+end
+
+local function formatMissdirectDamage(ts, source, damageSpellId, dest)
+    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:-2|t %s", date("%H:%M:%S", ts), source,
+        TRACKED_SPELLS[damageSpellId], dest)
+end
+
+local function formatMissdirectSummary(ts, source, missdirectSpellId, dest, totalDamage)
+    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:-2|t %s напул окончен %s", date("%H:%M:%S", ts),
+        source, TRACKED_SPELLS[missdirectSpellId], dest, totalDamage)
+end
+
+function MisdirectionTracker:LogHunterMisdirectionStart(sourceName)
+    local activePull = activePulls[sourceName]
+    if not activePull or activePull.startLogged then
+        return
+    end
+
+    activePull.startLogged = true
+    self.log(formatMissdirectStart(activePull.time, sourceName, activePull.spellId, activePull.target))
+end
+
+function MisdirectionTracker:OnHunterDamage(eventData, activePull)
+    if eventData.timestamp < activePull.time then
+        return
+    end
+
+    activePull.totalDamage = activePull.totalDamage + (eventData.amount or 0)
+    self:LogHunterMisdirectionStart(eventData.sourceName)
+
+    if SKIP_SPELLS[eventData.spellId] or HUNTER_VISIBLE_SKIP_SPELLS[eventData.spellId] or not TRACKED_SPELLS[eventData.spellId] then
+        return
+    end
+
+    self.log(formatMissdirectDamage(eventData.timestamp, eventData.sourceName, eventData.spellId, eventData.destName))
+end
+
+function MisdirectionTracker:LogHunterMisdirectionSummary(sourceName, timestamp)
+    local activePull = activePulls[sourceName]
+    if not activePull or not activePull.startLogged then
+        return
+    end
+
+    self.log(formatMissdirectSummary(timestamp or activePull.time, sourceName, activePull.spellId, activePull.target,
+        activePull.totalDamage or 0))
 end
 
 local function clearPullState(sourceName)
@@ -216,9 +293,15 @@ function MisdirectionTracker:demo()
 
 end
 
-function MisdirectionTracker:GenerateReport(hunterName)
+function MisdirectionTracker:GenerateReport(hunterName, timestamp)
     local activePull = activePulls[hunterName]
     local allHits = pullDamage[hunterName]
+
+    if activePull and activePull.spellId == MISDIRECTION_START_SPELL_ID then
+        self:LogHunterMisdirectionSummary(hunterName, timestamp)
+        clearPullState(hunterName)
+        return
+    end
 
     if not activePull or not allHits then
         clearPullState(hunterName)

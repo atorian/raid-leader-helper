@@ -16,6 +16,18 @@ local steady = "Interface\\Icons\\Ability_Hunter_SteadyShot"
 local charming = "Interface\\Icons\\Ability_Hunter_ImpalingBolt"
 local arcaneShot = "Interface\\Icons\\Ability_ImpalingBolt"
 
+local function hunterDamageEvent(event, timestamp, spellId, spellName, amount, destName)
+    return {
+        event = event,
+        timestamp = timestamp or GetTime(),
+        sourceName = "Охотник",
+        destName = destName or "Враг",
+        spellId = spellId,
+        spellName = spellName,
+        amount = amount
+    }
+end
+
 describe("Misdirection Tracker", function()
     local log
     local originalIterateModules
@@ -48,28 +60,91 @@ describe("Misdirection Tracker", function()
         RLHelper.IterateModules = originalIterateModules
     end)
 
-    it("отслеживает урон во время активного напула", function()
-        -- Начинаем напул
+    it("logs hunter misdirection start and each tracked damage spell separately", function()
+        RLHelper.inCombat = true
+
         dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
             :CastSuccess(34477, "Перенаправление"):Build())
 
-        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer(
-            "Охотник"):ApplyAura(35079, "Перенаправление"):Build())
-
-        -- Охотник наносит урон
         dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToEnemy("Враг")
             :SpellDamage(49050, "", 1000):Build())
-        -- Аура спадает
+
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 2):FromPlayer("Охотник"):ToEnemy("Другой враг")
+            :SpellDamage(53209, "Выстрел химеры", 1000):Build())
+
         dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
             :RemoveAura(35079, "Перенаправление"):Build())
 
-        -- Проверяем что был сгенерирован отчет
+        assert.spy(MisdirectionTracker.log).was_called(4)
         assert.spy(MisdirectionTracker.log).was_called_with(string.format(
-            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк |TInterface\\Icons\\INV_Spear_07:24:24:0:-2|t",
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк",
+            date("%H:%M:%S", GetTime()), misdirect))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Враг",
+            date("%H:%M:%S", GetTime()), aimedshot))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Другой враг",
+            date("%H:%M:%S", GetTime() + 2), chimera))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк напул окончен 2000",
             date("%H:%M:%S", GetTime()), misdirect))
     end)
 
+    it("logs tracked hunter range and periodic damage during misdirection", function()
+        RLHelper.inCombat = true
+
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
+            :CastSuccess(34477, "Перенаправление"):Build())
+
+        MisdirectionTracker:handleEvent(hunterDamageEvent("RANGE_DAMAGE", GetTime() + 1, 75, "Автоматическая стрельба", 100, "Враг"))
+        MisdirectionTracker:handleEvent(hunterDamageEvent("SPELL_PERIODIC_DAMAGE", GetTime() + 2, 53352, "Разрывной выстрел", 200, "Другой враг"))
+
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 3):FromPlayer("Охотник"):ToPlayer("Танк")
+            :RemoveAura(35079, "Перенаправление"):Build())
+
+        assert.spy(MisdirectionTracker.log).was_called(3)
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Другой враг",
+            date("%H:%M:%S", GetTime() + 2), "Interface\\Icons\\ability_hunter_explosiveshot"))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк напул окончен 300",
+            date("%H:%M:%S", GetTime() + 3), misdirect))
+    end)
+
+    it("logs tracked hunter shots until misdirection aura is removed", function()
+        RLHelper.inCombat = true
+
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
+            :CastSuccess(34477, "Перенаправление"):Build())
+
+        MisdirectionTracker:handleEvent(hunterDamageEvent("RANGE_DAMAGE", GetTime() + 1, 75, "Автоматическая стрельба", 100, "Враг"))
+        MisdirectionTracker:handleEvent(hunterDamageEvent("SPELL_PERIODIC_DAMAGE", GetTime() + 2, 49001, "Укус змеи", 200, "Враг"))
+        MisdirectionTracker:handleEvent(hunterDamageEvent("SPELL_DAMAGE", GetTime() + 3, 53209, "Выстрел химеры", 300, "Враг"))
+        MisdirectionTracker:handleEvent(hunterDamageEvent("SPELL_PERIODIC_DAMAGE", GetTime() + 4, 53353, "DoT химеры", 400, "Враг"))
+        MisdirectionTracker:handleEvent(hunterDamageEvent("SPELL_DAMAGE", GetTime() + 5, 49050, "Прицельный выстрел", 500, "Враг"))
+        MisdirectionTracker:handleEvent(hunterDamageEvent("SPELL_DAMAGE", GetTime() + 6, 49052, "Верный выстрел", 600, "Враг"))
+
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 7):FromPlayer("Охотник"):ToPlayer("Танк")
+            :RemoveAura(35079, "Перенаправление"):Build())
+
+        assert.spy(MisdirectionTracker.log).was_called(5)
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Враг",
+            date("%H:%M:%S", GetTime() + 3), chimera))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Враг",
+            date("%H:%M:%S", GetTime() + 5), aimedshot))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Враг",
+            date("%H:%M:%S", GetTime() + 6), steady))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк напул окончен 2100",
+            date("%H:%M:%S", GetTime() + 7), misdirect))
+    end)
+
     it("показывает Чародейский выстрел правильной иконкой", function()
+        RLHelper.inCombat = true
+
         dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
             :CastSuccess(34477, "Перенаправление"):Build())
 
@@ -79,9 +154,74 @@ describe("Misdirection Tracker", function()
         dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
             :RemoveAura(35079, "Перенаправление"):Build())
 
+        assert.spy(MisdirectionTracker.log).was_called(3)
         assert.spy(MisdirectionTracker.log).was_called_with(string.format(
-            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк |T%s:24:24:0:-2|t",
-            date("%H:%M:%S", GetTime()), misdirect, arcaneShot))
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Враг",
+            date("%H:%M:%S", GetTime()), arcaneShot))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк напул окончен 1000",
+            date("%H:%M:%S", GetTime()), misdirect))
+    end)
+
+    it("does not log hunter damage after misdirection aura is removed", function()
+        RLHelper.inCombat = true
+
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
+            :CastSuccess(34477, "Перенаправление"):Build())
+
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 1):FromPlayer("Охотник"):ToPlayer("Танк")
+            :RemoveAura(35079, "Перенаправление"):Build())
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 2):FromPlayer("Охотник"):ToEnemy("Враг")
+            :SpellDamage(49050, "Прицельный выстрел", 1000):Build())
+
+        assert.spy(MisdirectionTracker.log).was_called(2)
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк",
+            date("%H:%M:%S", GetTime()), misdirect))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк напул окончен 0",
+            date("%H:%M:%S", GetTime() + 1), misdirect))
+    end)
+
+    it("counts untracked hunter damage in the summary without logging a visible damage row", function()
+        RLHelper.inCombat = true
+
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
+            :CastSuccess(34477, "Перенаправление"):Build())
+
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 1):FromPlayer("Охотник"):ToEnemy("Враг")
+            :SpellDamage(99999, "Неотслеживаемый выстрел", 1000):Build())
+
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 2):FromPlayer("Охотник"):ToPlayer("Танк")
+            :RemoveAura(35079, "Перенаправление"):Build())
+
+        assert.spy(MisdirectionTracker.log).was_called(2)
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк",
+            date("%H:%M:%S", GetTime()), misdirect))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк напул окончен 1000",
+            date("%H:%M:%S", GetTime() + 2), misdirect))
+    end)
+
+    it("does not count pet damage in hunter misdirection summary", function()
+        RLHelper.inCombat = true
+
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
+            :CastSuccess(34477, "Перенаправление"):Build())
+
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 1):FromPlayer("Охотник"):ToEnemy("Враг")
+            :SpellDamage(99999, "Неотслеживаемый выстрел", 100):Build())
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 2):FromPet("Питомец"):ToEnemy("Враг")
+            :SpellDamage(99999, "Укус", 900):Build())
+
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 3):FromPlayer("Охотник"):ToPlayer("Танк")
+            :RemoveAura(35079, "Перенаправление"):Build())
+
+        assert.spy(MisdirectionTracker.log).was_called(2)
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк напул окончен 100",
+            date("%H:%M:%S", GetTime() + 3), misdirect))
     end)
 
     it("отслеживает урон во время активного напула Роги", function()
@@ -143,8 +283,14 @@ describe("Misdirection Tracker", function()
             :RemoveAura(35079, "Перенаправление"):Build())
 
         assert.spy(MisdirectionTracker.log).was_called_with(string.format(
-            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк |T%s:24:24:0:-2|t",
-            date("%H:%M:%S", GetTime()), misdirect, aimedshot))
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк",
+            date("%H:%M:%S", GetTime()), misdirect))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Враг",
+            date("%H:%M:%S", GetTime()), aimedshot))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк напул окончен 1000",
+            date("%H:%M:%S", GetTime()), misdirect))
     end)
 
     -- it("отслеживает несколько способностей во время напула", function()

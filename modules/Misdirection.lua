@@ -237,27 +237,13 @@ end
 
 function MisdirectionTracker:demo()
     local ts = time()
-    local hunterHits1 = {
-        [10] = {
-            [49050] = 1
-        },
-        [20] = {
-            [53353] = 1
-        },
-        [30] = {
-            [53353] = 1
-        }
-    }
-    self.log(formatMissdirect(time(), "HunterName", MISDIRECTION_SPELL_ID, "Tank", hunterHits1))
-    local hunterHits2 = {
-        [1] = {
-            [49052] = 1
-        },
-        [2] = {
-            [49052] = 1
-        }
-    }
-    self.log(formatMissdirect(time(), "HunterName", MISDIRECTION_SPELL_ID, "Tank", hunterHits2))
+
+    self.log(formatMissdirectStart(ts, "HunterName", MISDIRECTION_START_SPELL_ID, "Tank"))
+    self.log(formatMissdirectDamage(ts + 3, "HunterName", 53209, "Training Dummy"))
+    self.log(formatMissdirectDamage(ts + 5, "HunterName", 49050, "Training Dummy"))
+    self.log(formatMissdirectDamage(ts + 6, "HunterName", 49052, "Training Dummy"))
+    self.log(formatMissdirectSummary(ts + 7, "HunterName", MISDIRECTION_START_SPELL_ID, "Tank", 2100))
+
     local rogeHits1 = {
         [1] = {
             [48638] = 1

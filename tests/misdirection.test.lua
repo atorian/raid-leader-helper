@@ -224,6 +224,26 @@ describe("Misdirection Tracker", function()
             date("%H:%M:%S", GetTime() + 3), misdirect))
     end)
 
+    it("shows hunter misdirection demo messages like real combat", function()
+        MisdirectionTracker:demo()
+
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFHunterName|r |T%s:24:24:0:-2|t Tank",
+            date("%H:%M:%S", GetTime()), misdirect))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFHunterName|r |T%s:24:24:0:-2|t Training Dummy",
+            date("%H:%M:%S", GetTime() + 3), chimera))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFHunterName|r |T%s:24:24:0:-2|t Training Dummy",
+            date("%H:%M:%S", GetTime() + 5), aimedshot))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFHunterName|r |T%s:24:24:0:-2|t Training Dummy",
+            date("%H:%M:%S", GetTime() + 6), steady))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFHunterName|r |T%s:24:24:0:-2|t Tank напул окончен 2100",
+            date("%H:%M:%S", GetTime() + 7), misdirect))
+    end)
+
     it("отслеживает урон во время активного напула Роги", function()
         local tricks = "Interface\\Icons\\ability_rogue_tricksofthetrade"
         local eviscerate = "Interface\\Icons\\Spell_shadow_ritualofsacrifice"

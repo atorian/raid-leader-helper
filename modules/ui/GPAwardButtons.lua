@@ -3,9 +3,9 @@ local GPAwardButtons = RLHelper:NewModule("GPAwardButtons", "AceEvent-3.0")
 
 local BUTTONS = {
     { label = "100", amount = 100, reason = "Каспер" },
-    { label = "200", amount = 200, reason = "Мертвый_Оппосум" },
+    { label = "200", amount = 200, reason = "Вомбат" },
     { label = "250", amount = 250, reason = "Бэтмен" },
-    { label = "500", amount = 500, reason = "Копибара" },
+    { label = "500", amount = 500, reason = "Капибара" },
     { label = "1к", amount = 1000, reason = "Banana" }
 }
 
@@ -101,8 +101,8 @@ function GPAwardButtons:attachToMainFrame()
     end
 
     local footer = CreateFrame("Frame", nil, RLHelper.mainFrame)
-    footer:SetPoint("BOTTOMLEFT", RLHelper.mainFrame, "BOTTOMLEFT", 12, 8)
-    footer:SetPoint("BOTTOMRIGHT", RLHelper.mainFrame, "BOTTOMRIGHT", -32, 8)
+    footer:SetPoint("BOTTOMLEFT", RLHelper.mainFrame, "BOTTOMLEFT", 2, 2)
+    footer:SetPoint("BOTTOMRIGHT", RLHelper.mainFrame, "BOTTOMRIGHT", 2, 2)
     footer:SetHeight(22)
 
     self.buttons = {}

@@ -1250,7 +1250,7 @@ function RLHelper:CreateMainFrame()
     })
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", 15, 10)
+    title:SetPoint("TOPLEFT", 2, 12)
     title:SetText("RL Пупсик")
 
     -- Close button
@@ -1356,7 +1356,7 @@ function RLHelper:CreateMainFrame()
     end)
 
     frame.combatListButton = CreateFrame("Button", nil, buttonContainer)
-    frame.combatListButton:SetSize(25, 25)
+    frame.combatListButton:SetSize(18, 18)
     frame.combatListButton:SetPoint("LEFT", pull75Btn, "RIGHT", 4, 0)
     frame.combatListButton:SetNormalTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up")
     frame.combatListButton:SetPushedTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Down")

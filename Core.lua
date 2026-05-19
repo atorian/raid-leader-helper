@@ -53,6 +53,7 @@ local defaults = {
         enabled = true,
         debug = false,
         pullCancelMessage = "ГАЛЯ, ОТМЕНА!",
+        discordLink = "",
         displayOnlyInGroup = false,
         bossOnlyHistory = false,
         igor = false,
@@ -98,6 +99,14 @@ function RLHelper:isDebugging()
     return self.db and self.db.profile and self.db.profile.debug or false
 end
 
+local function trimText(value)
+    if type(value) ~= "string" then
+        return ""
+    end
+
+    return value:match("^%s*(.-)%s*$") or ""
+end
+
 function RLHelper:IsInGroup()
     if type(GetRealNumRaidMembers) == "function" and GetRealNumRaidMembers() > 0 then
         return true
@@ -128,6 +137,37 @@ end
 
 function RLHelper:IsHalionPhaseTwoEntryTimerEnabled()
     return self.db and self.db.profile and self.db.profile.halionPhaseTwoEntryTimer == true or false
+end
+
+function RLHelper:GetDiscordLink()
+    return trimText(self.db and self.db.profile and self.db.profile.discordLink)
+end
+
+function RLHelper:HasDiscordLink()
+    return self:GetDiscordLink() ~= ""
+end
+
+function RLHelper:RefreshDiscordButton()
+    if not self.mainFrame or not self.mainFrame.discordButton then
+        return
+    end
+
+    if self:HasDiscordLink() then
+        self.mainFrame.discordButton:Show()
+    else
+        self.mainFrame.discordButton:Hide()
+    end
+end
+
+function RLHelper:SendDiscordLink()
+    local link = self:GetDiscordLink()
+    if link == "" or type(SendChatMessage) ~= "function" then
+        return false
+    end
+
+    local channel = (GetRealNumRaidMembers and GetRealNumRaidMembers() > 0) and "RAID" or "PARTY"
+    SendChatMessage(link, channel)
+    return true
 end
 
 function RLHelper:RefreshMainFrameVisibility()
@@ -1365,6 +1405,17 @@ function RLHelper:CreateMainFrame()
         RLHelper:ToggleCombatListOverlay()
     end)
 
+    frame.discordButton = CreateFrame("Button", nil, buttonContainer)
+    frame.discordButton:SetSize(18, 18)
+    frame.discordButton:SetPoint("LEFT", frame.combatListButton, "RIGHT", 4, 0)
+    frame.discordButton:SetNormalTexture("Interface\\FriendsFrame\\UI-Toast-ChatInviteIcon")
+    frame.discordButton:SetPushedTexture("Interface\\FriendsFrame\\UI-Toast-ChatInviteIcon")
+    frame.discordButton:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    frame.discordButton:SetScript("OnClick", function()
+        RLHelper:SendDiscordLink()
+    end)
+    frame.discordButton:Hide()
+
     frame.combatListClickCatcher = CreateFrame("Button", nil, UIParent)
     frame.combatListClickCatcher:SetAllPoints(UIParent)
     frame.combatListClickCatcher:SetFrameStrata("DIALOG")
@@ -1439,6 +1490,7 @@ function RLHelper:CreateMainFrame()
     end)
 
     self.mainFrame = frame
+    self:RefreshDiscordButton()
     self:LayoutMainFrame()
     self:SendMessage("RLHelper_MainFrameCreated", frame)
     frame:Hide()
@@ -1460,8 +1512,11 @@ function RLHelper:CreateOptionsPanel()
     cancelLabel:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -24)
     cancelLabel:SetText("Текст сообщения отмены пула")
 
-    local cancelEditBox = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
+    local cancelEditBox = CreateFrame("EditBox", "RLHelperPullCancelEditBox", panel, "InputBoxTemplate")
     cancelEditBox:SetSize(320, 24)
+    if cancelEditBox.SetWidth then
+        cancelEditBox:SetWidth(320)
+    end
     cancelEditBox:SetPoint("TOPLEFT", cancelLabel, "BOTTOMLEFT", 8, -8)
     cancelEditBox:SetAutoFocus(false)
     cancelEditBox:SetScript("OnEnterPressed", function(self)
@@ -1472,9 +1527,30 @@ function RLHelper:CreateOptionsPanel()
         RLHelper.db.profile.pullCancelMessage = self:GetText()
     end)
 
+    local discordLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    discordLabel:SetPoint("TOPLEFT", cancelEditBox, "BOTTOMLEFT", -8, -10)
+    discordLabel:SetText("Ссылка Discord")
+
+    local discordEditBox = CreateFrame("EditBox", "RLHelperDiscordLinkEditBox", panel, "InputBoxTemplate")
+    discordEditBox:SetSize(320, 24)
+    if discordEditBox.SetWidth then
+        discordEditBox:SetWidth(320)
+    end
+    discordEditBox:SetPoint("TOPLEFT", discordLabel, "BOTTOMLEFT", 8, -8)
+    discordEditBox:SetAutoFocus(false)
+    discordEditBox:SetScript("OnEnterPressed", function(self)
+        RLHelper.db.profile.discordLink = self:GetText()
+        RLHelper:RefreshDiscordButton()
+        self:ClearFocus()
+    end)
+    discordEditBox:SetScript("OnEditFocusLost", function(self)
+        RLHelper.db.profile.discordLink = self:GetText()
+        RLHelper:RefreshDiscordButton()
+    end)
+
     local displayOnlyInGroup = CreateFrame("CheckButton", "RLHelperDisplayOnlyInGroupCheckButton", panel,
         "InterfaceOptionsCheckButtonTemplate")
-    displayOnlyInGroup:SetPoint("TOPLEFT", cancelEditBox, "BOTTOMLEFT", -4, -18)
+    displayOnlyInGroup:SetPoint("TOPLEFT", discordEditBox, "BOTTOMLEFT", -4, -18)
     _G[displayOnlyInGroup:GetName() .. "Text"]:SetText("Показывать только в группе")
     displayOnlyInGroup:SetScript("OnClick", function(self)
         RLHelper.db.profile.displayOnlyInGroup = self:GetChecked() and true or false
@@ -1526,6 +1602,7 @@ function RLHelper:CreateOptionsPanel()
 
     panel:SetScript("OnShow", function()
         cancelEditBox:SetText(RLHelper.db.profile.pullCancelMessage or "")
+        discordEditBox:SetText(RLHelper.db.profile.discordLink or "")
         displayOnlyInGroup:SetChecked(RLHelper.db.profile.displayOnlyInGroup)
         bossOnlyHistory:SetChecked(RLHelper.db.profile.bossOnlyHistory)
         igor:SetChecked(RLHelper.db.profile.igor)

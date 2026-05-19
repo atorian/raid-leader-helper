@@ -691,6 +691,7 @@ describe("RLHelper settings helpers", function()
     local originalSendMessage
     local originalInCombat
     local originalCombatEndRequestedAt
+    local originalSendChatMessage
 
     before_each(function()
         originalDb = RLHelper.db
@@ -707,6 +708,7 @@ describe("RLHelper settings helpers", function()
         originalSendMessage = RLHelper.SendMessage
         originalInCombat = RLHelper.inCombat
         originalCombatEndRequestedAt = RLHelper.combatEndRequestedAt
+        originalSendChatMessage = _G.SendChatMessage
         RLHelper.db = {
             profile = {
                 displayOnlyInGroup = true
@@ -729,6 +731,7 @@ describe("RLHelper settings helpers", function()
         RLHelper.SendMessage = originalSendMessage
         RLHelper.inCombat = originalInCombat
         RLHelper.combatEndRequestedAt = originalCombatEndRequestedAt
+        _G.SendChatMessage = originalSendChatMessage
     end)
 
     it("treats Halion burst pull as disabled when the saved value is missing", function()
@@ -767,6 +770,55 @@ describe("RLHelper settings helpers", function()
         assert.is_true(RLHelper:IsHalionBurstPullEnabled())
         assert.is_false(RLHelper:IsHalionBurstResetEnabled())
         assert.is_true(RLHelper:IsHalionPhaseTwoEntryTimerEnabled())
+    end)
+
+    it("treats an empty or whitespace Discord link as not configured", function()
+        RLHelper.db = {
+            profile = {
+                discordLink = "   "
+            }
+        }
+
+        assert.are.equal("", RLHelper:GetDiscordLink())
+        assert.is_false(RLHelper:HasDiscordLink())
+    end)
+
+    it("trims and sends the configured Discord link to raid chat", function()
+        local chatMessages = {}
+        RLHelper.db = {
+            profile = {
+                discordLink = "  https://discord.gg/example  "
+            }
+        }
+        _G.SendChatMessage = function(message, channel)
+            table.insert(chatMessages, { message = message, channel = channel })
+        end
+        _G.GetRealNumRaidMembers = function()
+            return 25
+        end
+
+        assert.are.equal("https://discord.gg/example", RLHelper:GetDiscordLink())
+        assert.is_true(RLHelper:HasDiscordLink())
+        assert.is_true(RLHelper:SendDiscordLink())
+        assert.are.same({ { message = "https://discord.gg/example", channel = "RAID" } }, chatMessages)
+    end)
+
+    it("sends the configured Discord link to party chat outside raid", function()
+        local chatMessages = {}
+        RLHelper.db = {
+            profile = {
+                discordLink = "https://discord.gg/party"
+            }
+        }
+        _G.SendChatMessage = function(message, channel)
+            table.insert(chatMessages, { message = message, channel = channel })
+        end
+        _G.GetRealNumRaidMembers = function()
+            return 0
+        end
+
+        assert.is_true(RLHelper:SendDiscordLink())
+        assert.are.same({ { message = "https://discord.gg/party", channel = "PARTY" } }, chatMessages)
     end)
 
     it("creates options panel with Russian setting labels", function()
@@ -843,6 +895,7 @@ describe("RLHelper settings helpers", function()
         assert.are.same({
             "RL Helper",
             "Текст сообщения отмены пула",
+            "Ссылка Discord",
             "Показывать только в группе",
             "Оставлять бои только с боссами",
             "Игорь",
@@ -851,6 +904,103 @@ describe("RLHelper settings helpers", function()
             "Отсчет на выход для Ретрика",
             "Отсчет на вход после 2го метеорита"
         }, texts)
+    end)
+
+    it("stores the Discord link from the options edit box and refreshes the button", function()
+        local editBoxes = {}
+        local refreshCalls = 0
+        local originalRefreshDiscordButton = RLHelper.RefreshDiscordButton
+
+        local function newFrame(frameType, name, parent, template)
+            local frame = {
+                frameType = frameType,
+                name = name,
+                parent = parent,
+                template = template,
+                scripts = {}
+            }
+
+            function frame:GetName()
+                return self.name
+            end
+
+            function frame:CreateFontString()
+                return newFrame("FontString", nil, self)
+            end
+
+            function frame:SetText(text)
+                self.text = text
+            end
+
+            function frame:SetPoint()
+            end
+
+            function frame:SetSize(width, height)
+                self.width = width
+                self.height = height
+            end
+
+            function frame:SetWidth(width)
+                self.fixedWidth = width
+            end
+
+            function frame:SetAutoFocus()
+            end
+
+            function frame:SetScript(event, callback)
+                self.scripts[event] = callback
+            end
+
+            function frame:GetText()
+                return self.text or ""
+            end
+
+            function frame:ClearFocus()
+                self.clearedFocus = true
+            end
+
+            function frame:SetChecked(value)
+                self.checked = value
+            end
+
+            if frameType == "EditBox" then
+                table.insert(editBoxes, frame)
+            end
+
+            if frameType == "CheckButton" and name then
+                _G[name .. "Text"] = {
+                    SetText = function()
+                    end
+                }
+            end
+
+            return frame
+        end
+
+        RLHelper.db = {
+            profile = {}
+        }
+        RLHelper.RefreshDiscordButton = function()
+            refreshCalls = refreshCalls + 1
+        end
+        _G.UIParent = newFrame("Frame", "UIParent")
+        _G.CreateFrame = newFrame
+        _G.InterfaceOptions_AddCategory = function()
+        end
+
+        RLHelper:CreateOptionsPanel()
+        editBoxes[2]:SetText("https://discord.gg/options")
+        editBoxes[2].scripts.OnEnterPressed(editBoxes[2])
+        RLHelper.RefreshDiscordButton = originalRefreshDiscordButton
+
+        assert.are.equal("https://discord.gg/options", RLHelper.db.profile.discordLink)
+        assert.are.equal("RLHelperPullCancelEditBox", editBoxes[1].name)
+        assert.are.equal("RLHelperDiscordLinkEditBox", editBoxes[2].name)
+        assert.are.equal(320, editBoxes[1].fixedWidth)
+        assert.are.equal(320, editBoxes[2].fixedWidth)
+        assert.are.equal(editBoxes[1].fixedWidth, editBoxes[2].fixedWidth)
+        assert.is_true(editBoxes[2].clearedFocus)
+        assert.are.equal(1, refreshCalls)
     end)
 
     it("opens the registered options panel", function()
@@ -1036,6 +1186,9 @@ describe("RLHelper main frame raid check button", function()
     local originalPrint
     local originalLayoutMainFrame
     local originalSendMessage
+    local originalSendChatMessage
+    local originalGetRealNumRaidMembers
+    local originalDb
     local frames
     local printedMessages
 
@@ -1226,6 +1379,9 @@ describe("RLHelper main frame raid check button", function()
         originalPrint = _G.print
         originalLayoutMainFrame = RLHelper.LayoutMainFrame
         originalSendMessage = RLHelper.SendMessage
+        originalSendChatMessage = _G.SendChatMessage
+        originalGetRealNumRaidMembers = _G.GetRealNumRaidMembers
+        originalDb = RLHelper.db
         frames = {}
         printedMessages = {}
 
@@ -1258,6 +1414,11 @@ describe("RLHelper main frame raid check button", function()
         end
         RLHelper.SendMessage = function()
         end
+        RLHelper.db = {
+            profile = {
+                discordLink = ""
+            }
+        }
     end)
 
     after_each(function()
@@ -1270,8 +1431,11 @@ describe("RLHelper main frame raid check button", function()
         _G.UIDropDownMenu_SetText = originalUIDropDownMenuSetText
         _G.DoReadyCheck = originalDoReadyCheck
         _G.print = originalPrint
+        _G.SendChatMessage = originalSendChatMessage
+        _G.GetRealNumRaidMembers = originalGetRealNumRaidMembers
         RLHelper.LayoutMainFrame = originalLayoutMainFrame
         RLHelper.SendMessage = originalSendMessage
+        RLHelper.db = originalDb
     end)
 
     it("adds Raid Check before pull buttons and hides cleanup", function()
@@ -1293,8 +1457,37 @@ describe("RLHelper main frame raid check button", function()
         assert.are.same({ "LEFT", RLHelper.mainFrame.pullButtons[3], "RIGHT", 4, 0 }, RLHelper.mainFrame.combatListButton.points[1])
         assert.equals(18, RLHelper.mainFrame.combatListButton.width)
         assert.equals(18, RLHelper.mainFrame.combatListButton.height)
+        assert.are.same({ "LEFT", RLHelper.mainFrame.combatListButton, "RIGHT", 4, 0 }, RLHelper.mainFrame.discordButton.points[1])
+        assert.equals(18, RLHelper.mainFrame.discordButton.width)
+        assert.equals(18, RLHelper.mainFrame.discordButton.height)
+        assert.equals("Interface\\FriendsFrame\\UI-Toast-ChatInviteIcon", RLHelper.mainFrame.discordButton.normalTexture)
+        assert.is_false(RLHelper.mainFrame.discordButton.visible)
         assert.is_false(RLHelper.mainFrame.combatListFrame.visible)
         assert.is_false(RLHelper.mainFrame.combatListClickCatcher.visible)
+    end)
+
+    it("shows the Discord button when a link is configured", function()
+        RLHelper.db.profile.discordLink = "https://discord.gg/example"
+
+        RLHelper:CreateMainFrame()
+
+        assert.is_true(RLHelper.mainFrame.discordButton.visible)
+    end)
+
+    it("sends the Discord link from the icon button", function()
+        local chatMessages = {}
+        RLHelper.db.profile.discordLink = "https://discord.gg/example"
+        _G.GetRealNumRaidMembers = function()
+            return 25
+        end
+        _G.SendChatMessage = function(message, channel)
+            table.insert(chatMessages, { message = message, channel = channel })
+        end
+
+        RLHelper:CreateMainFrame()
+        RLHelper.mainFrame.discordButton.scripts.OnClick()
+
+        assert.are.same({ { message = "https://discord.gg/example", channel = "RAID" } }, chatMessages)
     end)
 
     it("toggles the combat list overlay from the list button", function()

@@ -31,18 +31,27 @@ Use concrete changes only. If a section has no items, write `- Нет.`.
 
 3. Present the proposed `next_tag` and the Russian release message to the user. Ask for approval before changing files, committing, tagging, or pushing.
 
+If the user explicitly asks for a different semver tag, repeat that exact custom tag back for approval. Do not choose a custom tag yourself.
+
 4. After approval, run:
 
 ```bash
 python3 .opencode/skills/rlhelper-release/scripts/release.py apply --tag <next_tag>
 ```
 
+For an explicitly approved custom semver tag, run:
+
+```bash
+python3 .opencode/skills/rlhelper-release/scripts/release.py apply --tag <custom_tag> --allow-custom-version
+```
+
 5. Report the script output and the final Russian release message.
 
 ## Rules
 
-- The script is the source of truth for the next version tag.
+- The script is the source of truth for the next version tag unless the user explicitly approves a custom semver tag.
 - The agent only prepares the release message and passes the approved tag to the script.
+- Use `--allow-custom-version` only for a custom tag explicitly requested or approved by the user.
 - No fallbacks. If branch, worktree, tag history, version state, or remote state is unclear, ask the user.
 - Do not create or edit GitHub releases. GitHub automation handles draft release creation after the tag push.
 - Do not force-push, amend, hard-reset, or use destructive git commands.

@@ -94,6 +94,13 @@ def format_version(version: tuple[int, int, int]) -> str:
     return ".".join(str(part) for part in version)
 
 
+def parse_tag_version(tag: str) -> tuple[int, int, int]:
+    match = TAG_RE.match(tag)
+    if not match:
+        raise ReleaseError(f"custom release tag {tag} is not vX.Y.Z; ask the user for a semver tag")
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+
 def replace_toc_version(next_version: str) -> None:
     lines = TOC.read_text(encoding="utf-8").splitlines(keepends=True)
     changed = False
@@ -111,7 +118,7 @@ def replace_toc_version(next_version: str) -> None:
     TOC.write_text("".join(output), encoding="utf-8")
 
 
-def collect_prepare_data() -> dict[str, object]:
+def collect_prepare_data(custom_tag: str | None = None) -> dict[str, object]:
     branch = current_branch()
     require_clean_worktree()
     remote = origin_url()
@@ -119,12 +126,12 @@ def collect_prepare_data() -> dict[str, object]:
     tags = semver_tags()
     latest_version, latest_tag = tags[-1]
     latest_version_text = format_version(latest_version)
-    if version != latest_version_text:
+    if version != latest_version_text and not custom_tag:
         raise ReleaseError(
             f"{TOC.name} version is {version}, latest tag is {latest_tag}; ask the user which version to release"
         )
 
-    next_version_tuple = bump_patch(latest_version)
+    next_version_tuple = parse_tag_version(custom_tag) if custom_tag else bump_patch(latest_version)
     next_version = format_version(next_version_tuple)
     next_tag = f"v{next_version}"
     if next_tag in {tag for _, tag in tags}:
@@ -149,8 +156,8 @@ def prepare() -> int:
     return 0
 
 
-def apply(tag: str) -> int:
-    data = collect_prepare_data()
+def apply(tag: str, allow_custom_version: bool = False) -> int:
+    data = collect_prepare_data(tag if allow_custom_version else None)
     expected_tag = str(data["next_tag"])
     if tag != expected_tag:
         raise ReleaseError(f"approved tag {tag} does not match computed next tag {expected_tag}; ask the user")
@@ -181,13 +188,14 @@ def main() -> int:
     subparsers.add_parser("prepare")
     apply_parser = subparsers.add_parser("apply")
     apply_parser.add_argument("--tag", required=True)
+    apply_parser.add_argument("--allow-custom-version", action="store_true")
     args = parser.parse_args()
 
     try:
         if args.command == "prepare":
             return prepare()
         if args.command == "apply":
-            return apply(args.tag)
+            return apply(args.tag, allow_custom_version=args.allow_custom_version)
     except ReleaseError as exc:
         print(f"release.py: {exc}", file=sys.stderr)
         return 1

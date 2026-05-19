@@ -9,6 +9,8 @@ local BUTTONS = {
     { label = "1к", amount = 1000, reason = "Banana" }
 }
 
+local MAX_UNDO_STACK_SIZE = 10
+
 local function getTargetName()
     if type(UnitName) ~= "function" then
         return nil
@@ -20,6 +22,16 @@ end
 local function getEPGPSlashCommand()
     local slashCmdList = _G.SlashCmdList or SlashCmdList
     return slashCmdList and (slashCmdList["ACECONSOLE_EPGP"] or slashCmdList["EPGP"])
+end
+
+local function runGPCommand(targetName, reason, amount)
+    local epgpSlash = getEPGPSlashCommand()
+    if type(epgpSlash) ~= "function" then
+        return false, "Slash-команда EPGP недоступна"
+    end
+
+    epgpSlash(string.format("gp %s %s %s", targetName, reason, amount))
+    return true
 end
 
 function GPAwardButtons:OnInitialize()
@@ -49,6 +61,34 @@ function GPAwardButtons:refreshVisibility()
     RLHelper:SetMainFrameBottomPanel(self.footerFrame)
 end
 
+function GPAwardButtons:RefreshUndoButtonState()
+    if not self.undoButton then
+        return
+    end
+
+    self.awardUndoStack = self.awardUndoStack or {}
+    if #self.awardUndoStack > 0 then
+        self.undoButton:Enable()
+    else
+        self.undoButton:Disable()
+    end
+end
+
+function GPAwardButtons:PushUndoAward(targetName, reason, amount)
+    self.awardUndoStack = self.awardUndoStack or {}
+    table.insert(self.awardUndoStack, {
+        targetName = targetName,
+        reason = reason,
+        amount = amount
+    })
+
+    while #self.awardUndoStack > MAX_UNDO_STACK_SIZE do
+        table.remove(self.awardUndoStack, 1)
+    end
+
+    self:RefreshUndoButtonState()
+end
+
 function GPAwardButtons:AwardTargetGP(reason, amount)
     if type(UnitExists) ~= "function" or not UnitExists("target") then
         return false, "Нет выбранной цели"
@@ -63,17 +103,42 @@ function GPAwardButtons:AwardTargetGP(reason, amount)
         return false, "Не удалось определить имя цели"
     end
 
-    local epgpSlash = getEPGPSlashCommand()
-    if type(epgpSlash) ~= "function" then
-        return false, "Slash-команда EPGP недоступна"
+    local ok, err = runGPCommand(targetName, reason, amount)
+    if not ok then
+        return false, err
     end
 
-    epgpSlash(string.format("gp %s %s %s", targetName, reason, amount))
+    self:PushUndoAward(targetName, reason, amount)
     return true, targetName
+end
+
+function GPAwardButtons:UndoLastGPAward()
+    self.awardUndoStack = self.awardUndoStack or {}
+    local award = self.awardUndoStack[#self.awardUndoStack]
+    if not award then
+        self:RefreshUndoButtonState()
+        return false, "Нет начислений для отмены"
+    end
+
+    local ok, err = runGPCommand(award.targetName, award.reason, -award.amount)
+    if not ok then
+        return false, err
+    end
+
+    table.remove(self.awardUndoStack)
+    self:RefreshUndoButtonState()
+    return true, award.targetName
 end
 
 function GPAwardButtons:handleButtonClick(buttonInfo)
     local ok, result = self:AwardTargetGP(buttonInfo.reason, buttonInfo.amount)
+    if not ok then
+        self:printError(result)
+    end
+end
+
+function GPAwardButtons:handleUndoButtonClick()
+    local ok, result = self:UndoLastGPAward()
     if not ok then
         self:printError(result)
     end
@@ -112,9 +177,18 @@ function GPAwardButtons:attachToMainFrame()
         table.insert(self.buttons, anchor)
     end
 
+    self.undoButton = self:createButton(footer, anchor, {
+        label = "Отмена"
+    })
+    self.undoButton:SetSize(60, 22)
+    self.undoButton:SetScript("OnClick", function()
+        self:handleUndoButtonClick()
+    end)
+
     self.footerFrame = footer
     RLHelper:SetMainFrameBottomPanel(footer)
     self:refreshVisibility()
+    self:RefreshUndoButtonState()
 end
 
 return GPAwardButtons

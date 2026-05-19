@@ -234,6 +234,15 @@ describe('SpellTracker', function()
                 "Брюсуиллис"))
         end)
 
+        it('logs Death Knight Hysteria target on aura applied', function()
+            dispatch(SpellTracker, Builder:New():FromPlayer("Дк"):ToPlayer("Рога")
+                :ApplyAura(49016, "Истерия", "BUFF"):Build())
+
+            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
+                date("%H:%M:%S", GetTime()), "Дк", "Interface\\Icons\\Ability_DeathKnight_BladedArmor",
+                "Рога"))
+        end)
+
         it('ignores non-tracked spells', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("TestCaster"):ToEnemy("TestTarget")
                 :ApplyAura(12345, "Random Spell"):Build())
@@ -341,6 +350,8 @@ describe('SpellTracker', function()
                 "SOME DATE |cFFFFFFFFPaladin|r |TInterface\\Icons\\Spell_Holy_SealOfValor:24:24:0:0|t OtherPlayer")
             assert.spy(log).was_called_with(
                 "SOME DATE |cFFFFFFFFPaladin|r |TInterface\\Icons\\Spell_Holy_SealOfSacrifice:24:24:0:0|t OtherPlayer")
+            assert.spy(log).was_called_with(
+                "SOME DATE |cFFFFFFFFDeathKnight|r |TInterface\\Icons\\Ability_DeathKnight_BladedArmor:24:24:0:0|t OtherPlayer")
             assert.spy(log).was_called_with(
                 "SOME DATE |cFFFFFFFFPaladin|r |TInterface\\Icons\\Spell_Holy_AuraMastery:24:24:0:0|t")
             assert.spy(log).was_called_with(

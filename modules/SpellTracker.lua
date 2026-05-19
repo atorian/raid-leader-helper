@@ -35,6 +35,7 @@ local TRACKED_SPELLS = {
     [6940] = "Interface\\Icons\\Spell_Holy_SealOfSacrifice", -- Paladin: Длань жертвенности
     [31821] = "Interface\\Icons\\Spell_Holy_AuraMastery", -- Paladin: Мастер аур
     [48817] = "Interface\\Icons\\Spell_Holy_Excorcism", -- Paladin: Гнев небес
+    [49016] = "Interface\\Icons\\Ability_DeathKnight_BladedArmor", -- Death Knight: Hysteria
     
     [26994] = "Interface\\Icons\\spell_nature_reincarnation", -- Друид БР
     [48477] = "Interface\\Icons\\spell_nature_reincarnation" -- Друид БР
@@ -245,6 +246,7 @@ function SppellTracker:demo()
     for _, v in pairs({10278, 1044, 19752, 6940}) do
         self.log(formatSpellCast(time(), "Paladin", TRACKED_SPELLS[v], "OtherPlayer"))
     end
+    self.log(formatSpellCast(time(), "DeathKnight", TRACKED_SPELLS[49016], "OtherPlayer"))
 
     self.log(formatSpellCast(time(), "Paladin", TRACKED_SPELLS[31821]))
     self.log(formatSpellCast(time(), "Paladin", TRACKED_SPELLS[48817], "Нерубский землеглот"))

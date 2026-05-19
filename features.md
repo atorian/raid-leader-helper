@@ -101,8 +101,6 @@ TODO: проверять последние 3 хита
 ### DBM Break btn
     TODO: в попапе дать РЛу выбрать время перерыва
 
-Todo:
-- sort by timestamp?
 
 Синдра
     TODO

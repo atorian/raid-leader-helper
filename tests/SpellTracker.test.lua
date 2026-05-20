@@ -239,7 +239,7 @@ describe('SpellTracker', function()
                 :ApplyAura(49016, "Истерия", "BUFF"):Build())
 
             assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "Дк", "Interface\\Icons\\Ability_DeathKnight_BladedArmor",
+                date("%H:%M:%S", GetTime()), "Дк", "Interface\\Icons\\Spell_DeathKnight_BladedArmor",
                 "Рога"))
         end)
 
@@ -351,7 +351,7 @@ describe('SpellTracker', function()
             assert.spy(log).was_called_with(
                 "SOME DATE |cFFFFFFFFPaladin|r |TInterface\\Icons\\Spell_Holy_SealOfSacrifice:24:24:0:0|t OtherPlayer")
             assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFDeathKnight|r |TInterface\\Icons\\Ability_DeathKnight_BladedArmor:24:24:0:0|t OtherPlayer")
+                "SOME DATE |cFFFFFFFFDeathKnight|r |TInterface\\Icons\\Spell_DeathKnight_BladedArmor:24:24:0:0|t OtherPlayer")
             assert.spy(log).was_called_with(
                 "SOME DATE |cFFFFFFFFPaladin|r |TInterface\\Icons\\Spell_Holy_AuraMastery:24:24:0:0|t")
             assert.spy(log).was_called_with(

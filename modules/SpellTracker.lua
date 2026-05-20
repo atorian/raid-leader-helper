@@ -35,7 +35,7 @@ local TRACKED_SPELLS = {
     [6940] = "Interface\\Icons\\Spell_Holy_SealOfSacrifice", -- Paladin: Длань жертвенности
     [31821] = "Interface\\Icons\\Spell_Holy_AuraMastery", -- Paladin: Мастер аур
     [48817] = "Interface\\Icons\\Spell_Holy_Excorcism", -- Paladin: Гнев небес
-    [49016] = "Interface\\Icons\\Ability_DeathKnight_BladedArmor", -- Death Knight: Hysteria
+    [49016] = "Interface\\Icons\\Spell_DeathKnight_BladedArmor", -- Death Knight: Hysteria
     
     [26994] = "Interface\\Icons\\spell_nature_reincarnation", -- Друид БР
     [48477] = "Interface\\Icons\\spell_nature_reincarnation" -- Друид БР

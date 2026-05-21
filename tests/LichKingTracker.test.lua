@@ -71,6 +71,21 @@ describe('LichKingTracker', function()
         assert.spy(log).was_not_called()
     end)
 
+    it('logs Raging Spirit target from Lich King cast success', function()
+        dispatch(LichKingTracker, Builder:New(100):FromEnemy('Король-лич'):ToPlayer('Руперт')
+            :CastSuccess(69200, 'Гневный дух'):Build())
+
+        assert.spy(log).was_called(1)
+        assert.spy(log).was_called_with('SOME DATE Гневный дух: Руперт')
+    end)
+
+    it('ignores Raging Spirit named casts with another spell id', function()
+        dispatch(LichKingTracker, Builder:New(100):FromEnemy('Король-лич'):ToPlayer('Руперт')
+            :CastSuccess(69201, 'Гневный дух'):Build())
+
+        assert.spy(log).was_not_called()
+    end)
+
     it('resets same-timestamp suppression on reset', function()
         dispatch(LichKingTracker, Builder:New(100):FromEnemy('Темная ловушка'):ToPlayer('Jatagun')
             :SpellDamage(73529, 'Теневая ловушка', 13594):Build())

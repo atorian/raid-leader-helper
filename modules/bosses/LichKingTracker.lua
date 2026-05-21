@@ -5,6 +5,7 @@ LichKingTracker.zoneGateInstanceId = 631 -- Icecrown Citadel
 
 local SHADOW_TRAP_DAMAGE = 73529
 local SHADOW_TRAP_ICON = 'Interface\\Icons\\spell_shadow_gathershadows'
+local RAGING_SPIRIT = 69200
 local PLAYER_FLAGS = 0x7
 
 function LichKingTracker:OnInitialize()
@@ -31,7 +32,16 @@ local function formatShadowTrap(ts, playerName)
         playerName, SHADOW_TRAP_ICON)
 end
 
+local function formatRagingSpirit(ts, playerName)
+    return string.format('%s Гневный дух: %s', date('%H:%M:%S', ts), playerName)
+end
+
 function LichKingTracker:handleEvent(event)
+    if event.event == 'SPELL_CAST_SUCCESS' and event.spellId == RAGING_SPIRIT and event.destName then
+        self.log(formatRagingSpirit(event.timestamp, event.destName))
+        return
+    end
+
     if event.event ~= 'SPELL_DAMAGE' or event.spellId ~= SHADOW_TRAP_DAMAGE or not event.destName or
         not isPlayer(event.destFlags) then
         return

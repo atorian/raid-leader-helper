@@ -28,6 +28,14 @@ local DBM_PULL_BAR_NAMES = {
     "Pull in"
 }
 
+local DEFAULT_GP_AWARD_REASONS = {
+    [100] = "Каспер",
+    [200] = "Вомбат",
+    [250] = "Бэтмен",
+    [500] = "Капибара",
+    [1000] = "Banana"
+}
+
 -- Utility functions
 local function wipe(t)
     for k in pairs(t) do
@@ -54,6 +62,8 @@ local defaults = {
         debug = false,
         pullCancelMessage = "ГАЛЯ, ОТМЕНА!",
         discordLink = "",
+        gpAwardButtonsEnabled = false,
+        gpAwardReasons = DEFAULT_GP_AWARD_REASONS,
         displayOnlyInGroup = false,
         bossOnlyHistory = false,
         igor = false,
@@ -168,6 +178,17 @@ function RLHelper:SendDiscordLink()
     local channel = (GetRealNumRaidMembers and GetRealNumRaidMembers() > 0) and "RAID" or "PARTY"
     SendChatMessage(link, channel)
     return true
+end
+
+function RLHelper:RefreshGPAwardButtons()
+    if type(self.GetModule) ~= "function" then
+        return
+    end
+
+    local ok, module = pcall(self.GetModule, self, "GPAwardButtons", true)
+    if ok and module and type(module.refreshVisibility) == "function" then
+        module:refreshVisibility()
+    end
 end
 
 function RLHelper:RefreshMainFrameVisibility()
@@ -1504,20 +1525,30 @@ function RLHelper:CreateOptionsPanel()
     local panel = CreateFrame("Frame", "RLHelperOptionsPanel", UIParent)
     panel.name = "RL Helper"
 
-    local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", 16, -16)
+    local scrollFrame = CreateFrame("ScrollFrame", "RLHelperOptionsPanelScrollFrame", panel, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -12)
+    scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -30, 12)
+
+    local content = CreateFrame("Frame", "RLHelperOptionsPanelContent", scrollFrame)
+    content:SetSize(440, 640)
+    if scrollFrame.SetScrollChild then
+        scrollFrame:SetScrollChild(content)
+    end
+
+    local title = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", content, "TOPLEFT", 12, 0)
     title:SetText("RL Helper")
 
-    local cancelLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    local cancelLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     cancelLabel:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -24)
     cancelLabel:SetText("Текст сообщения отмены пула")
 
-    local cancelEditBox = CreateFrame("EditBox", "RLHelperPullCancelEditBox", panel, "InputBoxTemplate")
+    local cancelEditBox = CreateFrame("EditBox", "RLHelperPullCancelEditBox", content, "InputBoxTemplate")
     cancelEditBox:SetSize(320, 24)
     if cancelEditBox.SetWidth then
         cancelEditBox:SetWidth(320)
     end
-    cancelEditBox:SetPoint("TOPLEFT", cancelLabel, "BOTTOMLEFT", 8, -8)
+    cancelEditBox:SetPoint("TOPLEFT", cancelLabel, "BOTTOMLEFT", 0, -8)
     cancelEditBox:SetAutoFocus(false)
     cancelEditBox:SetScript("OnEnterPressed", function(self)
         RLHelper.db.profile.pullCancelMessage = self:GetText()
@@ -1527,16 +1558,16 @@ function RLHelper:CreateOptionsPanel()
         RLHelper.db.profile.pullCancelMessage = self:GetText()
     end)
 
-    local discordLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    discordLabel:SetPoint("TOPLEFT", cancelEditBox, "BOTTOMLEFT", -8, -10)
+    local discordLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    discordLabel:SetPoint("TOPLEFT", cancelEditBox, "BOTTOMLEFT", 0, -10)
     discordLabel:SetText("Ссылка Discord")
 
-    local discordEditBox = CreateFrame("EditBox", "RLHelperDiscordLinkEditBox", panel, "InputBoxTemplate")
+    local discordEditBox = CreateFrame("EditBox", "RLHelperDiscordLinkEditBox", content, "InputBoxTemplate")
     discordEditBox:SetSize(320, 24)
     if discordEditBox.SetWidth then
         discordEditBox:SetWidth(320)
     end
-    discordEditBox:SetPoint("TOPLEFT", discordLabel, "BOTTOMLEFT", 8, -8)
+    discordEditBox:SetPoint("TOPLEFT", discordLabel, "BOTTOMLEFT", 0, -8)
     discordEditBox:SetAutoFocus(false)
     discordEditBox:SetScript("OnEnterPressed", function(self)
         RLHelper.db.profile.discordLink = self:GetText()
@@ -1548,7 +1579,7 @@ function RLHelper:CreateOptionsPanel()
         RLHelper:RefreshDiscordButton()
     end)
 
-    local displayOnlyInGroup = CreateFrame("CheckButton", "RLHelperDisplayOnlyInGroupCheckButton", panel,
+    local displayOnlyInGroup = CreateFrame("CheckButton", "RLHelperDisplayOnlyInGroupCheckButton", content,
         "InterfaceOptionsCheckButtonTemplate")
     displayOnlyInGroup:SetPoint("TOPLEFT", discordEditBox, "BOTTOMLEFT", -4, -18)
     _G[displayOnlyInGroup:GetName() .. "Text"]:SetText("Показывать только в группе")
@@ -1557,7 +1588,7 @@ function RLHelper:CreateOptionsPanel()
         RLHelper:RefreshMainFrameVisibility()
     end)
 
-    local bossOnlyHistory = CreateFrame("CheckButton", "RLHelperBossOnlyHistoryCheckButton", panel,
+    local bossOnlyHistory = CreateFrame("CheckButton", "RLHelperBossOnlyHistoryCheckButton", content,
         "InterfaceOptionsCheckButtonTemplate")
     bossOnlyHistory:SetPoint("TOPLEFT", displayOnlyInGroup, "BOTTOMLEFT", 0, -8)
     _G[bossOnlyHistory:GetName() .. "Text"]:SetText("Оставлять бои только с боссами")
@@ -1565,18 +1596,18 @@ function RLHelper:CreateOptionsPanel()
         RLHelper.db.profile.bossOnlyHistory = self:GetChecked() and true or false
     end)
 
-    local igor = CreateFrame("CheckButton", "RLHelperIgorCheckButton", panel, "InterfaceOptionsCheckButtonTemplate")
+    local igor = CreateFrame("CheckButton", "RLHelperIgorCheckButton", content, "InterfaceOptionsCheckButtonTemplate")
     igor:SetPoint("TOPLEFT", bossOnlyHistory, "BOTTOMLEFT", 0, -8)
     _G[igor:GetName() .. "Text"]:SetText("Игорь")
     igor:SetScript("OnClick", function(self)
         RLHelper.db.profile.igor = self:GetChecked() and true or false
     end)
 
-    local halionBurstTitle = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    local halionBurstTitle = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     halionBurstTitle:SetPoint("TOPLEFT", igor, "BOTTOMLEFT", 0, -16)
     halionBurstTitle:SetText("РС Бурст")
 
-    local halionBurstReset = CreateFrame("CheckButton", "RLHelperHalionBurstResetCheckButton", panel,
+    local halionBurstReset = CreateFrame("CheckButton", "RLHelperHalionBurstResetCheckButton", content,
         "InterfaceOptionsCheckButtonTemplate")
     halionBurstReset:SetPoint("TOPLEFT", halionBurstTitle, "BOTTOMLEFT", 0, -8)
     _G[halionBurstReset:GetName() .. "Text"]:SetText("Сброс ДПС под Геру")
@@ -1584,7 +1615,7 @@ function RLHelper:CreateOptionsPanel()
         RLHelper.db.profile.halionBurstReset = self:GetChecked() and true or false
     end)
 
-    local halionBurst = CreateFrame("CheckButton", "RLHelperHalionBurstCheckButton", panel,
+    local halionBurst = CreateFrame("CheckButton", "RLHelperHalionBurstCheckButton", content,
         "InterfaceOptionsCheckButtonTemplate")
     halionBurst:SetPoint("TOPLEFT", halionBurstReset, "BOTTOMLEFT", 0, -8)
     _G[halionBurst:GetName() .. "Text"]:SetText("Отсчет на выход для Ретрика")
@@ -1592,13 +1623,61 @@ function RLHelper:CreateOptionsPanel()
         RLHelper.db.profile.halionBurstPull = self:GetChecked() and true or false
     end)
 
-    local halionPhaseTwoEntryTimer = CreateFrame("CheckButton", "RLHelperHalionPhaseTwoEntryTimerCheckButton", panel,
+    local halionPhaseTwoEntryTimer = CreateFrame("CheckButton", "RLHelperHalionPhaseTwoEntryTimerCheckButton", content,
         "InterfaceOptionsCheckButtonTemplate")
     halionPhaseTwoEntryTimer:SetPoint("TOPLEFT", halionBurst, "BOTTOMLEFT", 0, -8)
     _G[halionPhaseTwoEntryTimer:GetName() .. "Text"]:SetText("Отсчет на вход после 2го метеорита")
     halionPhaseTwoEntryTimer:SetScript("OnClick", function(self)
         RLHelper.db.profile.halionPhaseTwoEntryTimer = self:GetChecked() and true or false
     end)
+
+    local gpAwardTitle = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    gpAwardTitle:SetPoint("TOPLEFT", halionPhaseTwoEntryTimer, "BOTTOMLEFT", 0, -16)
+    gpAwardTitle:SetText("Начисление GP")
+
+    local gpAwardButtonsEnabled = CreateFrame("CheckButton", "RLHelperGPAwardButtonsEnabledCheckButton", content,
+        "InterfaceOptionsCheckButtonTemplate")
+    gpAwardButtonsEnabled:SetPoint("TOPLEFT", gpAwardTitle, "BOTTOMLEFT", 0, -8)
+    _G[gpAwardButtonsEnabled:GetName() .. "Text"]:SetText("Отображать кнопки начисления GP")
+    gpAwardButtonsEnabled:SetScript("OnClick", function(self)
+        RLHelper.db.profile.gpAwardButtonsEnabled = self:GetChecked() and true or false
+        RLHelper:RefreshGPAwardButtons()
+    end)
+
+    local gpReasonEditBoxes = {}
+    local gpReasonAnchor = gpAwardButtonsEnabled
+    local isFirstGpReason = true
+    for _, amount in ipairs({ 100, 200, 250, 500, 1000 }) do
+        local label = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        label:SetPoint("TOPLEFT", gpReasonAnchor, "BOTTOMLEFT", isFirstGpReason and 4 or 0, -10)
+        if label.SetWidth then
+            label:SetWidth(70)
+        end
+        label:SetText(amount .. " GP")
+
+        local editBox = CreateFrame("EditBox", "RLHelperGPAwardReason" .. amount .. "EditBox", content, "InputBoxTemplate")
+        editBox:SetSize(260, 24)
+        if editBox.SetWidth then
+            editBox:SetWidth(260)
+        end
+        editBox:SetPoint("LEFT", label, "LEFT", 78, 0)
+        editBox:SetAutoFocus(false)
+        editBox:SetScript("OnEnterPressed", function(self)
+            RLHelper.db.profile.gpAwardReasons = RLHelper.db.profile.gpAwardReasons or {}
+            RLHelper.db.profile.gpAwardReasons[amount] = self:GetText()
+            RLHelper:RefreshGPAwardButtons()
+            self:ClearFocus()
+        end)
+        editBox:SetScript("OnEditFocusLost", function(self)
+            RLHelper.db.profile.gpAwardReasons = RLHelper.db.profile.gpAwardReasons or {}
+            RLHelper.db.profile.gpAwardReasons[amount] = self:GetText()
+            RLHelper:RefreshGPAwardButtons()
+        end)
+
+        gpReasonEditBoxes[amount] = editBox
+        gpReasonAnchor = label
+        isFirstGpReason = false
+    end
 
     panel:SetScript("OnShow", function()
         cancelEditBox:SetText(RLHelper.db.profile.pullCancelMessage or "")
@@ -1609,6 +1688,11 @@ function RLHelper:CreateOptionsPanel()
         halionBurst:SetChecked(RLHelper:IsHalionBurstPullEnabled())
         halionBurstReset:SetChecked(RLHelper:IsHalionBurstResetEnabled())
         halionPhaseTwoEntryTimer:SetChecked(RLHelper:IsHalionPhaseTwoEntryTimerEnabled())
+        gpAwardButtonsEnabled:SetChecked(RLHelper.db.profile.gpAwardButtonsEnabled)
+        RLHelper.db.profile.gpAwardReasons = RLHelper.db.profile.gpAwardReasons or {}
+        for amount, editBox in pairs(gpReasonEditBoxes) do
+            editBox:SetText(RLHelper.db.profile.gpAwardReasons[amount] or DEFAULT_GP_AWARD_REASONS[amount] or "")
+        end
     end)
 
     self.optionsPanel = panel

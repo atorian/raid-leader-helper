@@ -1,6 +1,7 @@
 require('tests.mocks')
 local mocks = require('tests.mocks')
 local GPAwardButtons = require("../modules/ui/GPAwardButtons")
+local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 
 describe('GPAwardButtons', function()
     local originalUnitIsPlayer
@@ -10,6 +11,8 @@ describe('GPAwardButtons', function()
     local originalEPGP
     local originalSlashCmdList
     local originalCreateFrame
+    local originalDb
+    local originalSetMainFrameBottomPanel
 
     before_each(function()
         mocks:ClearUnitGUIDs()
@@ -20,11 +23,19 @@ describe('GPAwardButtons', function()
         originalEPGP = _G.EPGP
         originalSlashCmdList = _G.SlashCmdList
         originalCreateFrame = _G.CreateFrame
+        originalDb = RLHelper.db
+        originalSetMainFrameBottomPanel = RLHelper.SetMainFrameBottomPanel
 
         GPAwardButtons.awardUndoStack = {}
         GPAwardButtons.undoButton = nil
         GPAwardButtons.footerFrame = nil
         GPAwardButtons.buttons = nil
+        RLHelper.db = {
+            profile = {
+                gpAwardButtonsEnabled = true,
+                gpAwardReasons = {}
+            }
+        }
 
         _G.UnitIsPlayer = function(unitId)
             return unitId == "target"
@@ -53,6 +64,8 @@ describe('GPAwardButtons', function()
         _G.EPGP = originalEPGP
         _G.SlashCmdList = originalSlashCmdList
         _G.CreateFrame = originalCreateFrame
+        RLHelper.db = originalDb
+        RLHelper.SetMainFrameBottomPanel = originalSetMainFrameBottomPanel
     end)
 
     it('awards GP to the current player target through the EPGP slash command', function()
@@ -105,6 +118,36 @@ describe('GPAwardButtons', function()
         GPAwardButtons:handleButtonClick({ label = "200", reason = "Мертвый_Оппосум", amount = 200 })
 
         assert.are.same({ "gp TargetPlayer Мертвый_Оппосум 200" }, slashCalls)
+    end)
+
+    it('uses account-wide configured GP reason for fixed amount buttons', function()
+        local slashCalls = {}
+        mocks:SetUnitGUID("target", "0x0001")
+        RLHelper.db.profile.gpAwardReasons[200] = "Мертвый_Оппосум"
+        _G.SlashCmdList = {
+            EPGP = function(command)
+                table.insert(slashCalls, command)
+            end
+        }
+
+        GPAwardButtons:handleButtonClick({ label = "200", amount = 200, defaultReason = "Вомбат" })
+
+        assert.are.same({ "gp TargetPlayer Мертвый_Оппосум 200" }, slashCalls)
+    end)
+
+    it('falls back to default GP reason when the configured reason is blank', function()
+        local slashCalls = {}
+        mocks:SetUnitGUID("target", "0x0001")
+        RLHelper.db.profile.gpAwardReasons[200] = "   "
+        _G.SlashCmdList = {
+            EPGP = function(command)
+                table.insert(slashCalls, command)
+            end
+        }
+
+        GPAwardButtons:handleButtonClick({ label = "200", amount = 200, defaultReason = "Вомбат" })
+
+        assert.are.same({ "gp TargetPlayer Вомбат 200" }, slashCalls)
     end)
 
     it('stores successful GP awards and undoes the latest award with negative GP', function()
@@ -240,6 +283,61 @@ describe('GPAwardButtons', function()
         GPAwardButtons.undoButton.scripts.OnClick()
         assert.is_false(GPAwardButtons.undoButton.enabled)
         assert.are.same({ "gp TargetPlayer Каспер 100", "gp TargetPlayer Каспер -100" }, slashCalls)
+    end)
+
+    it('hides GP award footer and clears bottom panel when disabled in profile', function()
+        local bottomPanel
+        local frames = {}
+        RLHelper.mainFrame = {}
+        RLHelper.db.profile.gpAwardButtonsEnabled = false
+        RLHelper.SetMainFrameBottomPanel = function(_, panel)
+            bottomPanel = panel
+        end
+        _G.CreateFrame = function()
+            local frame = {
+                visible = true,
+                points = {},
+                scripts = {},
+                enabled = true
+            }
+            function frame:SetSize(width, height)
+                self.width = width
+                self.height = height
+            end
+            function frame:SetPoint(...)
+                table.insert(self.points, { ... })
+            end
+            function frame:SetHeight(height)
+                self.height = height
+            end
+            function frame:SetText(text)
+                self.text = text
+            end
+            function frame:SetScript(event, callback)
+                self.scripts[event] = callback
+            end
+            function frame:Show()
+                self.visible = true
+            end
+            function frame:Hide()
+                self.visible = false
+            end
+            function frame:Enable()
+                self.enabled = true
+            end
+            function frame:Disable()
+                self.enabled = false
+            end
+            table.insert(frames, frame)
+            return frame
+        end
+
+        GPAwardButtons:attachToMainFrame()
+
+        assert.is_false(GPAwardButtons.footerFrame.visible)
+        assert.is_false(GPAwardButtons.buttons[1].visible)
+        assert.is_false(GPAwardButtons.undoButton.visible)
+        assert.is_nil(bottomPanel)
     end)
 
     it('fails when the target is missing', function()

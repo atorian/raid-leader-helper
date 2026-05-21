@@ -734,6 +734,42 @@ describe("RLHelper settings helpers", function()
         _G.SendChatMessage = originalSendChatMessage
     end)
 
+    it("initializes account-wide GP award defaults", function()
+        local originalCreateMainFrame = RLHelper.CreateMainFrame
+        local originalCreateOptionsPanel = RLHelper.CreateOptionsPanel
+        local originalRegisterChatCommand = RLHelper.RegisterChatCommand
+        local originalMainFrame = RLHelper.mainFrame
+
+        RLHelper.CreateMainFrame = function(self)
+            self.mainFrame = {
+                Show = function()
+                end
+            }
+        end
+        RLHelper.CreateOptionsPanel = function()
+        end
+        RLHelper.RegisterChatCommand = function()
+        end
+
+        RLHelper:OnInitialize()
+        local gpAwardButtonsEnabled = RLHelper.db.profile.gpAwardButtonsEnabled
+        local gpAwardReasons = RLHelper.db.profile.gpAwardReasons
+
+        RLHelper.CreateMainFrame = originalCreateMainFrame
+        RLHelper.CreateOptionsPanel = originalCreateOptionsPanel
+        RLHelper.RegisterChatCommand = originalRegisterChatCommand
+        RLHelper.mainFrame = originalMainFrame
+
+        assert.is_false(gpAwardButtonsEnabled)
+        assert.are.same({
+            [100] = "Каспер",
+            [200] = "Вомбат",
+            [250] = "Бэтмен",
+            [500] = "Капибара",
+            [1000] = "Banana"
+        }, gpAwardReasons)
+    end)
+
     it("treats Halion burst pull as disabled when the saved value is missing", function()
         RLHelper.db = {
             profile = {}
@@ -902,8 +938,128 @@ describe("RLHelper settings helpers", function()
             "РС Бурст",
             "Сброс ДПС под Геру",
             "Отсчет на выход для Ретрика",
-            "Отсчет на вход после 2го метеорита"
+            "Отсчет на вход после 2го метеорита",
+            "Начисление GP",
+            "Отображать кнопки начисления GP",
+            "100 GP",
+            "200 GP",
+            "250 GP",
+            "500 GP",
+            "1000 GP"
         }, texts)
+    end)
+
+    it("creates a scrollable options panel with aligned GP reason rows", function()
+        local framesByName = {}
+        local labelsByText = {}
+
+        local function newFrame(frameType, name, parent, template)
+            local frame = {
+                frameType = frameType,
+                name = name,
+                parent = parent,
+                template = template,
+                points = {},
+                scripts = {}
+            }
+
+            if name then
+                framesByName[name] = frame
+            end
+
+            function frame:GetName()
+                return self.name
+            end
+
+            function frame:CreateFontString()
+                return newFrame("FontString", nil, self)
+            end
+
+            function frame:SetText(text)
+                self.text = text
+                labelsByText[text] = self
+            end
+
+            function frame:SetPoint(...)
+                table.insert(self.points, { ... })
+            end
+
+            function frame:SetSize(width, height)
+                self.width = width
+                self.height = height
+            end
+
+            function frame:SetWidth(width)
+                self.fixedWidth = width
+            end
+
+            function frame:SetHeight(height)
+                self.height = height
+            end
+
+            function frame:SetAutoFocus()
+            end
+
+            function frame:SetScript(event, callback)
+                self.scripts[event] = callback
+            end
+
+            function frame:SetScrollChild(child)
+                self.scrollChild = child
+            end
+
+            function frame:GetText()
+                return self.text or ""
+            end
+
+            function frame:ClearFocus()
+            end
+
+            function frame:SetChecked(value)
+                self.checked = value
+            end
+
+            if frameType == "CheckButton" and name then
+                _G[name .. "Text"] = {
+                    SetText = function()
+                    end
+                }
+            end
+
+            return frame
+        end
+
+        RLHelper.db = {
+            profile = {}
+        }
+        _G.UIParent = newFrame("Frame", "UIParent")
+        _G.CreateFrame = newFrame
+        _G.InterfaceOptions_AddCategory = function()
+        end
+
+        RLHelper:CreateOptionsPanel()
+
+        local scrollFrame = framesByName.RLHelperOptionsPanelScrollFrame
+        local contentFrame = framesByName.RLHelperOptionsPanelContent
+        assert.is_not_nil(scrollFrame)
+        assert.is_not_nil(contentFrame)
+        assert.are.equal("UIPanelScrollFrameTemplate", scrollFrame.template)
+        assert.are.same(contentFrame, scrollFrame.scrollChild)
+        assert.are.equal(440, contentFrame.width)
+        assert.are.equal(12, labelsByText["RL Helper"].points[1][4])
+
+        assert.are.equal(0, framesByName.RLHelperPullCancelEditBox.points[1][4])
+        assert.are.equal(0, framesByName.RLHelperDiscordLinkEditBox.points[1][4])
+
+        for _, amount in ipairs({ 100, 200, 250, 500, 1000 }) do
+            local label = labelsByText[amount .. " GP"]
+            local editBox = framesByName["RLHelperGPAwardReason" .. amount .. "EditBox"]
+            assert.are.equal(70, label.fixedWidth)
+            assert.are.equal(amount == 100 and 4 or 0, label.points[1][4])
+            assert.are.same({ "LEFT", label, "LEFT", 78, 0 }, editBox.points[1])
+            assert.are.equal(260, editBox.fixedWidth)
+            assert.is_true(editBox.points[1][4] + editBox.fixedWidth <= contentFrame.width - 24)
+        end
     end)
 
     it("stores the Discord link from the options edit box and refreshes the button", function()
@@ -1001,6 +1157,116 @@ describe("RLHelper settings helpers", function()
         assert.are.equal(editBoxes[1].fixedWidth, editBoxes[2].fixedWidth)
         assert.is_true(editBoxes[2].clearedFocus)
         assert.are.equal(1, refreshCalls)
+    end)
+
+    it("stores GP award visibility and reason settings from the options panel", function()
+        local editBoxes = {}
+        local checkButtons = {}
+        local refreshCalls = 0
+        local originalGetModule = RLHelper.GetModule
+
+        local function newFrame(frameType, name, parent, template)
+            local frame = {
+                frameType = frameType,
+                name = name,
+                parent = parent,
+                template = template,
+                scripts = {}
+            }
+
+            function frame:GetName()
+                return self.name
+            end
+
+            function frame:CreateFontString()
+                return newFrame("FontString", nil, self)
+            end
+
+            function frame:SetText(text)
+                self.text = text
+            end
+
+            function frame:SetPoint()
+            end
+
+            function frame:SetSize(width, height)
+                self.width = width
+                self.height = height
+            end
+
+            function frame:SetWidth(width)
+                self.fixedWidth = width
+            end
+
+            function frame:SetAutoFocus()
+            end
+
+            function frame:SetScript(event, callback)
+                self.scripts[event] = callback
+            end
+
+            function frame:GetText()
+                return self.text or ""
+            end
+
+            function frame:ClearFocus()
+                self.clearedFocus = true
+            end
+
+            function frame:SetChecked(value)
+                self.checked = value
+            end
+
+            function frame:GetChecked()
+                return self.checked
+            end
+
+            if frameType == "EditBox" then
+                table.insert(editBoxes, frame)
+            end
+
+            if frameType == "CheckButton" and name then
+                checkButtons[name] = frame
+                _G[name .. "Text"] = {
+                    SetText = function()
+                    end
+                }
+            end
+
+            return frame
+        end
+
+        RLHelper.db = {
+            profile = {
+                gpAwardReasons = {}
+            }
+        }
+        RLHelper.GetModule = function(_, name)
+            if name == "GPAwardButtons" then
+                return {
+                    refreshVisibility = function()
+                        refreshCalls = refreshCalls + 1
+                    end
+                }
+            end
+        end
+        _G.UIParent = newFrame("Frame", "UIParent")
+        _G.CreateFrame = newFrame
+        _G.InterfaceOptions_AddCategory = function()
+        end
+
+        RLHelper:CreateOptionsPanel()
+        checkButtons.RLHelperGPAwardButtonsEnabledCheckButton:SetChecked(true)
+        checkButtons.RLHelperGPAwardButtonsEnabledCheckButton.scripts.OnClick(
+            checkButtons.RLHelperGPAwardButtonsEnabledCheckButton)
+        editBoxes[4]:SetText("Мертвый_Оппосум")
+        editBoxes[4].scripts.OnEditFocusLost(editBoxes[4])
+
+        assert.is_true(RLHelper.db.profile.gpAwardButtonsEnabled)
+        assert.are.equal("Мертвый_Оппосум", RLHelper.db.profile.gpAwardReasons[200])
+        assert.are.equal(2, refreshCalls)
+
+        RLHelper.GetModule = originalGetModule
     end)
 
     it("opens the registered options panel", function()

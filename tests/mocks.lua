@@ -281,7 +281,23 @@ function M:NewModule(name)
     return module
 end
 
-function M:New(target)
+local function deepCopy(value)
+    if type(value) ~= "table" then
+        return value
+    end
+
+    local copy = {}
+    for key, childValue in pairs(value) do
+        copy[key] = deepCopy(childValue)
+    end
+    return copy
+end
+
+function M:New(target, defaults)
+    if type(target) == "string" and type(defaults) == "table" then
+        return deepCopy(defaults)
+    end
+
     return {}
 end
 

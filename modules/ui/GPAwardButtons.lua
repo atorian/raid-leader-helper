@@ -2,11 +2,11 @@ local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local GPAwardButtons = RLHelper:NewModule("GPAwardButtons", "AceEvent-3.0")
 
 local BUTTONS = {
-    { label = "100", amount = 100, reason = "Каспер" },
-    { label = "200", amount = 200, reason = "Вомбат" },
-    { label = "250", amount = 250, reason = "Бэтмен" },
-    { label = "500", amount = 500, reason = "Капибара" },
-    { label = "1к", amount = 1000, reason = "Banana" }
+    { label = "100", amount = 100, defaultReason = "Каспер" },
+    { label = "200", amount = 200, defaultReason = "Вомбат" },
+    { label = "250", amount = 250, defaultReason = "Бэтмен" },
+    { label = "500", amount = 500, defaultReason = "Капибара" },
+    { label = "1к", amount = 1000, defaultReason = "Banana" }
 }
 
 local MAX_UNDO_STACK_SIZE = 10
@@ -22,6 +22,14 @@ end
 local function getEPGPSlashCommand()
     local slashCmdList = _G.SlashCmdList or SlashCmdList
     return slashCmdList and (slashCmdList["ACECONSOLE_EPGP"] or slashCmdList["EPGP"])
+end
+
+local function trimText(value)
+    if type(value) ~= "string" then
+        return ""
+    end
+
+    return value:match("^%s*(.-)%s*$") or ""
 end
 
 local function runGPCommand(targetName, reason, amount)
@@ -49,14 +57,46 @@ function GPAwardButtons:printError(message)
     RLHelper:Print("RL Быдло: " .. message)
 end
 
+function GPAwardButtons:AreButtonsEnabled()
+    return RLHelper.db and RLHelper.db.profile and RLHelper.db.profile.gpAwardButtonsEnabled == true or false
+end
+
+function GPAwardButtons:GetAwardReason(buttonInfo)
+    local defaultReason = buttonInfo.defaultReason or buttonInfo.reason
+    local profile = RLHelper.db and RLHelper.db.profile
+    local configuredReason = profile and profile.gpAwardReasons and profile.gpAwardReasons[buttonInfo.amount]
+    configuredReason = trimText(configuredReason)
+
+    if configuredReason ~= "" then
+        return configuredReason
+    end
+
+    return defaultReason
+end
+
 function GPAwardButtons:refreshVisibility()
     if not self.footerFrame then
+        return
+    end
+
+    if not self:AreButtonsEnabled() then
+        self.footerFrame:Hide()
+        for _, button in ipairs(self.buttons or {}) do
+            button:Hide()
+        end
+        if self.undoButton then
+            self.undoButton:Hide()
+        end
+        RLHelper:SetMainFrameBottomPanel(nil)
         return
     end
 
     self.footerFrame:Show()
     for _, button in ipairs(self.buttons or {}) do
         button:Show()
+    end
+    if self.undoButton then
+        self.undoButton:Show()
     end
     RLHelper:SetMainFrameBottomPanel(self.footerFrame)
 end
@@ -131,7 +171,7 @@ function GPAwardButtons:UndoLastGPAward()
 end
 
 function GPAwardButtons:handleButtonClick(buttonInfo)
-    local ok, result = self:AwardTargetGP(buttonInfo.reason, buttonInfo.amount)
+    local ok, result = self:AwardTargetGP(self:GetAwardReason(buttonInfo), buttonInfo.amount)
     if not ok then
         self:printError(result)
     end

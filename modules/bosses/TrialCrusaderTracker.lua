@@ -118,7 +118,6 @@ function TrialCrusaderTracker:OnEnable()
 end
 
 function TrialCrusaderTracker:reset()
-    self:StopFactionChampionAutomark()
     self.championGuidsByRole = {}
     self.seenChampionGuids = {}
     self.markedRoles = {}

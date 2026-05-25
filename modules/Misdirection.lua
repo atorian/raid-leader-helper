@@ -99,14 +99,24 @@ function MisdirectionTracker:reset()
     pullDamage = {}
 end
 
+local function debugMisdirectionAura(eventData)
+    RLHelper:Debug(string.format("MisdirectionTracker 35079 event=%s source='%s' dest='%s'", tostring(eventData.event or ""),
+        tostring(eventData.sourceName or ""), tostring(eventData.destName or "")))
+end
+
 function MisdirectionTracker:handleEvent(eventData)
+    if eventData.spellId == MISDIRECTION_SPELL_ID then
+        debugMisdirectionAura(eventData)
+        self:GenerateReport(eventData.sourceName, eventData.timestamp)
+        return
+    end
+
     if eventData.event == "SPELL_CAST_SUCCESS" and
         (eventData.spellId == MISDIRECTION_START_SPELL_ID or eventData.spellId == SMALL_TRICKS_START_SPELL_ID) then
         self:OnMisdirection(eventData)
     end
 
-    if eventData.event == "SPELL_AURA_REMOVED" and
-        (eventData.spellId == MISDIRECTION_SPELL_ID or eventData.spellId == SMALL_TRICKS_SPELL_ID) then
+    if eventData.event == "SPELL_AURA_REMOVED" and eventData.spellId == SMALL_TRICKS_SPELL_ID then
         self:GenerateReport(eventData.sourceName, eventData.timestamp)
     end
 

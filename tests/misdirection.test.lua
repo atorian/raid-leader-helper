@@ -31,9 +31,11 @@ end
 describe("Misdirection Tracker", function()
     local log
     local originalIterateModules
+    local originalDebug
 
     before_each(function()
         originalIterateModules = RLHelper.IterateModules
+        originalDebug = RLHelper.Debug
         RLHelper:StopCombatTicker()
         RLHelper.inCombat = false
         RLHelper.lastCombatActivityAt = nil
@@ -54,10 +56,13 @@ describe("Misdirection Tracker", function()
         MisdirectionTracker:reset()
         MisdirectionTracker.log = spy.new(function()
         end)
+        RLHelper.Debug = spy.new(function()
+        end)
     end)
 
     after_each(function()
         RLHelper.IterateModules = originalIterateModules
+        RLHelper.Debug = originalDebug
     end)
 
     it("logs hunter misdirection start and each tracked damage spell separately", function()
@@ -174,6 +179,27 @@ describe("Misdirection Tracker", function()
         dispatch(MisdirectionTracker, Builder:New(GetTime() + 2):FromPlayer("Охотник"):ToEnemy("Враг")
             :SpellDamage(49050, "Прицельный выстрел", 1000):Build())
 
+        assert.spy(MisdirectionTracker.log).was_called(2)
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк",
+            date("%H:%M:%S", GetTime()), misdirect))
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк напул окончен 0",
+            date("%H:%M:%S", GetTime() + 1), misdirect))
+    end)
+
+    it("clears hunter pull on any 35079 event and logs debug context", function()
+        RLHelper.inCombat = true
+
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
+            :CastSuccess(34477, "Перенаправление"):Build())
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 1):FromPlayer("Охотник"):ToPlayer("Охотник")
+            :ApplyAura(35079, "Перенаправление", "BUFF"):Build())
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 2):FromPlayer("Охотник"):ToEnemy("Враг")
+            :SpellDamage(49050, "Прицельный выстрел", 1000):Build())
+
+        assert.spy(RLHelper.Debug).was_called_with(RLHelper,
+            "MisdirectionTracker 35079 event=SPELL_AURA_APPLIED source='Охотник' dest='Охотник'")
         assert.spy(MisdirectionTracker.log).was_called(2)
         assert.spy(MisdirectionTracker.log).was_called_with(string.format(
             "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк",

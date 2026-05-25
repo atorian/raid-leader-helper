@@ -55,6 +55,7 @@ describe('TrialCrusaderTracker', function()
         end)
         TrialCrusaderTracker.debug = debugLog
         TrialCrusaderTracker.factionChampionStartFragments = nil
+        TrialCrusaderTracker:StopFactionChampionAutomark()
         TrialCrusaderTracker:reset()
     end)
 
@@ -64,6 +65,7 @@ describe('TrialCrusaderTracker', function()
         _G.GetTime = originalGetTime
         TrialCrusaderTracker.debug = originalDebug
         TrialCrusaderTracker.factionChampionStartFragments = nil
+        TrialCrusaderTracker:StopFactionChampionAutomark()
         require('tests.mocks'):ClearUnitGUIDs()
     end)
 
@@ -354,6 +356,17 @@ describe('TrialCrusaderTracker', function()
 
         assert.are.equal(GetTime() + 180, TrialCrusaderTracker.factionChampionAutomarkActiveUntil)
         assert.is_not_nil(TrialCrusaderTracker.factionChampionAutomarkTicker)
+    end)
+
+    it('keeps active automark when combat state resets', function()
+        TrialCrusaderTracker:StartFactionChampionAutomark()
+        local activeUntil = TrialCrusaderTracker.factionChampionAutomarkActiveUntil
+        local ticker = TrialCrusaderTracker.factionChampionAutomarkTicker
+
+        TrialCrusaderTracker:reset()
+
+        assert.are.equal(activeUntil, TrialCrusaderTracker.factionChampionAutomarkActiveUntil)
+        assert.are.equal(ticker, TrialCrusaderTracker.factionChampionAutomarkTicker)
     end)
 
     it('stops automark when all configured marks are done', function()

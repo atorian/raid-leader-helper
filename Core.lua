@@ -653,6 +653,11 @@ function RLHelper:PLAYER_REGEN_ENABLED()
     local now = self:GetCombatNow()
     self.combatEndRequestedAt = now
     self.combatEndRequiresRegen = false
+    if not self:HasActiveEnemies() and not self.currentCombat.firstEnemy and not self:IsCombatOngoing(now) then
+        self:ResetCombatState()
+        return
+    end
+
     if not self:HasActiveEnemies() and not self:IsCombatOngoing(now) then
         self:FinishCombat("PLAYER_REGEN_ENABLED")
         return

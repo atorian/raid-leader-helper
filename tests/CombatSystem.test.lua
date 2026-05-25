@@ -25,10 +25,12 @@ end
 
 describe("Боевая система", function()
     local originalIterateModules
+    local originalSendMessage
     local displayedMessages
 
     before_each(function()
         originalIterateModules = RLHelper.IterateModules
+        originalSendMessage = RLHelper.SendMessage
         displayedMessages = {}
         RLHelper:StopCombatTicker()
         RLHelper.inCombat = false
@@ -79,6 +81,7 @@ describe("Боевая система", function()
 
     after_each(function()
         RLHelper.IterateModules = originalIterateModules
+        RLHelper.SendMessage = originalSendMessage
     end)
 
     it("начинает бой когда игрок входит в бой", function()
@@ -298,6 +301,7 @@ describe("Боевая система", function()
 
     it("завершает бой по PLAYER_REGEN_ENABLED если живых врагов нет", function()
         RLHelper:PLAYER_REGEN_DISABLED()
+        RLHelper.currentCombat.firstEnemy = "Враг1"
         RLHelper:OnCombatLogEvent("test message")
 
         M.UnitAffectingCombat1 = false
@@ -305,6 +309,25 @@ describe("Боевая система", function()
 
         assert.is_false(RLHelper.inCombat)
         assert.are.equal(1, #RLHelper.combatHistory)
+    end)
+
+    it("сбрасывает пустой бой от событий игроков без RLHelper_CombatEnded", function()
+        local combatEndedMessages = 0
+        RLHelper.SendMessage = function(_, message)
+            if message == "RLHelper_CombatEnded" then
+                combatEndedMessages = combatEndedMessages + 1
+            end
+        end
+
+        RLHelper:PLAYER_REGEN_DISABLED()
+        RLHelper.currentCombat.messages = { "player buff" }
+
+        M.UnitAffectingCombat1 = false
+        RLHelper:PLAYER_REGEN_ENABLED()
+
+        assert.is_false(RLHelper.inCombat)
+        assert.are.equal(0, combatEndedMessages)
+        assert.are.equal(0, #RLHelper.combatHistory)
     end)
 
     it("не завершает бой по PLAYER_REGEN_ENABLED если группа еще в бою", function()

@@ -175,7 +175,10 @@ function RLHelper:SendDiscordLink()
         return false
     end
 
-    local channel = (GetRealNumRaidMembers and GetRealNumRaidMembers() > 0) and "RAID" or "PARTY"
+    local isRaid = GetRealNumRaidMembers and GetRealNumRaidMembers() > 0
+    local canAnnounce = (UnitIsGroupLeader and UnitIsGroupLeader("player")) or
+        (UnitIsGroupAssistant and UnitIsGroupAssistant("player"))
+    local channel = isRaid and (canAnnounce and "RAID_WARNING" or "RAID") or "PARTY"
     SendChatMessage(link, channel)
     return true
 end

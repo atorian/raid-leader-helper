@@ -692,6 +692,8 @@ describe("RLHelper settings helpers", function()
     local originalInCombat
     local originalCombatEndRequestedAt
     local originalSendChatMessage
+    local originalUnitIsGroupLeader
+    local originalUnitIsGroupAssistant
 
     before_each(function()
         originalDb = RLHelper.db
@@ -709,6 +711,8 @@ describe("RLHelper settings helpers", function()
         originalInCombat = RLHelper.inCombat
         originalCombatEndRequestedAt = RLHelper.combatEndRequestedAt
         originalSendChatMessage = _G.SendChatMessage
+        originalUnitIsGroupLeader = _G.UnitIsGroupLeader
+        originalUnitIsGroupAssistant = _G.UnitIsGroupAssistant
         RLHelper.db = {
             profile = {
                 displayOnlyInGroup = true
@@ -732,6 +736,8 @@ describe("RLHelper settings helpers", function()
         RLHelper.inCombat = originalInCombat
         RLHelper.combatEndRequestedAt = originalCombatEndRequestedAt
         _G.SendChatMessage = originalSendChatMessage
+        _G.UnitIsGroupLeader = originalUnitIsGroupLeader
+        _G.UnitIsGroupAssistant = originalUnitIsGroupAssistant
     end)
 
     it("initializes account-wide GP award defaults", function()
@@ -832,11 +838,65 @@ describe("RLHelper settings helpers", function()
         _G.GetRealNumRaidMembers = function()
             return 25
         end
+        _G.UnitIsGroupLeader = function()
+            return false
+        end
+        _G.UnitIsGroupAssistant = function()
+            return false
+        end
 
         assert.are.equal("https://discord.gg/example", RLHelper:GetDiscordLink())
         assert.is_true(RLHelper:HasDiscordLink())
         assert.is_true(RLHelper:SendDiscordLink())
         assert.are.same({ { message = "https://discord.gg/example", channel = "RAID" } }, chatMessages)
+    end)
+
+    it("sends the configured Discord link to raid warning for raid leader", function()
+        local chatMessages = {}
+        RLHelper.db = {
+            profile = {
+                discordLink = "https://discord.gg/leader"
+            }
+        }
+        _G.SendChatMessage = function(message, channel)
+            table.insert(chatMessages, { message = message, channel = channel })
+        end
+        _G.GetRealNumRaidMembers = function()
+            return 25
+        end
+        _G.UnitIsGroupLeader = function(unitId)
+            return unitId == "player"
+        end
+        _G.UnitIsGroupAssistant = function()
+            return false
+        end
+
+        assert.is_true(RLHelper:SendDiscordLink())
+        assert.are.same({ { message = "https://discord.gg/leader", channel = "RAID_WARNING" } }, chatMessages)
+    end)
+
+    it("sends the configured Discord link to raid warning for raid assistant", function()
+        local chatMessages = {}
+        RLHelper.db = {
+            profile = {
+                discordLink = "https://discord.gg/assist"
+            }
+        }
+        _G.SendChatMessage = function(message, channel)
+            table.insert(chatMessages, { message = message, channel = channel })
+        end
+        _G.GetRealNumRaidMembers = function()
+            return 25
+        end
+        _G.UnitIsGroupLeader = function()
+            return false
+        end
+        _G.UnitIsGroupAssistant = function(unitId)
+            return unitId == "player"
+        end
+
+        assert.is_true(RLHelper:SendDiscordLink())
+        assert.are.same({ { message = "https://discord.gg/assist", channel = "RAID_WARNING" } }, chatMessages)
     end)
 
     it("sends the configured Discord link to party chat outside raid", function()
@@ -1454,6 +1514,8 @@ describe("RLHelper main frame raid check button", function()
     local originalSendMessage
     local originalSendChatMessage
     local originalGetRealNumRaidMembers
+    local originalUnitIsGroupLeader
+    local originalUnitIsGroupAssistant
     local originalDb
     local frames
     local printedMessages
@@ -1647,6 +1709,8 @@ describe("RLHelper main frame raid check button", function()
         originalSendMessage = RLHelper.SendMessage
         originalSendChatMessage = _G.SendChatMessage
         originalGetRealNumRaidMembers = _G.GetRealNumRaidMembers
+        originalUnitIsGroupLeader = _G.UnitIsGroupLeader
+        originalUnitIsGroupAssistant = _G.UnitIsGroupAssistant
         originalDb = RLHelper.db
         frames = {}
         printedMessages = {}
@@ -1699,6 +1763,8 @@ describe("RLHelper main frame raid check button", function()
         _G.print = originalPrint
         _G.SendChatMessage = originalSendChatMessage
         _G.GetRealNumRaidMembers = originalGetRealNumRaidMembers
+        _G.UnitIsGroupLeader = originalUnitIsGroupLeader
+        _G.UnitIsGroupAssistant = originalUnitIsGroupAssistant
         RLHelper.LayoutMainFrame = originalLayoutMainFrame
         RLHelper.SendMessage = originalSendMessage
         RLHelper.db = originalDb
@@ -1746,6 +1812,12 @@ describe("RLHelper main frame raid check button", function()
         _G.GetRealNumRaidMembers = function()
             return 25
         end
+        _G.UnitIsGroupLeader = function(unitId)
+            return unitId == "player"
+        end
+        _G.UnitIsGroupAssistant = function()
+            return false
+        end
         _G.SendChatMessage = function(message, channel)
             table.insert(chatMessages, { message = message, channel = channel })
         end
@@ -1753,7 +1825,7 @@ describe("RLHelper main frame raid check button", function()
         RLHelper:CreateMainFrame()
         RLHelper.mainFrame.discordButton.scripts.OnClick()
 
-        assert.are.same({ { message = "https://discord.gg/example", channel = "RAID" } }, chatMessages)
+        assert.are.same({ { message = "https://discord.gg/example", channel = "RAID_WARNING" } }, chatMessages)
     end)
 
     it("toggles the combat list overlay from the list button", function()

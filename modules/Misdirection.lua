@@ -53,19 +53,6 @@ local TRACKED_SPELLS = {
     [48668] = "Interface\\Icons\\ability_rogue_eviscerate"
 }
 
-local SKIP_SPELLS = {
-    [57965] = true, -- яд роги
-    [53254] = true, -- "мятежная стрела ханта(лук с леди?)"
-    [71834] = true, -- быстрая стрельба
-    [69193] = true, -- Ранец Корабли
-    [71341] = true, -- Пакт - Ланатель
-    [71879] = true, -- какой-то дк спелл
-    [72669] = true, -- прокалывание
-    [57981] = true, -- яд роги 2
-    [72817] = true, -- вихрь друля
-    [51675] = true -- какой-то спелл роги
-}
-
 -- Active pulls tracking
 local activePulls = {}
 local pullDamage = {}
@@ -152,18 +139,20 @@ function MisdirectionTracker:OnDamage(eventData)
         return
     end
 
-    if not SKIP_SPELLS[eventData.spellId] then
-        if not pullDamage[eventData.sourceName][eventData.timestamp] then
-            pullDamage[eventData.sourceName][eventData.timestamp] = {}
-        end
-
-        if not pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId] then
-            pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId] = 0
-        end
-
-        local val = pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId]
-        pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId] = val + 1
+    if not TRACKED_SPELLS[eventData.spellId] then
+        return
     end
+
+    if not pullDamage[eventData.sourceName][eventData.timestamp] then
+        pullDamage[eventData.sourceName][eventData.timestamp] = {}
+    end
+
+    if not pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId] then
+        pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId] = 0
+    end
+
+    local val = pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId]
+    pullDamage[eventData.sourceName][eventData.timestamp][eventData.spellId] = val + 1
 end
 
 local function formatMissdirectStart(ts, source, missdirectSpellId, dest)
@@ -199,7 +188,7 @@ function MisdirectionTracker:OnHunterDamage(eventData, activePull)
     activePull.totalDamage = activePull.totalDamage + (eventData.amount or 0)
     self:LogHunterMisdirectionStart(eventData.sourceName)
 
-    if SKIP_SPELLS[eventData.spellId] or HUNTER_VISIBLE_SKIP_SPELLS[eventData.spellId] or not TRACKED_SPELLS[eventData.spellId] then
+    if HUNTER_VISIBLE_SKIP_SPELLS[eventData.spellId] or not TRACKED_SPELLS[eventData.spellId] then
         return
     end
 

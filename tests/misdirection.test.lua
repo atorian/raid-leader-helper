@@ -32,10 +32,12 @@ describe("Misdirection Tracker", function()
     local log
     local originalIterateModules
     local originalDebug
+    local originalSendChatMessage
 
     before_each(function()
         originalIterateModules = RLHelper.IterateModules
         originalDebug = RLHelper.Debug
+        originalSendChatMessage = SendChatMessage
         RLHelper:StopCombatTicker()
         RLHelper.inCombat = false
         RLHelper.lastCombatActivityAt = nil
@@ -58,11 +60,14 @@ describe("Misdirection Tracker", function()
         end)
         RLHelper.Debug = spy.new(function()
         end)
+        SendChatMessage = spy.new(function()
+        end)
     end)
 
     after_each(function()
         RLHelper.IterateModules = originalIterateModules
         RLHelper.Debug = originalDebug
+        SendChatMessage = originalSendChatMessage
     end)
 
     it("logs hunter misdirection start and each tracked damage spell separately", function()
@@ -228,6 +233,26 @@ describe("Misdirection Tracker", function()
         assert.spy(MisdirectionTracker.log).was_called_with(string.format(
             "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк напул окончен 1000",
             date("%H:%M:%S", GetTime() + 2), misdirect))
+    end)
+
+    it("does not store untracked rogue damage in the icon summary", function()
+        local tricks = "Interface\\Icons\\ability_rogue_tricksofthetrade"
+        local fan = "Interface\\Icons\\ability_rogue_fanofknives"
+
+        dispatch(MisdirectionTracker, Builder:New():FromPlayer("Рога"):ToPlayer("Танк")
+            :CastSuccess(57934, "Маленькие хитрости"):Build())
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 1):FromPlayer("Рога"):ToEnemy("Враг")
+            :SpellDamage(99999, "Неотслеживаемый удар", 1000):Build())
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 2):FromPlayer("Рога"):ToEnemy("Враг")
+            :SpellDamage(51723, "Веер клинков", 500):Build())
+
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 3):FromPlayer("Рога"):ToPlayer("Танк")
+            :RemoveAura(59628, "Маленькие хитрости"):Build())
+
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFРога|r |T%s:24:24:0:-2|t Танк |T%s:24:24:0:-2|t",
+            date("%H:%M:%S", GetTime()), tricks, fan))
+        assert.spy(SendChatMessage).was_not_called()
     end)
 
     it("does not count pet damage in hunter misdirection summary", function()

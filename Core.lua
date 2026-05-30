@@ -836,10 +836,6 @@ local function formatLogMessageForDisplay(message)
 end
 
 function RLHelper:OnCombatLogEvent(message)
-    if not self.inCombat then
-        error("OnCombatLogEvent called before combat started", 2)
-    end
-
     table.insert(self.currentCombat.messages, message)
     if self.mainFrame and self.mainFrame.logText then
         self.mainFrame.logText:AddMessage(formatLogMessageForDisplay(message))

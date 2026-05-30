@@ -3,6 +3,7 @@ require('../lib/blizzardEvent')
 require('../lib/CombatFilters')
 require('../data/BossIds')
 local RLHelper = require('../Core')
+local SpellTracker = require('../modules/SpellTracker')
 local Builder = require('../utils/CombatEventBuilder')
 
 local function count(tbl)
@@ -101,14 +102,12 @@ describe("Боевая система", function()
         assert.are.equal("Враг1", RLHelper.currentCombat.firstEnemy)
     end)
 
-    it("запрещает прямое добавление сообщения до начала боя", function()
-        assert.has.errors(function()
-            RLHelper:OnCombatLogEvent("test message")
-        end)
+    it("позволяет добавить сообщение до начала боя", function()
+        RLHelper:OnCombatLogEvent("test message")
 
         assert.is_false(RLHelper.inCombat)
         assert.is_nil(RLHelper.currentCombat.startTime)
-        assert.are.equal(0, #RLHelper.currentCombat.messages)
+        assert.are.same({ "test message" }, RLHelper.currentCombat.messages)
     end)
 
     it("shows 24px icons with vertical offset without changing stored combat messages", function()
@@ -290,6 +289,22 @@ describe("Боевая система", function()
         assert.is_false(RLHelper.inCombat)
         assert.are.equal(0, count(RLHelper.activeEnemies))
         assert.is_nil(RLHelper.currentCombat.firstEnemy)
+    end)
+
+    it("сохраняет отслеживаемые бафы игроков до начала боя", function()
+        M.UnitAffectingCombat1 = false
+        SpellTracker:OnInitialize()
+        SpellTracker:reset()
+        setBossModules({ SpellTracker })
+
+        assert.has_no.errors(function()
+            RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromPlayer("Дк"):ToPlayer("Рога")
+                :ApplyAura(49016, "Истерия", "BUFF"):Build())
+        end)
+
+        assert.is_false(RLHelper.inCombat)
+        assert.are.same({ string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", GetTime()),
+            "Дк", "Interface\\Icons\\Spell_DeathKnight_BladedArmor", "Рога") }, RLHelper.currentCombat.messages)
     end)
 
     it("не завершает бой сразу по PLAYER_REGEN_ENABLED", function()

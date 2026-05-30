@@ -2004,6 +2004,127 @@ describe("RLHelper main frame raid check button", function()
     end)
 end)
 
+describe("RLHelper combat display selection", function()
+    local originalMainFrame
+    local originalCurrentCombat
+    local originalCombatHistory
+    local originalSelectedCombatKind
+    local originalSelectedCombatIndex
+    local originalDisplayedCombat
+    local originalInCombat
+    local originalBeginPullCountdown
+    local originalInvokeDBMPullCommand
+    local originalMinimizeWindow
+    local originalDb
+
+    local function newLogText()
+        return {
+            messages = {},
+            Clear = function(self)
+                self.messages = {}
+            end,
+            AddMessage = function(self, message)
+                table.insert(self.messages, message)
+            end
+        }
+    end
+
+    before_each(function()
+        originalMainFrame = RLHelper.mainFrame
+        originalCurrentCombat = RLHelper.currentCombat
+        originalCombatHistory = RLHelper.combatHistory
+        originalSelectedCombatKind = RLHelper.selectedCombatKind
+        originalSelectedCombatIndex = RLHelper.selectedCombatIndex
+        originalDisplayedCombat = RLHelper.displayedCombat
+        originalInCombat = RLHelper.inCombat
+        originalBeginPullCountdown = RLHelper.BeginPullCountdown
+        originalInvokeDBMPullCommand = RLHelper.InvokeDBMPullCommand
+        originalMinimizeWindow = RLHelper.MinimizeWindow
+        originalDb = RLHelper.db
+
+        RLHelper.mainFrame = {
+            logText = newLogText(),
+            Show = function(self)
+                self.visible = true
+            end
+        }
+        RLHelper.currentCombat = {
+            startTime = nil,
+            messages = { "current before" }
+        }
+        RLHelper.combatHistory = {}
+        RLHelper.selectedCombatKind = nil
+        RLHelper.selectedCombatIndex = nil
+        RLHelper.displayedCombat = nil
+        RLHelper.inCombat = false
+        RLHelper.db = {
+            profile = {}
+        }
+    end)
+
+    after_each(function()
+        RLHelper.mainFrame = originalMainFrame
+        RLHelper.currentCombat = originalCurrentCombat
+        RLHelper.combatHistory = originalCombatHistory
+        RLHelper.selectedCombatKind = originalSelectedCombatKind
+        RLHelper.selectedCombatIndex = originalSelectedCombatIndex
+        RLHelper.displayedCombat = originalDisplayedCombat
+        RLHelper.inCombat = originalInCombat
+        RLHelper.BeginPullCountdown = originalBeginPullCountdown
+        RLHelper.InvokeDBMPullCommand = originalInvokeDBMPullCommand
+        RLHelper.MinimizeWindow = originalMinimizeWindow
+        RLHelper.db = originalDb
+    end)
+
+    it("stores current log events without changing a displayed history combat", function()
+        local historyCombat = {
+            messages = { "history row" }
+        }
+
+        RLHelper:DisplayCombat(historyCombat)
+        RLHelper:OnCombatLogEvent("current row")
+
+        assert.are.same({ "current before", "current row" }, RLHelper.currentCombat.messages)
+        assert.are.same({ "history row" }, RLHelper.mainFrame.logText.messages)
+        assert.are.same(historyCombat, RLHelper.displayedCombat)
+    end)
+
+    it("does not switch from displayed history combat when current combat starts", function()
+        local historyCombat = {
+            messages = { "history row" }
+        }
+        RLHelper.combatHistory = { historyCombat }
+
+        RLHelper:ShowCombatByIndex(1)
+        RLHelper:StartCombat("test")
+
+        assert.are.equal("history", RLHelper.selectedCombatKind)
+        assert.are.equal(1, RLHelper.selectedCombatIndex)
+        assert.are.same(historyCombat, RLHelper.displayedCombat)
+        assert.are.same({ "history row" }, RLHelper.mainFrame.logText.messages)
+    end)
+
+    it("switches to current combat when a pull countdown starts", function()
+        local historyCombat = {
+            messages = { "history row" }
+        }
+        RLHelper.combatHistory = { historyCombat }
+        RLHelper.BeginPullCountdown = function()
+        end
+        RLHelper.InvokeDBMPullCommand = function()
+        end
+        RLHelper.MinimizeWindow = function()
+        end
+
+        RLHelper:ShowCombatByIndex(1)
+        RLHelper:StartPullCountdown(15)
+
+        assert.are.equal("current", RLHelper.selectedCombatKind)
+        assert.is_nil(RLHelper.selectedCombatIndex)
+        assert.are.same(RLHelper.currentCombat, RLHelper.displayedCombat)
+    end)
+end)
+
 describe("RLHelper pull controls", function()
     local originalSlashCmdList
     local originalDBM

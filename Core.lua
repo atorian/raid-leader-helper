@@ -88,6 +88,7 @@ RLHelper.currentCombat = {
     firstEnemy = nil, -- Name of the first enemy in combat
     isBoss = false
 }
+RLHelper.displayedCombat = RLHelper.currentCombat
 RLHelper.viewingCurrentCombat = true -- Initialize to true by default
 
 RLHelper.activeEnemies = {}
@@ -528,6 +529,10 @@ function RLHelper:IsCombatOngoing(now)
     return self:HasRecentEnemyActivity(now)
 end
 
+function RLHelper:IsDisplayingCurrentCombat()
+    return not self.displayedCombat or self.displayedCombat == self.currentCombat
+end
+
 function RLHelper:StartCombat(reason)
     local now = self:GetCombatNow()
     self.lastCombatActivityAt = now
@@ -543,11 +548,15 @@ function RLHelper:StartCombat(reason)
     end
 
     self:EnsureCombatTicker()
-    self:DisplayCombat(self.currentCombat)
+    if self:IsDisplayingCurrentCombat() then
+        self:ShowCurrentCombat()
+    end
     self:Debug("Combat started", reason)
 end
 
 function RLHelper:ResetCombatState()
+    local wasDisplayingCurrentCombat = self:IsDisplayingCurrentCombat()
+
     self:StopCombatTicker()
     self.inCombat = false
     self.lastCombatActivityAt = nil
@@ -560,6 +569,10 @@ function RLHelper:ResetCombatState()
         firstEnemy = nil,
         isBoss = false
     }
+
+    if wasDisplayingCurrentCombat then
+        self.displayedCombat = self.currentCombat
+    end
 
     wipe(self.activeEnemies)
     wipe(self.activePlayers)
@@ -837,7 +850,7 @@ end
 
 function RLHelper:OnCombatLogEvent(message)
     table.insert(self.currentCombat.messages, message)
-    if self.mainFrame and self.mainFrame.logText then
+    if self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() then
         self.mainFrame.logText:AddMessage(formatLogMessageForDisplay(message))
     end
 end
@@ -1069,6 +1082,7 @@ function RLHelper:InvokeDBMPullCommand(duration)
 end
 
 function RLHelper:StartPullCountdown(duration)
+    self:ShowCurrentCombat()
     self:BeginPullCountdown(duration)
     self:InvokeDBMPullCommand(duration)
     self:MinimizeWindow()
@@ -1187,9 +1201,7 @@ function RLHelper:RefreshCombatListOverlay()
         currentText = COMBAT_LIST_YELLOW .. currentText .. COLOR_END
     end
     setRow(currentText, function()
-        RLHelper.selectedCombatKind = "current"
-        RLHelper.selectedCombatIndex = nil
-        RLHelper:DisplayCombat(RLHelper.currentCombat)
+        RLHelper:ShowCurrentCombat()
         RLHelper:HideCombatListOverlay()
     end)
 
@@ -1251,13 +1263,10 @@ function RLHelper:UpdateCombatDropdown()
 end
 
 function RLHelper:DisplayCombat(combat)
+    self.displayedCombat = combat
+
     if not self.mainFrame or not self.mainFrame.logText then
         return
-    end
-
-    if combat == self.currentCombat then
-        self.selectedCombatKind = "current"
-        self.selectedCombatIndex = nil
     end
 
     self.mainFrame.logText:Clear()
@@ -1268,6 +1277,12 @@ function RLHelper:DisplayCombat(combat)
     end
 
     self:RefreshCombatListOverlay()
+end
+
+function RLHelper:ShowCurrentCombat()
+    self.selectedCombatKind = "current"
+    self.selectedCombatIndex = nil
+    self:DisplayCombat(self.currentCombat)
 end
 
 function RLHelper:LayoutMainFrame()

@@ -44,6 +44,7 @@ describe("Боевая система", function()
             firstEnemy = nil,
             isBoss = false
         }
+        RLHelper.displayedCombat = RLHelper.currentCombat
         RLHelper.combatHistory = {}
         RLHelper.DisplayCombat = function()
         end

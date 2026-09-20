@@ -20,6 +20,7 @@ release:
 	cp Core.lua release/RLHelper
 	cp -r modules release/RLHelper
 	cp -r lib release/RLHelper
+	cp -r data release/RLHelper
 	cp -r Libs release/RLHelper
 	cd release && zip -r ../RLHelper.zip .
 

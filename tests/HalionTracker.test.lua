@@ -502,51 +502,152 @@ describe('HalionTracker', function()
             "%s окно первого урона по Халиону в свету закрыто: %s", date("%H:%M:%S", GetTime()), "Героизм"))
     end)
 
-    it('starts a 45 second pull on phase two yell after second meteor when enabled', function()
-        local pullDurations = {}
-        RLHelper.IsHalionPhaseTwoEntryTimerEnabled = function()
-            return true
-        end
-        RLHelper.StartDBMPullCommand = function(_, duration)
-            table.insert(pullDurations, duration)
-        end
+    describe('phase two entry countdown', function()
+        local pulls, timers, enabled, now, difficulty, dynamicDifficulty
+        local originalTimerApi, originalGetInstanceInfo
 
-        HalionTracker:CHAT_MSG_MONSTER_YELL("Небеса в огне!")
-        HalionTracker:CHAT_MSG_MONSTER_YELL("The heavens burn!")
-        HalionTracker:CHAT_MSG_MONSTER_YELL("В мире сумерек вы найдете лишь страдания! Входите, если посмеете!")
-        HalionTracker:CHAT_MSG_MONSTER_YELL("You will find only suffering within the realm of twilight! Enter if you dare!")
-
-        assert.are.same({ 45 }, pullDurations)
-    end)
-
-    it('does not start phase two entry timer before second meteor', function()
-        local pullDurations = {}
-        RLHelper.IsHalionPhaseTwoEntryTimerEnabled = function()
-            return true
-        end
-        RLHelper.StartDBMPullCommand = function(_, duration)
-            table.insert(pullDurations, duration)
+        local function yell(message)
+            HalionTracker:CHAT_MSG_MONSTER_YELL("CHAT_MSG_MONSTER_YELL", message, "Халион")
         end
 
-        HalionTracker:CHAT_MSG_MONSTER_YELL("Небеса в огне!")
-        HalionTracker:CHAT_MSG_MONSTER_YELL("В мире сумерек вы найдете лишь страдания! Входите, если посмеете!")
-
-        assert.are.same({}, pullDurations)
-    end)
-
-    it('does not start phase two entry timer when option is disabled', function()
-        local pullDurations = {}
-        RLHelper.IsHalionPhaseTwoEntryTimerEnabled = function()
-            return false
-        end
-        RLHelper.StartDBMPullCommand = function(_, duration)
-            table.insert(pullDurations, duration)
+        local function enterPhaseTwo()
+            yell("Небеса в огне!")
+            yell("Небеса в огне!")
+            yell("В мире сумерек вы найдете лишь страдания! Входите, если посмеете!")
         end
 
-        HalionTracker:CHAT_MSG_MONSTER_YELL("Небеса в огне!")
-        HalionTracker:CHAT_MSG_MONSTER_YELL("Небеса в огне!")
-        HalionTracker:CHAT_MSG_MONSTER_YELL("В мире сумерек вы найдете лишь страдания! Входите, если посмеете!")
+        local function advance(seconds)
+            now = now + seconds
+            for _, timer in ipairs(timers) do
+                if not timer.cancelled and not timer.fired and timer.at <= now then
+                    timer.fired = true
+                    timer.callback()
+                end
+            end
+        end
 
-        assert.are.same({}, pullDurations)
+        before_each(function()
+            pulls, timers, enabled, now, difficulty = {}, {}, true, 0, 4
+            dynamicDifficulty = nil
+            originalTimerApi = RLHelper.C_Timer
+            originalGetInstanceInfo = _G.GetInstanceInfo
+            _G.GetInstanceInfo = function()
+                return "Рубиновое святилище", "raid", difficulty, "", 25,
+                    dynamicDifficulty, dynamicDifficulty ~= nil
+            end
+            RLHelper.C_Timer = {
+                NewTimer = function(delay, callback)
+                    local timer = { at = now + delay, callback = callback }
+                    function timer:Cancel()
+                        self.cancelled = true
+                    end
+                    table.insert(timers, timer)
+                    return timer
+                end
+            }
+            RLHelper.IsHalionPhaseTwoEntryTimerEnabled = function()
+                return enabled
+            end
+            RLHelper.StartDBMPullCommand = function(_, duration)
+                table.insert(pulls, { at = now, duration = duration })
+            end
+        end)
+
+        after_each(function()
+            HalionTracker:reset()
+            RLHelper.C_Timer = originalTimerApi
+            _G.GetInstanceInfo = originalGetInstanceInfo
+        end)
+
+        it('finishes at phase two +45 on heroic without waiting for the late cutter yell', function()
+            enterPhaseTwo()
+            advance(29)
+            assert.are.same({}, pulls)
+            advance(1)
+            assert.are.same({ { at = 30, duration = 15 } }, pulls)
+            advance(15)
+            yell("Остерегайтесь теней!")
+            assert.are.equal(1, #pulls)
+            assert.are.equal(now, pulls[1].at + pulls[1].duration)
+        end)
+
+        it('finishes at phase two +50 on normal and recognizes English yells', function()
+            difficulty = 2
+            yell("The heavens burn!")
+            yell("The heavens burn!")
+            yell("You will find only suffering within the realm of twilight! Enter if you dare!")
+            advance(34)
+            assert.are.same({}, pulls)
+            advance(1)
+            assert.are.same({ { at = 35, duration = 15 } }, pulls)
+        end)
+
+        it('uses heroic timing for dynamic heroic raid difficulty', function()
+            difficulty, dynamicDifficulty = 2, 1
+            enterPhaseTwo()
+            advance(30)
+            assert.are.same({ { at = 30, duration = 15 } }, pulls)
+        end)
+
+        it('does not reschedule on duplicate phase or cutter yells', function()
+            enterPhaseTwo()
+            advance(10)
+            yell("В мире сумерек вы найдете лишь страдания! Входите, если посмеете!")
+            yell("Остерегайтесь теней!")
+            advance(20)
+            assert.are.same({ { at = 30, duration = 15 } }, pulls)
+            assert.are.equal(1, #timers)
+        end)
+
+        it('requires two meteors before phase two and ignores later meteors', function()
+            yell("Небеса в огне!")
+            yell("В мире сумерек вы найдете лишь страдания! Входите, если посмеете!")
+            yell("Небеса в огне!")
+            yell("Остерегайтесь теней!")
+            advance(60)
+            assert.are.same({}, pulls)
+        end)
+
+        it('does not schedule when disabled or start if disabled while waiting', function()
+            enabled = false
+            enterPhaseTwo()
+            assert.are.equal(0, #timers)
+            HalionTracker:reset()
+            enabled = true
+            enterPhaseTwo()
+            enabled = false
+            advance(30)
+            assert.are.same({}, pulls)
+        end)
+
+        it('cancels pending work and resets meteor counting between combats', function()
+            enterPhaseTwo()
+            local oldTimer = timers[1]
+            advance(10)
+            HalionTracker:reset()
+            assert.is_true(oldTimer.cancelled)
+            oldTimer.callback()
+            advance(20)
+            assert.are.same({}, pulls)
+
+            yell("Небеса в огне!")
+            yell("В мире сумерек вы найдете лишь страдания! Входите, если посмеете!")
+            advance(30)
+            assert.are.same({}, pulls)
+
+            HalionTracker:reset()
+            enterPhaseTwo()
+            oldTimer.callback()
+            advance(30)
+            assert.are.same({ { at = 90, duration = 15 } }, pulls)
+        end)
+
+        it('cancels pending work when the module is disabled', function()
+            enterPhaseTwo()
+            HalionTracker:OnDisable()
+            advance(30)
+            assert.are.same({}, pulls)
+            assert.is_true(timers[1].cancelled)
+        end)
     end)
 end)

@@ -34,7 +34,8 @@ local pelena25hm = 75486
 local HEROISM = 32182
 local BLOODLUST = 2825
 local MAX_DMG_EVENTS_PER_PLAYER = 10
-local PHASE_TWO_ENTRY_TIMER_DURATION = 45
+-- DBM-RS: first cutters end 30/35 + 5 + 10 seconds after the phase-two yell.
+local PHASE_TWO_ENTRY_TIMER_DURATION = 15
 -- 74792 - metka
 
 local MATERIALITY_AURAS = {
@@ -173,16 +174,24 @@ function HalionTracker:OnEnable()
 end
 
 function HalionTracker:reset()
+    if self.phaseTwoEntryTimer then
+        self.phaseTwoEntryTimer:Cancel()
+        self.phaseTwoEntryTimer = nil
+    end
     self.dmgEvents = {}
     self.healEvents = {}
     self.firstEntered = false
     self.damageMetersReset = false
     self.materialityPullStarted = false
-    self.phaseTwoEntryTimerStarted = false
+    self.phaseTwoStarted = false
     self.meteorYellCount = 0
     self.bossName = nil
     self.firstLightDamageWindowOpen = false
     self.firstLightDamageLogged = false
+end
+
+function HalionTracker:OnDisable()
+    self:reset()
 end
 
 function HalionTracker:debugReset(message, ...)
@@ -350,22 +359,36 @@ function HalionTracker:trackFirstLightHalionDamage(event, log)
     end
 end
 
-function HalionTracker:CHAT_MSG_MONSTER_YELL(message)
+function HalionTracker:CHAT_MSG_MONSTER_YELL(eventName, message)
     if METEOR_YELLS[message] then
         self.meteorYellCount = (self.meteorYellCount or 0) + 1
         return
     end
 
-    if not PHASE_TWO_YELLS[message] then
+    if not PHASE_TWO_YELLS[message] or self.phaseTwoStarted then
         return
     end
 
-    if type(RLHelper.StartDBMPullCommand) ~= "function" or not isHalionPhaseTwoEntryTimerEnabled() or self.phaseTwoEntryTimerStarted or (self.meteorYellCount or 0) < 2 then
+    self.phaseTwoStarted = true
+    if type(RLHelper.StartDBMPullCommand) ~= "function" or not isHalionPhaseTwoEntryTimerEnabled() or (self.meteorYellCount or 0) < 2 then
         return
     end
 
-    self.phaseTwoEntryTimerStarted = true
-    RLHelper:StartDBMPullCommand(PHASE_TWO_ENTRY_TIMER_DURATION)
+    local _, _, difficulty, _, _, dynamicDifficulty, isDynamic = GetInstanceInfo()
+    local heroic = difficulty == 3 or difficulty == 4 or (isDynamic and dynamicDifficulty == 1)
+    local timerApi = RLHelper.C_Timer or C_Timer
+    local handle
+    handle = timerApi.NewTimer(heroic and 30 or 35, function()
+        if self.phaseTwoEntryTimer ~= handle then
+            return
+        end
+
+        self.phaseTwoEntryTimer = nil
+        if isHalionPhaseTwoEntryTimerEnabled() then
+            RLHelper:StartDBMPullCommand(PHASE_TWO_ENTRY_TIMER_DURATION)
+        end
+    end)
+    self.phaseTwoEntryTimer = handle
 end
 
 function HalionTracker:logDmg(playerName, event)

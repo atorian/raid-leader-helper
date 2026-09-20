@@ -347,7 +347,8 @@ local function isTwilightCutter(spellId)
     return spellId >= pelena10 and spellId <= pelena25hm
 end
 
-function HalionTracker:handleEvent(event, log)
+function HalionTracker:handleEvent(event)
+    local log = self.log
     self:RememberBossName(event)
     self:debugMateriality(event)
     self:tryStartPullOnMaterialityDrop(event)

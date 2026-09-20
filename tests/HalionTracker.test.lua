@@ -5,7 +5,7 @@ local HalionTracker = require("../modules/bosses/HalionTracker")
 local Builder = require("../utils/CombatEventBuilder")
 
 local function dispatch(module, ...)
-    module:handleEvent(blizzardEvent(select(2, ...)), module.log)
+    module:handleEvent(blizzardEvent(select(2, ...)))
 end
 
 describe('HalionTracker', function()

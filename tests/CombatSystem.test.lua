@@ -4,6 +4,7 @@ require('../lib/CombatFilters')
 require('../data/BossIds')
 local RLHelper = require('../Core')
 local SpellTracker = require('../modules/SpellTracker')
+local HalionTracker = require('../modules/bosses/HalionTracker')
 local Builder = require('../utils/CombatEventBuilder')
 
 local function count(tbl)
@@ -306,6 +307,25 @@ describe("Боевая система", function()
         assert.is_false(RLHelper.inCombat)
         assert.are.same({ string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", GetTime()),
             "Дк", "Interface\\Icons\\Spell_DeathKnight_BladedArmor", "Рога") }, RLHelper.currentCombat.messages)
+    end)
+
+    it("logs the first Twilight Shroud target through the Core dispatcher", function()
+        RLHelper.currentInstanceId = 724
+        HalionTracker:OnInitialize()
+        HalionTracker:reset()
+        setBossModules({ HalionTracker })
+
+        assert.has_no.errors(function()
+            RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Халион"):ToPlayer("Игрок1")
+                :SpellDamage(75483, "Пелена Тени", 1000):Build())
+            RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Халион"):ToPlayer("Игрок2")
+                :SpellDamage(75483, "Пелена Тени", 1000):Build())
+        end)
+
+        local message = string.format("%s |cFFFFFFFF%s|r зашел во тьму первый",
+            date("%H:%M:%S", GetTime()), "Игрок1")
+        assert.are.same({ message }, RLHelper.currentCombat.messages)
+        assert.are.same({ message }, displayedMessages)
     end)
 
     it("не завершает бой сразу по PLAYER_REGEN_ENABLED", function()

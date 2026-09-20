@@ -25,6 +25,8 @@ local LUZHA = 75949
 local LEZVIA25OB = 77844
 local LEZVIA10HM = 77845
 local LEZVIA25HM = 77846
+local LIGHT_HALION_ID = 39863
+local DARK_HALION_ID = 40142
 local pelena10 = 75483
 local pelena25 = 75484
 local pelena10hm = 75485
@@ -70,6 +72,14 @@ local HEROISM_SPELLS = {
     [BLOODLUST] = true
 }
 
+local DAMAGE_EVENTS = {
+    SWING_DAMAGE = true,
+    RANGE_DAMAGE = true,
+    SPELL_DAMAGE = true,
+    SPELL_PERIODIC_DAMAGE = true,
+    DAMAGE_SHIELD = true
+}
+
 local PHASE_TWO_YELLS = {
     ["В мире сумерек вы найдете лишь страдания! Входите, если посмеете!"] = true,
     ["You will find only suffering within the realm of twilight! Enter if you dare!"] = true
@@ -94,6 +104,18 @@ end
 
 local function isEnemy(flags)
     return bit.band(flags or 0, RLHelper.ENEMY_FLAGS or 0xa48) > 0
+end
+
+local function isPlayer(flags)
+    return bit.band(flags or 0, 0x7) > 0
+end
+
+local function creatureIdFromGuid(guid)
+    if type(RLHelper.GetCreatureId) == "function" then
+        return RLHelper.GetCreatureId(guid)
+    end
+
+    return type(guid) == "string" and tonumber(guid:sub(9, 12), 16) or nil
 end
 
 local function prepareSkadaBossSegment(set, mobname, gotboss, suffix)
@@ -159,6 +181,8 @@ function HalionTracker:reset()
     self.phaseTwoEntryTimerStarted = false
     self.meteorYellCount = 0
     self.bossName = nil
+    self.firstLightDamageWindowOpen = false
+    self.firstLightDamageLogged = false
 end
 
 function HalionTracker:debugReset(message, ...)
@@ -290,6 +314,42 @@ function HalionTracker:tryStartPullOnMaterialityDrop(event)
     RLHelper:StartDBMPullCommand(15)
 end
 
+local function formatFirstLightHalionDamage(ts, name)
+    return string.format("%s |cFFFFFFFF%s|r первый ударил Халиона в свету", date("%H:%M:%S", ts), name)
+end
+
+local function formatFirstLightDamageWindowClosed(ts, spellName)
+    return string.format("%s окно первого урона по Халиону в свету закрыто: %s", date("%H:%M:%S", ts), spellName)
+end
+
+function HalionTracker:trackFirstLightHalionDamage(event, log)
+    if event.event == "SPELL_AURA_APPLIED" and event.spellId == 74835 and creatureIdFromGuid(event.destGUID) == DARK_HALION_ID then
+        self.firstLightDamageWindowOpen = true
+        self.firstLightDamageLogged = false
+        return
+    end
+
+    if not self.firstLightDamageWindowOpen then
+        return
+    end
+
+    if event.event == "SPELL_AURA_APPLIED" and event.spellId == 74831 and creatureIdFromGuid(event.destGUID) == LIGHT_HALION_ID then
+        self.firstLightDamageWindowOpen = false
+        return
+    end
+
+    if event.event == "SPELL_AURA_APPLIED" and HEROISM_SPELLS[event.spellId] then
+        self.firstLightDamageWindowOpen = false
+        log(formatFirstLightDamageWindowClosed(event.timestamp, event.spellName))
+        return
+    end
+
+    if not self.firstLightDamageLogged and DAMAGE_EVENTS[event.event] and isPlayer(event.sourceFlags) and creatureIdFromGuid(event.destGUID) == LIGHT_HALION_ID then
+        self.firstLightDamageLogged = true
+        log(formatFirstLightHalionDamage(event.timestamp, event.sourceName))
+    end
+end
+
 function HalionTracker:CHAT_MSG_MONSTER_YELL(message)
     if METEOR_YELLS[message] then
         self.meteorYellCount = (self.meteorYellCount or 0) + 1
@@ -335,10 +395,6 @@ function HalionTracker:isFirstInDarkness(event, log)
     end
 end
 
-local function isPlayer(flags)
-    return bit.band(flags or 0, 0x7) > 0
-end
-
 -- todo: rename this method
 local function isTwilightCutter(spellId)
     if not spellId then
@@ -352,6 +408,7 @@ function HalionTracker:handleEvent(event)
     self:RememberBossName(event)
     self:debugMateriality(event)
     self:tryStartPullOnMaterialityDrop(event)
+    self:trackFirstLightHalionDamage(event, log)
 
     if isPlayer(event.destFlags) then
         self:tryResetDamageMetersOnHeroism(event)

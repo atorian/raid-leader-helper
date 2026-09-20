@@ -8,6 +8,16 @@ local function dispatch(module, ...)
     module:handleEvent(blizzardEvent(select(2, ...)))
 end
 
+local function npcGuid(npcId, spawnId)
+    return string.format("0xF13000%04X%06X", npcId, spawnId or npcId)
+end
+
+local function dispatchWithGuids(module, event, sourceGUID, destGUID)
+    event[4] = sourceGUID or event[4]
+    event[7] = destGUID or event[7]
+    dispatch(module, unpack(event))
+end
+
 describe('HalionTracker', function()
     local log
     local originalDetails
@@ -450,6 +460,46 @@ describe('HalionTracker', function()
             :ApplyAura(74831, "Материальность", "DEBUFF"):Build())
 
         assert.are.same({}, pullDurations)
+    end)
+
+    it('logs the first player damage to light Halion after dark materiality reaches 10 percent', function()
+        dispatchWithGuids(HalionTracker, { Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+            :ApplyAura(74835, "Материальность", "DEBUFF"):Build() }, npcGuid(40142), npcGuid(40142))
+
+        dispatchWithGuids(HalionTracker, { Builder:New():FromPlayer("Игрок1"):ToEnemy("Халион")
+            :SpellDamage(12345, "Праведная месть", 777):Build() }, nil, npcGuid(39863))
+        dispatchWithGuids(HalionTracker, { Builder:New():FromPlayer("Игрок2"):ToEnemy("Халион")
+            :SpellDamage(67890, "Второй удар", 888):Build() }, nil, npcGuid(39863))
+
+        assert.spy(log).was_called(1)
+        assert.spy(log).was_called_with(string.format(
+            "%s |cFFFFFFFF%s|r первый ударил Халиона в свету", date("%H:%M:%S", GetTime()), "Игрок1"))
+    end)
+
+    it('stops tracking first light Halion damage when light Halion reaches full physical materiality', function()
+        dispatchWithGuids(HalionTracker, { Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+            :ApplyAura(74835, "Материальность", "DEBUFF"):Build() }, npcGuid(40142), npcGuid(40142))
+        dispatchWithGuids(HalionTracker, { Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+            :ApplyAura(74831, "Материальность", "BUFF"):Build() }, npcGuid(39863), npcGuid(39863))
+
+        dispatchWithGuids(HalionTracker, { Builder:New():FromPlayer("Игрок1"):ToEnemy("Халион")
+            :SpellDamage(12345, "Праведная месть", 777):Build() }, nil, npcGuid(39863))
+
+        assert.spy(log).was_not_called()
+    end)
+
+    it('closes first light Halion damage tracking on heroism and logs the closing aura', function()
+        dispatchWithGuids(HalionTracker, { Builder:New():FromEnemy("Халион"):ToEnemy("Халион")
+            :ApplyAura(74835, "Материальность", "DEBUFF"):Build() }, npcGuid(40142), npcGuid(40142))
+
+        dispatch(HalionTracker, Builder:New():FromPlayer("Шаман"):ToPlayer("Игрок1")
+            :ApplyAura(32182, "Героизм"):Build())
+        dispatchWithGuids(HalionTracker, { Builder:New():FromPlayer("Игрок1"):ToEnemy("Халион")
+            :SpellDamage(12345, "Праведная месть", 777):Build() }, nil, npcGuid(39863))
+
+        assert.spy(log).was_called(1)
+        assert.spy(log).was_called_with(string.format(
+            "%s окно первого урона по Халиону в свету закрыто: %s", date("%H:%M:%S", GetTime()), "Героизм"))
     end)
 
     it('starts a 45 second pull on phase two yell after second meteor when enabled', function()

@@ -193,7 +193,7 @@ describe("Misdirection Tracker", function()
             date("%H:%M:%S", GetTime() + 1), misdirect))
     end)
 
-    it("clears hunter pull on any 35079 event and logs debug context", function()
+    it("finishes hunter misdirection only when the 35079 aura is removed", function()
         RLHelper.inCombat = true
 
         dispatch(MisdirectionTracker, Builder:New():FromPlayer("Охотник"):ToPlayer("Танк")
@@ -203,15 +203,24 @@ describe("Misdirection Tracker", function()
         dispatch(MisdirectionTracker, Builder:New(GetTime() + 2):FromPlayer("Охотник"):ToEnemy("Враг")
             :SpellDamage(49050, "Прицельный выстрел", 1000):Build())
 
-        assert.spy(RLHelper.Debug).was_called_with(RLHelper,
-            "MisdirectionTracker 35079 event=SPELL_AURA_APPLIED source='Охотник' dest='Охотник'")
         assert.spy(MisdirectionTracker.log).was_called(2)
         assert.spy(MisdirectionTracker.log).was_called_with(string.format(
             "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк",
             date("%H:%M:%S", GetTime()), misdirect))
         assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Враг",
+            date("%H:%M:%S", GetTime() + 2), aimedshot))
+        assert.spy(MisdirectionTracker.log).was_not_called_with(string.format(
             "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк напул окончен 0",
             date("%H:%M:%S", GetTime() + 1), misdirect))
+
+        dispatch(MisdirectionTracker, Builder:New(GetTime() + 4):FromPlayer("Охотник"):ToPlayer("Танк")
+            :RemoveAura(35079, "Перенаправление"):Build())
+
+        assert.spy(MisdirectionTracker.log).was_called(3)
+        assert.spy(MisdirectionTracker.log).was_called_with(string.format(
+            "%s |cFFFFFFFFОхотник|r |T%s:24:24:0:-2|t Танк напул окончен 1000",
+            date("%H:%M:%S", GetTime() + 4), misdirect))
     end)
 
     it("counts untracked hunter damage in the summary without logging a visible damage row", function()

@@ -92,7 +92,7 @@ local function debugMisdirectionAura(eventData)
 end
 
 function MisdirectionTracker:handleEvent(eventData)
-    if eventData.spellId == MISDIRECTION_SPELL_ID then
+    if eventData.event == "SPELL_AURA_REMOVED" and eventData.spellId == MISDIRECTION_SPELL_ID then
         debugMisdirectionAura(eventData)
         self:GenerateReport(eventData.sourceName, eventData.timestamp)
         return

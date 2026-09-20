@@ -6,8 +6,8 @@ Other versions of WOW are out of scope.
 
 ## Branching
 
-- Use Trunk Based Development: make changes directly on the `main` branch. Do not create or switch to feature branches unless explicitly requested.
-- If work needs to diverge from `main` and is incomplete, keep it behind a feature flag so `main` remains releasable.
+- Use Trunk Based Development: make changes directly on the `master` branch. Do not create or switch to feature branches unless explicitly requested.
+- If work needs to diverge from `master` and is incomplete, keep it behind a feature flag so `master` remains releasable.
 
 ## Valid Data Source
 

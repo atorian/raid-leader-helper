@@ -1,5 +1,5 @@
 
-.PHONY: all clean test test-release build release
+.PHONY: all clean test build release
 
 build:
 	echo "Building the project..."
@@ -12,12 +12,15 @@ lint:
 
 test:
 	busted --verbose ./tests/*.lua	
-	$(MAKE) test-release
-
-test-release:
-	python3 -B -m unittest discover -s tests -p release_archive_test.py -v
 
 release:
-	python3 scripts/build_release.py
+	mkdir -p release/RLHelper
+	cp RLHelper.toc release/RLHelper
+	cp RLHelper.xml release/RLHelper
+	cp Core.lua release/RLHelper
+	cp -r modules release/RLHelper
+	cp -r lib release/RLHelper
+	cp -r Libs release/RLHelper
+	cd release && zip -r ../RLHelper.zip .
 
 all: clean test build

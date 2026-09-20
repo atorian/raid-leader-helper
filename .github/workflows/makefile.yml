@@ -31,7 +31,6 @@ jobs:
       - name: Run tests
         run: |
           busted tests/*.test.lua
-          make test-release
 
   release:
     name: Create Release

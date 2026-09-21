@@ -74,6 +74,7 @@ function MisdirectionTracker:OnEnable()
 end
 
 function MisdirectionTracker:OnInitialize()
+    self:RegisterMessage("RLHelper_CombatEnding", "finishJournalPulls")
     self:RegisterMessage("RLHelper_CombatEnded", "reset")
     self:RegisterMessage("RLHelper_Demo", "demo")
     self.log = function(...)
@@ -84,6 +85,65 @@ end
 function MisdirectionTracker:reset()
     activePulls = {}
     pullDamage = {}
+    self.journalPulls = {}
+    self.nextJournalPullId = 1
+end
+
+function MisdirectionTracker:startJournalPull(pull)
+    if pull.started then return end
+    pull.started = true
+    self.log(RLHelperJournal.Copy(pull.entry))
+end
+
+function MisdirectionTracker:finishJournalPull(guid, timestamp)
+    local pull = self.journalPulls[guid]
+    if not pull then return end
+    self:startJournalPull(pull)
+    self.log(RLHelperJournal.Create("MISDIRECTION_SUMMARY", { timestamp = timestamp }, "INFO", {
+        pullId = pull.entry.pullId, source = pull.entry.source, target = pull.entry.target,
+        spellId = pull.entry.spellId, amount = pull.totalDamage
+    }))
+    self.journalPulls[guid] = nil
+end
+
+function MisdirectionTracker:finishJournalPulls()
+    if not RLHelper.journalV2Enabled then return end
+    local pending = {}
+    for guid, pull in pairs(self.journalPulls or {}) do
+        pending[#pending + 1] = { guid = guid, id = pull.entry.pullId }
+    end
+    table.sort(pending, function(a, b) return a.id < b.id end)
+    for _, pull in ipairs(pending) do self:finishJournalPull(pull.guid, time()) end
+end
+
+function MisdirectionTracker:handleJournalEvent(event)
+    self.journalPulls = self.journalPulls or {}
+    self.nextJournalPullId = self.nextJournalPullId or 1
+    local guid = event.sourceGUID
+    if event.event == "SPELL_CAST_SUCCESS" and
+        (event.spellId == MISDIRECTION_START_SPELL_ID or event.spellId == SMALL_TRICKS_START_SPELL_ID) then
+        if not guid then return end
+        self:finishJournalPull(guid, event.timestamp)
+        local pull = {
+            entry = RLHelperJournal.Create("MISDIRECTION_START", event, "INFO", { pullId = self.nextJournalPullId }),
+            totalDamage = 0
+        }
+        self.nextJournalPullId = self.nextJournalPullId + 1
+        self.journalPulls[guid] = pull
+        if RLHelper.inCombat then self:startJournalPull(pull) end
+        return
+    end
+    if event.event == "SPELL_AURA_REMOVED" and
+        (event.spellId == MISDIRECTION_SPELL_ID or event.spellId == SMALL_TRICKS_SPELL_ID) then
+        local owner = self.journalPulls[guid] and guid or event.destGUID
+        if owner then self:finishJournalPull(owner, event.timestamp) end
+        return
+    end
+    local pull = guid and self.journalPulls[guid]
+    if not pull or not HUNTER_DAMAGE_EVENTS[event.event] or event.timestamp < pull.entry.timestamp then return end
+    self:startJournalPull(pull)
+    pull.totalDamage = pull.totalDamage + (event.amount or 0)
+    self.log(RLHelperJournal.Create("MISDIRECTION_DAMAGE", event, "INFO", { pullId = pull.entry.pullId }))
 end
 
 local function debugMisdirectionAura(eventData)
@@ -92,6 +152,7 @@ local function debugMisdirectionAura(eventData)
 end
 
 function MisdirectionTracker:handleEvent(eventData)
+    if RLHelper.journalV2Enabled then return self:handleJournalEvent(eventData) end
     if eventData.event == "SPELL_AURA_REMOVED" and eventData.spellId == MISDIRECTION_SPELL_ID then
         debugMisdirectionAura(eventData)
         self:GenerateReport(eventData.sourceName, eventData.timestamp)

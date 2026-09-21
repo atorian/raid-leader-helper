@@ -38,7 +38,7 @@ end
 
 function LichKingTracker:handleEvent(event)
     if event.event == 'SPELL_CAST_SUCCESS' and event.spellId == RAGING_SPIRIT and event.destName then
-        self.log(formatRagingSpirit(event.timestamp, event.destName))
+        RLHelperJournal.Log(RLHelper, self.log, "RAGING_SPIRIT", event, formatRagingSpirit(event.timestamp, event.destName))
         return
     end
 
@@ -52,7 +52,8 @@ function LichKingTracker:handleEvent(event)
     end
 
     self.lastShadowTrapTimestamp = event.timestamp
-    self.log(formatShadowTrap(event.timestamp, event.destName))
+    RLHelperJournal.Log(RLHelper, self.log, "SHADOW_TRAP", event,
+        formatShadowTrap(event.timestamp, event.destName), "TACTIC_VIOLATION")
 end
 
 function LichKingTracker:demo()

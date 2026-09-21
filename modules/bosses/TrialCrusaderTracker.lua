@@ -387,7 +387,8 @@ end
 
 function TrialCrusaderTracker:handleEvent(event)
     if event.event == "SPELL_DAMAGE" and event.spellId == ICEHOWL_TRAMPLE and event.destName then
-        self.log(formatIcehowlTrample(event.timestamp, event.destName))
+        RLHelperJournal.Log(RLHelper, self.log, "TRAMPLE_HIT", event,
+            formatIcehowlTrample(event.timestamp, event.destName), "TACTIC_VIOLATION")
     end
 
     if self:AreChampionMarksDone() then

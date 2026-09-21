@@ -44,7 +44,8 @@ function BloodQueenTracker:handleEvent(event)
         return
     end
 
-    self.log(formatSplashHit(event.timestamp, event.sourceName or "Unknown", event.destName or "Unknown"))
+    RLHelperJournal.Log(RLHelper, self.log, "BLOODBOLT_SPLASH", event,
+        formatSplashHit(event.timestamp, event.sourceName or "Unknown", event.destName or "Unknown"), "TACTIC_VIOLATION")
 end
 
 function BloodQueenTracker:demo()

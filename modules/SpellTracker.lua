@@ -11,6 +11,19 @@ local HOLY_WRATH = 48817
 local ICECROWN_CITADEL = 631
 local VALITHRIA_DREAMWALKER = "Валитрия Сноходица"
 local LICH_KING = "Король-лич"
+local TAUNTS = {
+    [355] = true, [694] = true, [1161] = true, [49560] = true, [51399] = true,
+    [56222] = true, [62124] = true, [31789] = true, [5209] = true
+}
+
+function SppellTracker:logSpell(event, legacyMessage, kind)
+    kind = kind or (TAUNTS[event.spellId] and "TAUNT" or "SPELL_USE")
+    local severity = "INFO"
+    if RLHelper.journalV2Enabled and kind == "TAUNT" then
+        severity = RLHelperJournal.TauntType(event.sourceGUID)
+    end
+    RLHelperJournal.Log(RLHelper, self.log, kind, event, legacyMessage, severity)
+end
 function SppellTracker:OnEnable()
     RLHelper:Debug("RL Быдло: TauntTracker включен")
     firstDamageDone = false
@@ -142,7 +155,9 @@ function SppellTracker:trackHandOfReckoningTarget(eventData)
         spellIcon = TRACKED_SPELLS[eventData.spellId],
         sourceGUID = eventData.sourceGUID,
         sourceName = eventData.sourceName,
-        destName = eventData.destName
+        destName = eventData.destName,
+        destGUID = eventData.destGUID,
+        spellId = eventData.spellId
     }
 end
 
@@ -159,7 +174,7 @@ function SppellTracker:tryLogHandOfReckoningTarget(unitId)
     local targetUnit = unitId .. "target"
     if UnitExists(targetUnit) and UnitGUID(targetUnit) == pending.sourceGUID then
         self:clearPendingHandOfReckoning(UnitGUID(unitId))
-        self.log(formatSpellCast(pending.timestamp, pending.sourceName, pending.spellIcon, pending.destName))
+        self:logSpell(pending, formatSpellCast(pending.timestamp, pending.sourceName, pending.spellIcon, pending.destName))
         return true
     end
 
@@ -175,7 +190,8 @@ function SppellTracker:handleEvent(eventData)
         if isPlayer(eventData.sourceFlags) and isEnemy(eventData.destFlags) then
             if not CombatFilters or not CombatFilters:IsIgnoredCombatEnemy(eventData.destName) then
                 firstDamageDone = true
-                self.log(formatFirstHit(eventData.timestamp, eventData.sourceName, eventData.destName))
+                RLHelperJournal.Log(RLHelper, self.log, "FIRST_DAMAGE", eventData,
+                    formatFirstHit(eventData.timestamp, eventData.sourceName, eventData.destName))
             end
         end
     end
@@ -183,7 +199,8 @@ function SppellTracker:handleEvent(eventData)
     if not firstValithriaHealDone and (eventData.event == "SPELL_HEAL" or eventData.event == "SPELL_PERIODIC_HEAL") then
         if isPlayer(eventData.sourceFlags) and eventData.destName == VALITHRIA_DREAMWALKER and (eventData.amount or 0) > 0 then
             firstValithriaHealDone = true
-            self.log(formatFirstHeal(eventData.timestamp, eventData.sourceName, eventData.destName))
+            RLHelperJournal.Log(RLHelper, self.log, "FIRST_HEAL", eventData,
+                formatFirstHeal(eventData.timestamp, eventData.sourceName, eventData.destName))
         end
     end
 
@@ -192,26 +209,26 @@ function SppellTracker:handleEvent(eventData)
     end
 
     if eventData.event == "SPELL_DISPEL" and TRACKED_DISPEL_SPELLS[eventData.spellId] then
-        self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_DISPEL_SPELLS[eventData.spellId],
-            eventData.destName))
+        self:logSpell(eventData, formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_DISPEL_SPELLS[eventData.spellId],
+            eventData.destName), "DISPEL")
         return
     end
 
     if eventData.event == "SPELL_RESURRECT" and TRACKED_SPELLS[eventData.spellId] then
-        self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
-            eventData.destName))
+        self:logSpell(eventData, formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
+            eventData.destName), "RESURRECT")
         return
     end
 
     if eventData.event == "SPELL_CAST_SUCCESS" and TRACKED_CAST_SUCCESS_SPELLS[eventData.spellId] and
         TRACKED_SPELLS[eventData.spellId] then
-        self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
+        self:logSpell(eventData, formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
             eventData.destName))
         return
     end
 
     if eventData.event == "SPELL_DAMAGE" and eventData.spellId == HOLY_WRATH and isLichKingCombat() then
-        self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
+        self:logSpell(eventData, formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
             eventData.destName))
         return
     end
@@ -221,7 +238,7 @@ function SppellTracker:handleEvent(eventData)
         if eventData.spellId == HAND_OF_RECKONING then
             self:trackHandOfReckoningTarget(eventData)
         else
-            self.log(formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
+            self:logSpell(eventData, formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
                 eventData.destName))
         end
         return

@@ -1,4 +1,5 @@
 local M = {}
+require('lib.Journal')
 
 -- Mock для AceEvent-3.0
 local AceEvent = {

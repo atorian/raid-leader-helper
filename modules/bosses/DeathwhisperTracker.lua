@@ -107,7 +107,9 @@ function DeathwhisperTracker:summarizeCombat()
         return
     end
 
-    self.log(formatSpiritHitSummary(time(), summary.total, summary.details))
+    RLHelperJournal.Log(RLHelper, self.log, "SPIRIT_SUMMARY", nil,
+        formatSpiritHitSummary(time(), summary.total, summary.details), "INFO",
+        { text = string.format("Духов взорвали: всего %s %s", summary.total, summary.details) })
 end
 
 function DeathwhisperTracker:sendSummaryToRaid()
@@ -140,24 +142,26 @@ end
 function DeathwhisperTracker:handleEvent(eventData)
     if eventData.event == "SPELL_CAST_SUCCESS" and eventData.spellId == LADY_DEATHWHISPER_DOMINATE_MIND and
         eventData.destName then
-        self.log(formatMindControl(eventData.timestamp, eventData.destName))
+        RLHelperJournal.Log(RLHelper, self.log, "MIND_CONTROL", eventData, formatMindControl(eventData.timestamp, eventData.destName))
         return
     end
 
     if isLadyDeathwhisperCombat() and eventData.spellId == CYCLONE and eventData.sourceName and eventData.destName then
         if eventData.event == "SPELL_AURA_APPLIED" then
-            self.log(formatCyclone(eventData.timestamp, eventData.sourceName, eventData.destName))
+            RLHelperJournal.Log(RLHelper, self.log, "CYCLONE_APPLIED", eventData,
+                formatCyclone(eventData.timestamp, eventData.sourceName, eventData.destName))
             return
         end
 
         if eventData.event == "SPELL_MISSED" or eventData.event == "DAMAGE_SHIELD_MISSED" then
-            self.log(formatCyclone(eventData.timestamp, eventData.sourceName, eventData.destName, eventData.missType))
+            RLHelperJournal.Log(RLHelper, self.log, "CYCLONE_MISSED", eventData,
+                formatCyclone(eventData.timestamp, eventData.sourceName, eventData.destName, eventData.missType))
             return
         end
     end
 
     if eventData.event == "SPELL_AURA_REMOVED" and eventData.spellId == LADY_DEATHWHISPER_MANA_BARRIER then
-        self.log(formatShieldBroken(eventData.timestamp))
+        RLHelperJournal.Log(RLHelper, self.log, "MANA_BARRIER_REMOVED", eventData, formatShieldBroken(eventData.timestamp))
         return
     end
 
@@ -178,7 +182,8 @@ function DeathwhisperTracker:handleEvent(eventData)
         self.report[eventData.destName] = self.report[eventData.destName] or 0
         self.report[eventData.destName] = self.report[eventData.destName] + 1
 
-        self.log(formatSpiritHit(eventData.timestamp, eventData.destName))
+        RLHelperJournal.Log(RLHelper, self.log, "SPIRIT_HIT", eventData,
+            formatSpiritHit(eventData.timestamp, eventData.destName), "TACTIC_VIOLATION")
         return
     end
 
@@ -188,7 +193,7 @@ function DeathwhisperTracker:handleEvent(eventData)
             return
         end
 
-        self.log(formatSpiritMiss(eventData.timestamp, eventData.destName))
+        RLHelperJournal.Log(RLHelper, self.log, "SPIRIT_MISSED", eventData, formatSpiritMiss(eventData.timestamp, eventData.destName))
         return
     end
 end

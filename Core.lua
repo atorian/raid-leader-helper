@@ -4,6 +4,7 @@ local IsGroupInCombat, InCombatLockdown = RLHelper.IsGroupInCombat, InCombatLock
 local GetUnitIdFromGUID = RLHelper.GetUnitIdFromGUID
 local CombatFilters = RLHelperCombatFilters
 local BossIds = RLHelperBossIds
+local Journal = RLHelperJournal
 
 local COMBAT_END_CHECK_INTERVAL = 1
 local COMBAT_END_GRACE = 3
@@ -60,6 +61,7 @@ local defaults = {
     profile = {
         enabled = true,
         debug = false,
+        journalV2 = false,
         pullCancelMessage = "ГАЛЯ, ОТМЕНА!",
         discordLink = "",
         gpAwardButtonsEnabled = false,
@@ -324,17 +326,7 @@ function RLHelper:OnInitialize()
 
     self.db = LibStub("AceDB-3.0"):New("RLHelperDB", defaults, true)
 
-    -- Load combat history from character DB
-    local combatHistory = self.db.char and self.db.char.combatHistory or {}
-    for _, combat in ipairs(combatHistory) do
-        table.insert(self.combatHistory, {
-            startTime = combat.startTime,
-            endTime = combat.endTime,
-            messages = combat.messages,
-            firstEnemy = combat.firstEnemy,
-            isBoss = combat.isBoss
-        })
-    end
+    self:InitializeJournal()
 
     self:RegisterChatCommand("rlh", "HandleSlashCommand")
 
@@ -345,6 +337,36 @@ function RLHelper:OnInitialize()
     self:RefreshMainFrameVisibility()
 
     self:Debug("RL Быдло: Аддон включен")
+end
+
+function RLHelper:InitializeJournal()
+    -- The choice is latched until /reload, including when the option changes mid-fight.
+    self.journalV2Enabled = self.db.profile.journalV2 == true
+    self.journalView = "ALL"
+    self.followNextCombat = false
+    self.combatHistory = {}
+    if self.journalV2Enabled then
+        local store = self.db.char.combatHistoryV2
+        if not store then
+            store = { schemaVersion = 2, nextCombatId = 1, combats = {} }
+            self.db.char.combatHistoryV2 = store
+        end
+        assert(store.schemaVersion == 2, "Unsupported combatHistoryV2 schema")
+        self.combatHistory = Journal.Copy(store.combats)
+        self.currentCombat = { events = {}, isBoss = false }
+        self.displayedCombat = self.currentCombat
+        return
+    end
+    local combatHistory = self.db.char and self.db.char.combatHistory or {}
+    for _, combat in ipairs(combatHistory) do
+        table.insert(self.combatHistory, {
+            startTime = combat.startTime,
+            endTime = combat.endTime,
+            messages = combat.messages,
+            firstEnemy = combat.firstEnemy,
+            isBoss = combat.isBoss
+        })
+    end
 end
 
 function RLHelper:OnEnable()
@@ -548,7 +570,7 @@ function RLHelper:StartCombat(reason)
     end
 
     self:EnsureCombatTicker()
-    if self:IsDisplayingCurrentCombat() then
+    if self:IsDisplayingCurrentCombat() or (self.journalV2Enabled and self.followNextCombat) then
         self:ShowCurrentCombat()
     end
     self:Debug("Combat started", reason)
@@ -556,6 +578,7 @@ end
 
 function RLHelper:ResetCombatState()
     local wasDisplayingCurrentCombat = self:IsDisplayingCurrentCombat()
+    self.followNextCombat = false
 
     self:StopCombatTicker()
     self.inCombat = false
@@ -569,6 +592,10 @@ function RLHelper:ResetCombatState()
         firstEnemy = nil,
         isBoss = false
     }
+    if self.journalV2Enabled then
+        self.currentCombat.messages = nil
+        self.currentCombat.events = {}
+    end
 
     if wasDisplayingCurrentCombat then
         self.displayedCombat = self.currentCombat
@@ -581,11 +608,13 @@ end
 
 function RLHelper:FinishCombat(reason)
     self:Debug("Combat ended", reason)
+    local wasDisplayingCurrentCombat = self:IsDisplayingCurrentCombat()
 
     self:SendMessage("RLHelper_CombatEnding")
 
     local combat = nil
-    if self.currentCombat.startTime and #self.currentCombat.messages > 0 then
+    local records = self.journalV2Enabled and self.currentCombat.events or self.currentCombat.messages
+    if self.currentCombat.startTime and #(records or {}) > 0 then
         combat = {
             startTime = self.currentCombat.startTime,
             endTime = time(),
@@ -593,6 +622,12 @@ function RLHelper:FinishCombat(reason)
             firstEnemy = self.currentCombat.firstEnemy,
             isBoss = self.currentCombat.isBoss
         }
+        if self.journalV2Enabled then
+            combat.id = self.currentCombat.id
+            combat.messages = nil
+            combat.events = self.currentCombat.events
+            combat.droppedEvents = self.currentCombat.droppedEvents
+        end
     end
 
     self:ResetCombatState()
@@ -600,6 +635,11 @@ function RLHelper:FinishCombat(reason)
     if combat and self:ShouldSaveCombatToHistory(combat) then
         self:SaveCombatToProfile(combat, self.db.profile)
         self:Debug("Combat Saved to history")
+    end
+
+    if self.journalV2Enabled and combat and wasDisplayingCurrentCombat then
+        self:DisplayCombat(combat)
+        self.followNextCombat = true
     end
 
     self:SendMessage("RLHelper_CombatEnded")
@@ -849,13 +889,63 @@ local function formatLogMessageForDisplay(message)
 end
 
 function RLHelper:OnCombatLogEvent(message)
+    if self.journalV2Enabled then
+        assert(type(message) == "table" and message.kind and message.type, "V2 requires a structured event")
+        local combat = self.currentCombat
+        combat.events = combat.events or {}
+        if #combat.events >= Journal.MAX_EVENTS then
+            combat.droppedEvents = (combat.droppedEvents or 0) + 1
+            if combat.droppedEvents == 1 and self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() then
+                self.mainFrame.logText:AddMessage("|cFFFF5555Достигнут лимит истории: дальнейшие события не сохраняются|r")
+            end
+            return
+        end
+        local entry = Journal.Copy(message)
+        entry.seq = #combat.events + 1
+        table.insert(combat.events, entry)
+        if self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() and
+            Journal.Visible(entry, self.journalView) then
+            self.mainFrame.logText:AddMessage(self:FormatJournalEntry(entry))
+        end
+        return
+    end
     table.insert(self.currentCombat.messages, message)
     if self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() then
         self.mainFrame.logText:AddMessage(formatLogMessageForDisplay(message))
     end
 end
 
+function RLHelper:FormatJournalEntry(entry)
+    local text = Journal.Format(entry)
+    if entry.kind == "MISDIRECTION_SUMMARY" then
+        text = "|Hrlhpull:" .. entry.pullId .. "|h" .. text .. "|h"
+    end
+    return text
+end
+
+function RLHelper:SetJournalView(view)
+    self.journalView = view
+    for name, button in pairs(self.mainFrame and self.mainFrame.journalFilterButtons or {}) do
+        if name == view then button:Disable() else button:Enable() end
+    end
+    self:DisplayCombat(self.displayedCombat or self.currentCombat)
+end
+
 function RLHelper:SaveCombatToProfile(combat, profile)
+    if self.journalV2Enabled then
+        local store = self.db.char.combatHistoryV2
+        if not combat.id then
+            combat.id = store.nextCombatId
+            store.nextCombatId = store.nextCombatId + 1
+        end
+        for _, saved in ipairs(store.combats) do
+            if saved.id == combat.id then return end
+        end
+        table.insert(store.combats, 1, Journal.Copy(combat))
+        while #store.combats > Journal.MAX_COMBATS do table.remove(store.combats) end
+        self.combatHistory = Journal.Copy(store.combats)
+        return
+    end
     table.insert(self.combatHistory, 1, combat)
 
     while #self.combatHistory > 30 do
@@ -1270,7 +1360,16 @@ function RLHelper:DisplayCombat(combat)
     end
 
     self.mainFrame.logText:Clear()
-    if combat and combat.messages then
+    if self.journalV2Enabled and combat then
+        for _, entry in ipairs(combat.events or {}) do
+            if Journal.Visible(entry, self.journalView) then
+                self.mainFrame.logText:AddMessage(self:FormatJournalEntry(entry))
+            end
+        end
+        if combat.droppedEvents then
+            self.mainFrame.logText:AddMessage("|cFFFF5555Лимит истории: пропущено событий " .. combat.droppedEvents .. "|r")
+        end
+    elseif combat and combat.messages then
         for _, message in ipairs(combat.messages) do
             self.mainFrame.logText:AddMessage(formatLogMessageForDisplay(message))
         end
@@ -1280,6 +1379,7 @@ function RLHelper:DisplayCombat(combat)
 end
 
 function RLHelper:ShowCurrentCombat()
+    self.followNextCombat = false
     self.selectedCombatKind = "current"
     self.selectedCombatIndex = nil
     self:DisplayCombat(self.currentCombat)
@@ -1292,7 +1392,7 @@ function RLHelper:LayoutMainFrame()
     end
 
     frame.logText:ClearAllPoints()
-    frame.logText:SetPoint("TOPLEFT", frame.buttonContainer, "BOTTOMLEFT", 0, -8)
+    frame.logText:SetPoint("TOPLEFT", frame.journalFilters or frame.buttonContainer, "BOTTOMLEFT", 0, -8)
 
     if frame.bottomPanel then
         frame.logText:SetPoint("BOTTOMRIGHT", frame.bottomPanel, "TOPRIGHT", -48, 4)
@@ -1524,6 +1624,41 @@ function RLHelper:CreateMainFrame()
     frame.buttonContainer = buttonContainer
     frame.logText = logText
 
+    if self.journalV2Enabled then
+        local filters = CreateFrame("Frame", nil, frame)
+        filters:SetPoint("TOPLEFT", buttonContainer, "BOTTOMLEFT", 0, -4)
+        filters:SetSize(260, 22)
+        frame.journalFilters = filters
+        frame.journalFilterButtons = {}
+        local previous
+        for _, choice in ipairs({ { "ALL", "Все" }, { "DEATHS", "Смерти" }, { "MISDIRECTION", "Напулы" } }) do
+            local view, label = choice[1], choice[2]
+            local button = CreateFrame("Button", nil, filters, "UIPanelButtonTemplate")
+            button:SetSize(80, 22)
+            button:SetText(label)
+            if previous then button:SetPoint("LEFT", previous, "RIGHT", 4, 0)
+            else button:SetPoint("LEFT", filters, "LEFT", 0, 0) end
+            button:SetScript("OnClick", function() RLHelper:SetJournalView(view) end)
+            frame.journalFilterButtons[view] = button
+            if view == self.journalView then button:Disable() end
+            previous = button
+        end
+        logText:SetHyperlinksEnabled(true)
+        logText:SetScript("OnHyperlinkEnter", function(_, link)
+            local pullId = tonumber(link:match("^rlhpull:(%d+)$"))
+            if not pullId or not GameTooltip then return end
+            GameTooltip:SetOwner(logText, "ANCHOR_CURSOR")
+            GameTooltip:AddLine("Урон напула по целям")
+            local combat = RLHelper.displayedCombat or RLHelper.currentCombat
+            for _, row in ipairs(Journal.PullTargets(combat, pullId)) do
+                GameTooltip:AddDoubleLine(row.target.name or "?", tostring(row.amount))
+            end
+            if combat.droppedEvents then GameTooltip:AddLine("Данные неполные: достигнут лимит истории") end
+            GameTooltip:Show()
+        end)
+        logText:SetScript("OnHyperlinkLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    end
+
     -- Size changed handler
     frame:SetScript("OnSizeChanged", function()
         RLHelper:LayoutMainFrame()
@@ -1729,7 +1864,11 @@ end
 
 function RLHelper:ClearCombatHistory()
     self.combatHistory = {}
-    self.db.char.combatHistory = {}
+    if self.journalV2Enabled then
+        self.db.char.combatHistoryV2.combats = {}
+    else
+        self.db.char.combatHistory = {}
+    end
     self:Print("История боев очищена")
 end
 
@@ -1740,6 +1879,7 @@ function RLHelper:ShowCombatByIndex(index)
     end
 
     local combat = self.combatHistory[index]
+    self.followNextCombat = false
     self.selectedCombatKind = "history"
     self.selectedCombatIndex = index
     self:DisplayCombat(combat)
@@ -1800,6 +1940,10 @@ function RLHelper:HandleSlashCommand(input)
         print("/rlh debug - включить/выключить режим отладки")
         print("/rlh clear - очистить историю боев")
         print("/rlh demo - show all messages")
+        print("/rlh journal v1|v2 - выбрать историю, затем /reload между боями")
+    elseif input == "journal v1" or input == "journal v2" then
+        self.db.profile.journalV2 = input == "journal v2"
+        self:Print("Версия истории выбрана. Примените /reload между боями.")
     elseif input == "debug" then
         self.db.profile.debug = not self.db.profile.debug
         print("Режим отладки: " .. (self.db.profile.debug and "включен" or "выключен"))
@@ -1812,8 +1956,31 @@ function RLHelper:HandleSlashCommand(input)
         self:ClearCombatHistory()
     elseif input == "demo" then
         self:StartCombat("demo")
-        self:SendMessage("RLHelper_Demo")
+        if self.journalV2Enabled then
+            self:DemoJournal()
+        else
+            self:SendMessage("RLHelper_Demo")
+        end
         self.combatEndRequestedAt = self:GetCombatNow()
+    end
+end
+
+function RLHelper:DemoJournal()
+    local event = { timestamp = time(), sourceName = "DemoPlayer", destName = "DemoTarget" }
+    for _, kind in ipairs({ "FIRST_DAMAGE", "FIRST_HEAL", "TAUNT", "SPELL_USE", "DISPEL", "RESURRECT",
+        "VORTEX_HIT", "VORTEX_MISSED", "BLOODBOLT_SPLASH", "MANA_BARRIER_REMOVED", "MIND_CONTROL",
+        "CYCLONE_APPLIED", "CYCLONE_MISSED", "SPIRIT_HIT", "SPIRIT_MISSED", "SPIRIT_SUMMARY",
+        "MALLEABLE_GOO", "CHOKING_GAS", "MALLEABLE_GOO_SUMMARY", "CHOKING_GAS_SUMMARY", "SHADOW_TRAP",
+        "RAGING_SPIRIT", "TRAMPLE_HIT", "FIRST_TWILIGHT_ENTRY", "FIRST_LIGHT_DAMAGE",
+        "LIGHT_DAMAGE_WINDOW_CLOSED", "MECHANIC_DEATH" }) do
+        self:OnCombatLogEvent(Journal.Create(kind, event, kind == "TAUNT" and "TACTIC_VIOLATION" or "INFO"))
+    end
+    local tracker = self:FindModuleByName("MisdirectionTracker")
+    -- Reserve an ID from the same sequence as real pulls in this combat.
+    local pullId = tracker and (tracker.nextJournalPullId or 1) or 1
+    if tracker then tracker.nextJournalPullId = pullId + 1 end
+    for _, kind in ipairs({ "MISDIRECTION_START", "MISDIRECTION_DAMAGE", "MISDIRECTION_SUMMARY" }) do
+        self:OnCombatLogEvent(Journal.Create(kind, event, "INFO", { pullId = pullId, amount = 1000 }))
     end
 end
 

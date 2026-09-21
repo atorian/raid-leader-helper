@@ -100,12 +100,16 @@ end
 function PutricideTracker:summarizeCombat()
     local malleableGooSummary = buildMalleableGooSummary(self.malleableGooReport)
     if malleableGooSummary then
-        self.log(formatMalleableGooSummary(time(), malleableGooSummary))
+        RLHelperJournal.Log(RLHelper, self.log, "MALLEABLE_GOO_SUMMARY", nil,
+            formatMalleableGooSummary(time(), malleableGooSummary), "INFO",
+            { text = string.format("Вязкая гадость: всего %s %s", malleableGooSummary.total, malleableGooSummary.details) })
     end
 
     local chokingGasSummary = buildMalleableGooSummary(self.chokingGasReport)
     if chokingGasSummary then
-        self.log(formatChokingGasSummary(time(), chokingGasSummary))
+        RLHelperJournal.Log(RLHelper, self.log, "CHOKING_GAS_SUMMARY", nil,
+            formatChokingGasSummary(time(), chokingGasSummary), "INFO",
+            { text = string.format("Удушливый газ: всего %s %s", chokingGasSummary.total, chokingGasSummary.details) })
     end
 end
 
@@ -123,7 +127,8 @@ end
 function PutricideTracker:handleEvent(event)
     if event.event == "SPELL_AURA_APPLIED" and CHOKING_GAS_SPELLS[event.spellId] and event.destName then
         self.chokingGasReport[event.destName] = (self.chokingGasReport[event.destName] or 0) + 1
-        self.log(formatChokingGas(event.timestamp, event.destName))
+        RLHelperJournal.Log(RLHelper, self.log, "CHOKING_GAS", event,
+            formatChokingGas(event.timestamp, event.destName), "TACTIC_VIOLATION")
         return
     end
 
@@ -132,7 +137,8 @@ function PutricideTracker:handleEvent(event)
     end
 
     self.malleableGooReport[event.destName] = (self.malleableGooReport[event.destName] or 0) + 1
-    self.log(formatMalleableGoo(event.timestamp, event.destName))
+    RLHelperJournal.Log(RLHelper, self.log, "MALLEABLE_GOO", event,
+        formatMalleableGoo(event.timestamp, event.destName), "TACTIC_VIOLATION")
 end
 
 return PutricideTracker

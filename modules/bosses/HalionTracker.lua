@@ -349,13 +349,15 @@ function HalionTracker:trackFirstLightHalionDamage(event, log)
 
     if event.event == "SPELL_AURA_APPLIED" and HEROISM_SPELLS[event.spellId] then
         self.firstLightDamageWindowOpen = false
-        log(formatFirstLightDamageWindowClosed(event.timestamp, event.spellName))
+        RLHelperJournal.Log(RLHelper, log, "LIGHT_DAMAGE_WINDOW_CLOSED", event,
+            formatFirstLightDamageWindowClosed(event.timestamp, event.spellName))
         return
     end
 
     if not self.firstLightDamageLogged and DAMAGE_EVENTS[event.event] and isPlayer(event.sourceFlags) and creatureIdFromGuid(event.destGUID) == LIGHT_HALION_ID then
         self.firstLightDamageLogged = true
-        log(formatFirstLightHalionDamage(event.timestamp, event.sourceName))
+        RLHelperJournal.Log(RLHelper, log, "FIRST_LIGHT_DAMAGE", event,
+            formatFirstLightHalionDamage(event.timestamp, event.sourceName))
     end
 end
 
@@ -414,7 +416,7 @@ end
 function HalionTracker:isFirstInDarkness(event, log)
     if not self.firstEntered and event.spellId >= pelena10 and event.spellId <= pelena25hm then
         self.firstEntered = true
-        log(formatFirstInTwilight(event.timestamp, event.destName))
+        RLHelperJournal.Log(RLHelper, log, "FIRST_TWILIGHT_ENTRY", event, formatFirstInTwilight(event.timestamp, event.destName))
     end
 end
 
@@ -441,6 +443,7 @@ function HalionTracker:handleEvent(event)
         elseif event.event == "SPELL_DAMAGE" then
             self:logDmg(event.destName, {
                 source = event.sourceName,
+                sourceGUID = event.sourceGUID,
                 amount = event.amount,
                 spellId = event.spellId,
                 spellName = event.spellName
@@ -448,11 +451,12 @@ function HalionTracker:handleEvent(event)
         elseif event.event == "SWING_DAMAGE" then
             self:logDmg(event.destName, {
                 source = event.sourceName,
+                sourceGUID = event.sourceGUID,
                 amount = event.amount,
                 spellName = "Автоатака"
             })
         elseif event.event == "UNIT_DIED" then
-            self:ProcessPlayerDeath(log, event.destName, event.timestamp)
+            self:ProcessPlayerDeath(log, event.destName, event.timestamp, event.destGUID)
         end
     end
 end
@@ -462,7 +466,7 @@ local function formatDiedFrom(ts, name)
         "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8")
 end
 
-function HalionTracker:ProcessPlayerDeath(log, playerName, timestamp)
+function HalionTracker:ProcessPlayerDeath(log, playerName, timestamp, playerGUID)
     local msg = formatDiedFrom(timestamp, playerName)
     local damageEvents = self.dmgEvents[playerName]
 
@@ -470,7 +474,11 @@ function HalionTracker:ProcessPlayerDeath(log, playerName, timestamp)
         for i = #damageEvents, 1, -1 do
             local lastDamage = damageEvents[i]
             if spells[lastDamage.spellId] then
-                log(msg .. spells[lastDamage.spellId])
+                RLHelperJournal.Log(RLHelper, log, "MECHANIC_DEATH", {
+                    timestamp = timestamp, destGUID = playerGUID, destName = playerName,
+                    sourceGUID = lastDamage.sourceGUID, sourceName = lastDamage.source,
+                    spellId = lastDamage.spellId
+                }, msg .. spells[lastDamage.spellId])
                 break
             end
         end

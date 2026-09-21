@@ -3,6 +3,68 @@ local Journal = {}
 Journal.MAX_COMBATS = 30
 Journal.MAX_EVENTS = 20000
 local FIRST_DAMAGE_ICON = "Interface\\Icons\\Ability_SteelMelee"
+local classByGUID = {}
+local classByName = {}
+local CLASS_COLORS = {
+    DEATHKNIGHT = "FFC41F3B",
+    DRUID = "FFFF7D0A",
+    HUNTER = "FFABD473",
+    MAGE = "FF69CCF0",
+    PALADIN = "FFF58CBA",
+    PRIEST = "FFFFFFFF",
+    ROGUE = "FFFFF569",
+    SHAMAN = "FF0070DE",
+    WARLOCK = "FF9482C9",
+    WARRIOR = "FFC79C6E",
+}
+
+local function formatEntityName(entity, defaultWhite)
+    if not entity then return "?" end
+    local name = entity.name or "?"
+    local color = CLASS_COLORS[entity.class]
+    if color then return "|c" .. color .. name .. "|r" end
+    return defaultWhite and "|cFFFFFFFF" .. name .. "|r" or name
+end
+
+local function rememberClass(guid, name, classToken)
+    if type(classToken) ~= "string" or classToken == "" then return nil end
+    classToken = string.upper(classToken)
+    if guid then classByGUID[guid] = classToken end
+    if name then classByName[name] = classToken end
+    return classToken
+end
+
+local function resolveEventClass(guid, name, classToken)
+    classToken = rememberClass(guid, name, classToken)
+    if classToken then return classToken end
+    if guid and classByGUID[guid] then return classByGUID[guid] end
+    if name and classByName[name] then return classByName[name] end
+
+    if type(UnitGUID) == "function" and type(UnitClass) == "function" then
+        local units = { "player", "target", "focus" }
+        for i = 1, (GetNumRaidMembers and GetNumRaidMembers() or 0) do
+            units[#units + 1] = "raid" .. i
+        end
+        for i = 1, (GetNumPartyMembers and GetNumPartyMembers() or 0) do
+            units[#units + 1] = "party" .. i
+        end
+        for _, unit in ipairs(units) do
+            if guid and UnitGUID(unit) == guid then
+                local _, unitClass = UnitClass(unit)
+                return rememberClass(guid, name, unitClass)
+            end
+        end
+    end
+
+    if type(GetRaidRosterInfo) == "function" and type(GetNumRaidMembers) == "function" then
+        for i = 1, GetNumRaidMembers() do
+            local rosterName, _, _, _, _, classFileName = GetRaidRosterInfo(i)
+            if name and rosterName == name then
+                return rememberClass(guid, name, classFileName)
+            end
+        end
+    end
+end
 
 function Journal.Log(addon, log, kind, event, legacyMessage, severity, fields)
     if addon.journalV2Enabled then
@@ -19,27 +81,9 @@ function Journal.Copy(value)
     return copy
 end
 
-function Journal.Entity(guid, name)
+function Journal.Entity(guid, name, classToken)
     if not guid and not name then return nil end
-    local entity = { guid = guid, name = name }
-    -- Resolve class while the participant is available, never when reading history.
-    if type(UnitGUID) == "function" and type(UnitClass) == "function" then
-        local units = { "player", "target", "focus" }
-        for i = 1, (GetNumRaidMembers and GetNumRaidMembers() or 0) do
-            units[#units + 1] = "raid" .. i
-        end
-        for i = 1, (GetNumPartyMembers and GetNumPartyMembers() or 0) do
-            units[#units + 1] = "party" .. i
-        end
-        for _, unit in ipairs(units) do
-            if guid and UnitGUID(unit) == guid then
-                local _, class = UnitClass(unit)
-                entity.class = class
-                break
-            end
-        end
-    end
-    return entity
+    return { guid = guid, name = name, class = resolveEventClass(guid, name, classToken) }
 end
 
 function Journal.TauntType(guid)
@@ -94,12 +138,16 @@ local descriptions = {
 
 function Journal.Create(kind, event, severity, fields)
     event = event or {}
+    local source = type(event.source) == "table" and event.source or nil
+    local target = type(event.target) == "table" and event.target or nil
     local entry = {
         timestamp = event.timestamp or time(),
         type = severity or "INFO",
         kind = kind,
-        source = Journal.Entity(event.sourceGUID, event.sourceName),
-        target = Journal.Entity(event.destGUID, event.destName),
+        source = Journal.Entity(event.sourceGUID or (source and source.guid), event.sourceName or (source and source.name),
+            event.sourceClass or (source and source.class)),
+        target = Journal.Entity(event.destGUID or (target and target.guid), event.destName or (target and target.name),
+            event.destClass or (target and target.class)),
         spellId = event.spellId,
         amount = event.amount,
         missType = event.missType,
@@ -137,15 +185,14 @@ function Journal.Format(entry)
 
     local message
     if entry.kind == "MISDIRECTION_DAMAGE" then
-        local target = entry.target and entry.target.name or "?"
+        local target = formatEntityName(entry.target)
         message = string.format("%s %s", target, entry.amount or 0)
     elseif entry.kind == "MISDIRECTION_SUMMARY" then
         message = string.format("Напул окончен %s", entry.amount or 0)
     elseif entry.kind == "TAUNT" then
-        message = entry.target and "→ " .. (entry.target.name or "?") or ""
+        message = entry.target and "→ " .. formatEntityName(entry.target) or ""
     elseif entry.kind == "FIRST_DAMAGE" or entry.kind == "FIRST_HEAL" then
-        message = string.format("%s по |cFFFFFFFF%s|r", descriptions[entry.kind],
-            entry.target and entry.target.name or "?")
+        message = string.format("%s по %s", descriptions[entry.kind], formatEntityName(entry.target, true))
     else
         message = entry.text or ""
         local source = entry.source and entry.source.name
@@ -156,16 +203,16 @@ function Journal.Format(entry)
     end
 
     local parts = { date("%H:%M:%S", entry.timestamp) }
-    if entry.source then parts[#parts + 1] = "|cFFFFFFFF" .. (entry.source.name or "?") .. "|r" end
+    if entry.source then parts[#parts + 1] = formatEntityName(entry.source, true) end
     if spellIcon ~= "" then parts[#parts + 1] = spellIcon end
     if message ~= "" then parts[#parts + 1] = message end
     local text = table.concat(parts, " ")
     if entry.type == "TACTIC_VIOLATION" then
         local cleanMessage = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
         local whiteTime = "|cFFFFFFFF" .. date("%H:%M:%S", entry.timestamp) .. "|r"
-        local whiteSource = entry.source and " |cFFFFFFFF" .. (entry.source.name or "?") .. "|r" or ""
+        local sourceName = entry.source and " " .. formatEntityName(entry.source, true) or ""
         local redMessage = cleanMessage ~= "" and " |cFFFF0000" .. cleanMessage .. "|r" or ""
-        return whiteTime .. whiteSource ..
+        return whiteTime .. sourceName ..
             (spellIcon ~= "" and " " .. spellIcon or "") .. redMessage
     end
     return text

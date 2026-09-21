@@ -95,6 +95,7 @@ describe('Structured journal', function()
         mocks:SetUnitGUID('player', 'priest')
         _G.UnitClass = function() return 'Жрец', 'PRIEST' end
         local dispel = event('SPELL_DISPEL', 988, 'priest', 'tank')
+        dispel.sourceClass = 'PRIEST'
         dispel.extraSpellId = 71289
         spells:handleEvent(dispel)
         addon.currentCombat.startTime = 1000
@@ -246,13 +247,25 @@ describe('Structured journal', function()
         assert.is_truthy(Journal.Format(ability):find('|TSpellTexture:', 1, true))
     end)
 
+    it('colors known source classes with the standard WoW palette', function()
+        _G.GetSpellInfo = function() return 'Spell', nil, 'SpellTexture' end
+        mocks.raidSize = 1
+        mocks:SetRaidRosterInfo(1, 'hunter', 1, 'Охотник', 'HUNTER')
+        local entry = Journal.Create('SPELL_USE', event('SPELL_CAST_SUCCESS', 53209, 'hunter', 'boss', 1001))
+
+        assert.are.equal('HUNTER', entry.source.class)
+        assert.are.equal(date('%H:%M:%S', 1001) ..
+            ' |cFFABD473hunter|r |TSpellTexture:24:24:0:-2|t Применение способности → boss',
+            Journal.Format(entry))
+    end)
+
     it('keeps the violation prefix and message red while preserving white time and source', function()
         local entry = Journal.Create('SHADOW_TRAP', event('SPELL_DAMAGE', 73529), 'TACTIC_VIOLATION', {
             text = '|cFFFFFFFFPlayer|r взорвал ловушку',
         })
         addon:OnCombatLogEvent(entry)
         local expected = '|cFFFFFFFF' .. date('%H:%M:%S', entry.timestamp) ..
-            '|r |cFFFFFFFFHunter|r |cFFFF0000Player взорвал ловушку|r'
+            '|r |cFFABD473Hunter|r |cFFFF0000Player взорвал ловушку|r'
         assert.are.equal(expected, lines[1])
         addon:DisplayCombat(Journal.Copy(addon.currentCombat))
         assert.are.equal(expected, lines[1])
@@ -269,7 +282,7 @@ describe('Structured journal', function()
         end
         _G.GetSpellInfo = function() return 'Отвлекающий выстрел', nil, 'DistractingShotTexture' end
 
-        spells:handleEvent(event('SPELL_CAST_SUCCESS', 20736, 'dps', 'boss', 1001))
+        spells:handleEvent(event('SPELL_CAST_SUCCESS', 20736, 'Dps', 'boss', 1001))
         spells:handleEvent(event('SPELL_AURA_APPLIED', 20736, 'dps', 'boss', 1001))
 
         local entry = addon.currentCombat.events[1]
@@ -278,7 +291,7 @@ describe('Structured journal', function()
         assert.are.equal('TAUNT', entry.kind)
         assert.are.equal('TACTIC_VIOLATION', entry.type)
         assert.are.equal('|cFFFFFFFF' .. date('%H:%M:%S', 1001) ..
-            '|r |cFFFFFFFFdps|r |TDistractingShotTexture:24:24:0:-2|t |cFFFF0000→ boss|r', lines[1])
+            '|r |cFFC79C6EDps|r |TDistractingShotTexture:24:24:0:-2|t |cFFFF0000→ boss|r', lines[1])
     end)
 
     it('filters hunter damage like V1 while retaining all damage in totals and saved target details', function()

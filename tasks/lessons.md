@@ -10,7 +10,9 @@
 - For Distracting Shot, record only `SPELL_CAST_SUCCESS`; ignore the resulting aura event to avoid duplicate journal rows.
 - First-damage rows always use `Interface\\Icons\\Ability_SteelMelee`, independent of the combat-log spell icon.
 - TAUNT rows omit the textual `Провокация`; the spell icon identifies the taunt and only the target remains after it.
-- Render `TACTIC_VIOLATION` message text in red without adding a violation label, while keeping the time and source name white; embedded message colors or resets must not override the event color.
++ V2 player names use the standard WoW 3.3.5a class colors from the class token persisted when the event is created; unknown classes remain white.
++ Prefer `sourceClass`/`destClass` from the event, then resolve and persist a missing class at event creation; never resolve class while rendering saved history.
+- Render `TACTIC_VIOLATION` message text in red without adding a violation label, while keeping the time white and the source name in its class color; embedded message colors or resets must not override the event color.
 
 - When an update adds addon files or changes the TOC, tell the user to fully restart WoW 3.3.5a before testing; `/reload` is only sufficient for switching journal versions after those files are loaded. For `mainFrame == nil` during OnEnable, inspect the earlier OnInitialize error first: an unloaded Journal dependency can prevent frame creation.
 

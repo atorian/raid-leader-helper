@@ -193,7 +193,7 @@ describe('Structured journal', function()
         assert.are.equal('TACTIC_VIOLATION', entries[2].type)
         assert.are.equal('TAUNT', entries[2].kind)
         assert.are.equal('INFO', entries[3].type)
-        assert.is_truthy(lines[2]:find('[НАРУШЕНИЕ]', 1, true))
+        assert.is_truthy(lines[2]:find('|cFFFF0000', 1, true))
         _G.GetRaidRosterInfo = function() return 'Dps' end
         spells:handleEvent(event('SPELL_AURA_APPLIED', 355, 'dps'))
         assert.are.equal('INFO', entries[4].type)
@@ -235,8 +235,8 @@ describe('Structured journal', function()
         spells:handleEvent(event('SPELL_DAMAGE', 53209, 'Hunter', 'Boss', 1001, 100))
         spells:handleEvent(event('SPELL_HEAL', 48782, 'Healer', 'Валитрия Сноходица', 1002, 200))
         local expected = {
-            date('%H:%M:%S', 1001) .. ' |cFFFFFFFFHunter|r Первый урон по |cFFFFFFFFBoss|r',
-            date('%H:%M:%S', 1002) .. ' |cFFFFFFFFHealer|r Первый хил по |cFFFFFFFFВалитрия Сноходица|r',
+            date('%H:%M:%S', 1001) .. ' |cFFFFFFFFHunter|r |TInterface\\Icons\\Ability_SteelMelee:24:24:0:-2|t Первый урон по |cFFFFFFFFBoss|r',
+            date('%H:%M:%S', 1002) .. ' |cFFFFFFFFHealer|r |TSpellTexture:24:24:0:-2|t Первый хил по |cFFFFFFFFВалитрия Сноходица|r',
         }
         assert.are.same(expected, lines)
         assert.are.equal(53209, addon.currentCombat.events[1].spellId)
@@ -246,17 +246,39 @@ describe('Structured journal', function()
         assert.is_truthy(Journal.Format(ability):find('|TSpellTexture:', 1, true))
     end)
 
-    it('renders the entire violation message in red, including any highlighted names', function()
+    it('keeps the violation prefix and message red while preserving white time and source', function()
         local entry = Journal.Create('SHADOW_TRAP', event('SPELL_DAMAGE', 73529), 'TACTIC_VIOLATION', {
             text = '|cFFFFFFFFPlayer|r взорвал ловушку',
         })
         addon:OnCombatLogEvent(entry)
-        local expected = '|cFFFF0000[НАРУШЕНИЕ] ' .. date('%H:%M:%S', entry.timestamp) ..
-            ' Player взорвал ловушку|r'
+        local expected = '|cFFFFFFFF' .. date('%H:%M:%S', entry.timestamp) ..
+            '|r |cFFFFFFFFHunter|r |cFFFF0000Player взорвал ловушку|r'
         assert.are.equal(expected, lines[1])
         addon:DisplayCombat(Journal.Copy(addon.currentCombat))
         assert.are.equal(expected, lines[1])
         assert.is_nil(Journal.Format(Journal.Create('SPELL_USE', event('SPELL_CAST_SUCCESS'))):find('|cFFFF0000', 1, true))
+    end)
+
+    it('classifies distracting shot as a tactic violation and colors only its message red', function()
+        mocks.raidSize = 2
+        mocks:SetUnitGUID('raid1', 'tank')
+        mocks:SetUnitGUID('raid2', 'dps')
+        _G.GetRaidRosterInfo = function(i)
+            return i == 1 and 'Tank' or 'Dps', nil, 1, nil, nil, 'WARRIOR', nil, nil, nil,
+                i == 1 and 'MAINTANK' or nil
+        end
+        _G.GetSpellInfo = function() return 'Отвлекающий выстрел', nil, 'DistractingShotTexture' end
+
+        spells:handleEvent(event('SPELL_CAST_SUCCESS', 20736, 'dps', 'boss', 1001))
+        spells:handleEvent(event('SPELL_AURA_APPLIED', 20736, 'dps', 'boss', 1001))
+
+        local entry = addon.currentCombat.events[1]
+        assert.are.equal(1, #addon.currentCombat.events)
+        assert.are.equal(1, #lines)
+        assert.are.equal('TAUNT', entry.kind)
+        assert.are.equal('TACTIC_VIOLATION', entry.type)
+        assert.are.equal('|cFFFFFFFF' .. date('%H:%M:%S', 1001) ..
+            '|r |cFFFFFFFFdps|r |TDistractingShotTexture:24:24:0:-2|t |cFFFF0000→ boss|r', lines[1])
     end)
 
     it('filters hunter damage like V1 while retaining all damage in totals and saved target details', function()
@@ -306,6 +328,7 @@ describe('Structured journal', function()
     end)
 
     it('shows each simultaneous hunter and rogue hit with its target name live and after reload', function()
+        _G.GetSpellInfo = function(spellId) return 'Spell', nil, 'SpellTexture-' .. spellId end
         addon.inCombat = true
         addon.currentCombat.startTime = 1000
         addon:SetJournalView('MISDIRECTION')
@@ -317,12 +340,17 @@ describe('Structured journal', function()
                 hit.destName = target
                 pulls:handleEvent(hit)
                 assert.are.equal(before + i, #lines)
-                assert.is_truthy(lines[#lines]:find(caster[1] .. ' → ' .. target, 1, true))
-                assert.is_truthy(lines[#lines]:find(tostring(i * 100), 1, true))
-                assert.is_nil(lines[#lines]:find('Tank', 1, true))
+                assert.are.equal(string.format('%s |cFFFFFFFF%s|r |TSpellTexture-%s:24:24:0:-2|t %s %s',
+                    date('%H:%M:%S', 1001), caster[1], caster[3], target, i * 100), lines[#lines])
             end
+            pulls:handleEvent(event('SPELL_AURA_REMOVED', caster[2] == 34477 and 35079 or 59628,
+                caster[1], caster[1], 1002))
         end
         addon:FinishCombat('test')
+        assert.are.equal(string.format('|Hrlhpull:1|h%s |cFFFFFFFFHunter|r |TSpellTexture-34477:24:24:0:-2|t Напул окончен 600|h',
+            date('%H:%M:%S', 1002)), lines[5])
+        assert.are.equal(string.format('|Hrlhpull:2|h%s |cFFFFFFFFRogue|r |TSpellTexture-57934:24:24:0:-2|t Напул окончен 600|h',
+            date('%H:%M:%S', 1002)), lines[10])
         local expected = Journal.Copy(lines)
         addon.db = assert(loadstring('return ' .. serialize(addon.db)))()
         addon:InitializeJournal()

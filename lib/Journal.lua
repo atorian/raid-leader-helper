@@ -2,6 +2,7 @@
 local Journal = {}
 Journal.MAX_COMBATS = 30
 Journal.MAX_EVENTS = 20000
+local FIRST_DAMAGE_ICON = "Interface\\Icons\\Ability_SteelMelee"
 
 function Journal.Log(addon, log, kind, event, legacyMessage, severity, fields)
     if addon.journalV2Enabled then
@@ -107,8 +108,11 @@ function Journal.Create(kind, event, severity, fields)
     for key, value in pairs(fields or {}) do entry[key] = Journal.Copy(value) end
     if not entry.text then
         local parts = { descriptions[kind] or kind }
-        if entry.source then parts[#parts + 1] = entry.source.name or "?" end
-        if entry.target then parts[#parts + 1] = "→ " .. (entry.target.name or "?") end
+        if kind == "FIRST_DAMAGE" or kind == "FIRST_HEAL" then
+            if entry.target then parts[#parts + 1] = "по " .. (entry.target.name or "?") end
+        elseif entry.target then
+            parts[#parts + 1] = "→ " .. (entry.target.name or "?")
+        end
         if entry.amount then parts[#parts + 1] = tostring(entry.amount) end
         if entry.missType then parts[#parts + 1] = entry.missType end
         entry.text = table.concat(parts, " ")
@@ -123,20 +127,46 @@ function Journal.Visible(entry, view)
 end
 
 function Journal.Format(entry)
-    local message = entry.text
-    local icon = ""
-    if entry.kind == "FIRST_DAMAGE" or entry.kind == "FIRST_HEAL" then
-        message = string.format("|cFFFFFFFF%s|r %s по |cFFFFFFFF%s|r",
-            entry.source and entry.source.name or "?", descriptions[entry.kind],
-            entry.target and entry.target.name or "?")
+    local spellIcon = ""
+    if entry.kind == "FIRST_DAMAGE" then
+        spellIcon = "|T" .. FIRST_DAMAGE_ICON .. ":24:24:0:-2|t"
     elseif entry.spellId and type(GetSpellInfo) == "function" then
         local _, _, texture = GetSpellInfo(entry.spellId)
-        if texture then icon = "|T" .. texture .. ":18:18:0:-2|t " end
+        if texture then spellIcon = "|T" .. texture .. ":24:24:0:-2|t" end
     end
-    local text = date("%H:%M:%S", entry.timestamp) .. " " .. icon .. message
+
+    local message
+    if entry.kind == "MISDIRECTION_DAMAGE" then
+        local target = entry.target and entry.target.name or "?"
+        message = string.format("%s %s", target, entry.amount or 0)
+    elseif entry.kind == "MISDIRECTION_SUMMARY" then
+        message = string.format("Напул окончен %s", entry.amount or 0)
+    elseif entry.kind == "TAUNT" then
+        message = entry.target and "→ " .. (entry.target.name or "?") or ""
+    elseif entry.kind == "FIRST_DAMAGE" or entry.kind == "FIRST_HEAL" then
+        message = string.format("%s по |cFFFFFFFF%s|r", descriptions[entry.kind],
+            entry.target and entry.target.name or "?")
+    else
+        message = entry.text or ""
+        local source = entry.source and entry.source.name
+        local oldPrefix = source and ((descriptions[entry.kind] or entry.kind) .. " " .. source)
+        if oldPrefix and message:sub(1, #oldPrefix) == oldPrefix then
+            message = message:sub(#oldPrefix + 2)
+        end
+    end
+
+    local parts = { date("%H:%M:%S", entry.timestamp) }
+    if entry.source then parts[#parts + 1] = "|cFFFFFFFF" .. (entry.source.name or "?") .. "|r" end
+    if spellIcon ~= "" then parts[#parts + 1] = spellIcon end
+    if message ~= "" then parts[#parts + 1] = message end
+    local text = table.concat(parts, " ")
     if entry.type == "TACTIC_VIOLATION" then
-        text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-        return "|cFFFF0000[НАРУШЕНИЕ] " .. text .. "|r"
+        local cleanMessage = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+        local whiteTime = "|cFFFFFFFF" .. date("%H:%M:%S", entry.timestamp) .. "|r"
+        local whiteSource = entry.source and " |cFFFFFFFF" .. (entry.source.name or "?") .. "|r" or ""
+        local redMessage = cleanMessage ~= "" and " |cFFFF0000" .. cleanMessage .. "|r" or ""
+        return whiteTime .. whiteSource ..
+            (spellIcon ~= "" and " " .. spellIcon or "") .. redMessage
     end
     return text
 end

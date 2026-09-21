@@ -8,6 +8,7 @@ local firstDamageDone = false
 local firstValithriaHealDone = false
 local HAND_OF_RECKONING = 62124
 local HOLY_WRATH = 48817
+local DISTRACTING_SHOT = 20736
 local ICECROWN_CITADEL = 631
 local VALITHRIA_DREAMWALKER = "Валитрия Сноходица"
 local LICH_KING = "Король-лич"
@@ -19,7 +20,9 @@ local TAUNTS = {
 function SppellTracker:logSpell(event, legacyMessage, kind)
     kind = kind or (TAUNTS[event.spellId] and "TAUNT" or "SPELL_USE")
     local severity = "INFO"
-    if RLHelper.journalV2Enabled and kind == "TAUNT" then
+    if RLHelper.journalV2Enabled and kind == "TAUNT" and event.spellId == DISTRACTING_SHOT then
+        severity = "TACTIC_VIOLATION"
+    elseif RLHelper.journalV2Enabled and kind == "TAUNT" then
         severity = RLHelperJournal.TauntType(event.sourceGUID)
     end
     RLHelperJournal.Log(RLHelper, self.log, kind, event, legacyMessage, severity)
@@ -59,13 +62,15 @@ local TRACKED_CAST_SUCCESS_SPELLS = {
     [1044] = true, -- Длань свободы
     [19752] = true, -- Божественное вмешательство
     [31789] = true, -- Праведная защита
-    [31821] = true -- Мастер аур
+    [31821] = true, -- Мастер аур
+    [20736] = true -- Отвлекающий выстрел
 }
 
 local IGNORED_AURA_APPLIED_SPELLS = {
     [1044] = true, -- Длань свободы
     [31821] = true, -- Мастер аур
-    [48817] = true -- Гнев небес
+    [48817] = true, -- Гнев небес
+    [20736] = true -- Отвлекающий выстрел: логируем только попытку каста
 }
 
 local TRACKED_DISPEL_SPELLS = {

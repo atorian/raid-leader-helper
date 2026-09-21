@@ -117,20 +117,26 @@ function Journal.Create(kind, event, severity, fields)
 end
 
 function Journal.Visible(entry, view)
-    if view == "MISDIRECTION" then return entry.pullId ~= nil end
+    if view == "MISDIRECTION" then return entry.pullId ~= nil and not entry.hidden end
     if view == "DEATHS" then return entry.kind == "MECHANIC_DEATH" end
     return entry.kind ~= "MISDIRECTION_DAMAGE"
 end
 
 function Journal.Format(entry)
+    local message = entry.text
     local icon = ""
-    if entry.spellId and type(GetSpellInfo) == "function" then
+    if entry.kind == "FIRST_DAMAGE" or entry.kind == "FIRST_HEAL" then
+        message = string.format("|cFFFFFFFF%s|r %s по |cFFFFFFFF%s|r",
+            entry.source and entry.source.name or "?", descriptions[entry.kind],
+            entry.target and entry.target.name or "?")
+    elseif entry.spellId and type(GetSpellInfo) == "function" then
         local _, _, texture = GetSpellInfo(entry.spellId)
         if texture then icon = "|T" .. texture .. ":18:18:0:-2|t " end
     end
-    local text = date("%H:%M:%S", entry.timestamp) .. " " .. icon .. entry.text
+    local text = date("%H:%M:%S", entry.timestamp) .. " " .. icon .. message
     if entry.type == "TACTIC_VIOLATION" then
-        return "|cFFFF5555[НАРУШЕНИЕ] " .. text .. "|r"
+        text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+        return "|cFFFF0000[НАРУШЕНИЕ] " .. text .. "|r"
     end
     return text
 end

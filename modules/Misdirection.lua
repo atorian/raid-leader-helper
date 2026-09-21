@@ -69,6 +69,10 @@ local HUNTER_VISIBLE_SKIP_SPELLS = {
     [53353] = true
 }
 
+local function isHunterDamageVisible(spellId)
+    return TRACKED_SPELLS[spellId] ~= nil and not HUNTER_VISIBLE_SKIP_SPELLS[spellId]
+end
+
 function MisdirectionTracker:OnEnable()
     RLHelper:Debug("RL Быдло: MisdirectionTracker включен")
 end
@@ -143,7 +147,11 @@ function MisdirectionTracker:handleJournalEvent(event)
     if not pull or not HUNTER_DAMAGE_EVENTS[event.event] or event.timestamp < pull.entry.timestamp then return end
     self:startJournalPull(pull)
     pull.totalDamage = pull.totalDamage + (event.amount or 0)
-    self.log(RLHelperJournal.Create("MISDIRECTION_DAMAGE", event, "INFO", { pullId = pull.entry.pullId }))
+    self.log(RLHelperJournal.Create("MISDIRECTION_DAMAGE", event, "INFO", {
+        pullId = pull.entry.pullId,
+        hidden = not TRACKED_SPELLS[event.spellId] or
+            (pull.entry.spellId == MISDIRECTION_START_SPELL_ID and not isHunterDamageVisible(event.spellId))
+    }))
 end
 
 local function debugMisdirectionAura(eventData)
@@ -249,7 +257,7 @@ function MisdirectionTracker:OnHunterDamage(eventData, activePull)
     activePull.totalDamage = activePull.totalDamage + (eventData.amount or 0)
     self:LogHunterMisdirectionStart(eventData.sourceName)
 
-    if HUNTER_VISIBLE_SKIP_SPELLS[eventData.spellId] or not TRACKED_SPELLS[eventData.spellId] then
+    if not isHunterDamageVisible(eventData.spellId) then
         return
     end
 

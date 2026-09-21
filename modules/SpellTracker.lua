@@ -13,7 +13,7 @@ local VALITHRIA_DREAMWALKER = "Валитрия Сноходица"
 local LICH_KING = "Король-лич"
 local TAUNTS = {
     [355] = true, [694] = true, [1161] = true, [49560] = true, [51399] = true,
-    [56222] = true, [62124] = true, [31789] = true, [5209] = true
+    [56222] = true, [62124] = true, [31789] = true, [5209] = true, [20736] = true
 }
 
 function SppellTracker:logSpell(event, legacyMessage, kind)
@@ -41,6 +41,7 @@ local TRACKED_SPELLS = {
     [62124] = "Interface\\Icons\\Spell_Holy_UnyieldingFaith", -- Paladin: Hand of Reckoning
     [31789] = "Interface\\Icons\\inv_shoulder_37",
     [5209] = "Interface\\Icons\\Ability_Druid_ChallangingRoar", -- Druid: Growl
+    [20736] = "Interface\\Icons\\spell_arcane_blink", -- Hunter: Distracting Shot
 
     [10278] = "Interface\\Icons\\Spell_Holy_SealOfProtection", -- Paladin: Корона
     [1044] = "Interface\\Icons\\Spell_Holy_SealOfValor", -- Paladin: Длань свободы
@@ -256,7 +257,7 @@ function SppellTracker:demo()
     self.log(formatFirstHit(time(), "CrazyDkPet", "Halion"))
     self.log(formatFirstHeal(time(), "Healer", VALITHRIA_DREAMWALKER))
 
-    for _, v in pairs({355, 694, 1161, 49560, 51399, 56222, 62124, 5209, 31789}) do
+    for _, v in pairs({355, 694, 1161, 49560, 51399, 56222, 62124, 5209, 31789, 20736}) do
         self.log(formatSpellCast(time(), "NotTank", TRACKED_SPELLS[v], "Halion"))
     end
 

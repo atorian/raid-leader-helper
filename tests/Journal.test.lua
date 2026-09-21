@@ -39,11 +39,12 @@ local function cast(source, target, spellId)
 end
 
 describe('Structured journal', function()
-    local oldRoster, oldClass, oldIterate, oldSend, oldFrame, oldTooltip, lines
+    local oldRoster, oldClass, oldIterate, oldSend, oldFrame, oldTooltip, oldSpellInfo, lines
 
     before_each(function()
         oldRoster, oldClass = GetRaidRosterInfo, UnitClass
         oldFrame, oldTooltip = CreateFrame, GameTooltip
+        oldSpellInfo = GetSpellInfo
         oldIterate, oldSend = addon.IterateModules, addon.SendMessage
         mocks:ClearUnitGUIDs()
         mocks:ClearRaidRoster()
@@ -76,6 +77,7 @@ describe('Structured journal', function()
     after_each(function()
         _G.GetRaidRosterInfo, _G.UnitClass = oldRoster, oldClass
         _G.CreateFrame, _G.GameTooltip = oldFrame, oldTooltip
+        _G.GetSpellInfo = oldSpellInfo
         addon.IterateModules, addon.SendMessage = oldIterate, oldSend
         addon.journalV2Enabled = false
         addon:StopCombatTicker()
@@ -228,6 +230,108 @@ describe('Structured journal', function()
         assert.is_truthy(entries[2].text:find('Player(2)', 1, true))
     end)
 
+    it('renders first damage and healing like V1 without using their spell icons', function()
+        _G.GetSpellInfo = function() return 'Spell', nil, 'SpellTexture' end
+        spells:handleEvent(event('SPELL_DAMAGE', 53209, 'Hunter', 'Boss', 1001, 100))
+        spells:handleEvent(event('SPELL_HEAL', 48782, 'Healer', 'Валитрия Сноходица', 1002, 200))
+        local expected = {
+            date('%H:%M:%S', 1001) .. ' |cFFFFFFFFHunter|r Первый урон по |cFFFFFFFFBoss|r',
+            date('%H:%M:%S', 1002) .. ' |cFFFFFFFFHealer|r Первый хил по |cFFFFFFFFВалитрия Сноходица|r',
+        }
+        assert.are.same(expected, lines)
+        assert.are.equal(53209, addon.currentCombat.events[1].spellId)
+        addon:DisplayCombat(Journal.Copy(addon.currentCombat))
+        assert.are.same(expected, lines)
+        local ability = Journal.Create('SPELL_USE', event('SPELL_CAST_SUCCESS', 53209))
+        assert.is_truthy(Journal.Format(ability):find('|TSpellTexture:', 1, true))
+    end)
+
+    it('renders the entire violation message in red, including any highlighted names', function()
+        local entry = Journal.Create('SHADOW_TRAP', event('SPELL_DAMAGE', 73529), 'TACTIC_VIOLATION', {
+            text = '|cFFFFFFFFPlayer|r взорвал ловушку',
+        })
+        addon:OnCombatLogEvent(entry)
+        local expected = '|cFFFF0000[НАРУШЕНИЕ] ' .. date('%H:%M:%S', entry.timestamp) ..
+            ' Player взорвал ловушку|r'
+        assert.are.equal(expected, lines[1])
+        addon:DisplayCombat(Journal.Copy(addon.currentCombat))
+        assert.are.equal(expected, lines[1])
+        assert.is_nil(Journal.Format(Journal.Create('SPELL_USE', event('SPELL_CAST_SUCCESS'))):find('|cFFFF0000', 1, true))
+    end)
+
+    it('filters hunter damage like V1 while retaining all damage in totals and saved target details', function()
+        addon.inCombat = true
+        addon.currentCombat.startTime = 1000
+        addon:SetJournalView('MISDIRECTION')
+        cast('hunter', 'tank')
+        local hits = {
+            { 'RANGE_DAMAGE', 75 }, { 'SPELL_DAMAGE', 53353 },
+            { 'SPELL_PERIODIC_DAMAGE', 49001 }, { 'SWING_DAMAGE' },
+            { 'SPELL_DAMAGE', 53209 }, { 'SPELL_PERIODIC_DAMAGE', 53352 },
+        }
+        for _, hit in ipairs(hits) do
+            pulls:handleEvent(event(hit[1], hit[2], 'hunter', 'enemy', 1001, 100))
+        end
+        pulls:handleEvent(event('SPELL_AURA_REMOVED', 35079, 'hunter', 'hunter', 1002))
+        assert.are.equal(4, #lines) -- Start, two tracked spells, summary.
+        local entries = addon.currentCombat.events
+        assert.are.equal(8, #entries)
+        assert.are.equal(600, entries[8].amount)
+        assert.are.same({ { target = { guid = 'enemy', name = 'enemy' }, amount = 600 } },
+            Journal.PullTargets(addon.currentCombat, 1))
+        local expected = Journal.Copy(lines)
+        addon:FinishCombat('test')
+        addon.db = assert(loadstring('return ' .. serialize(addon.db)))()
+        addon:InitializeJournal()
+        addon:DisplayCombat(addon.combatHistory[1])
+        addon:SetJournalView('MISDIRECTION')
+        assert.are.same(expected, lines)
+        assert.are.equal(600, Journal.PullTargets(addon.combatHistory[1], 1)[1].amount)
+    end)
+
+    it('filters rogue damage by the existing whitelist without removing damage from the total', function()
+        addon.inCombat = true
+        addon:SetJournalView('MISDIRECTION')
+        cast('rogue', 'tank', 57934)
+        pulls:handleEvent(event('SWING_DAMAGE', nil, 'rogue', 'enemy', 1001, 100))
+        pulls:handleEvent(event('SPELL_DAMAGE', 57965, 'rogue', 'enemy', 1001, 200))
+        pulls:handleEvent(event('SPELL_DAMAGE', 51723, 'rogue', 'enemy', 1001, 300))
+        pulls:handleEvent(event('SPELL_PERIODIC_DAMAGE', 57970, 'rogue', 'enemy', 1001, 400))
+        pulls:handleEvent(event('SPELL_AURA_REMOVED', 59628, 'rogue', 'rogue', 1002))
+        assert.are.equal(4, #lines) -- Start, two whitelisted hits, summary.
+        assert.is_truthy(lines[2]:find('300', 1, true))
+        assert.is_truthy(lines[3]:find('400', 1, true))
+        assert.are.equal(6, #addon.currentCombat.events)
+        assert.are.equal(1000, addon.currentCombat.events[6].amount)
+    end)
+
+    it('shows each simultaneous hunter and rogue hit with its target name live and after reload', function()
+        addon.inCombat = true
+        addon.currentCombat.startTime = 1000
+        addon:SetJournalView('MISDIRECTION')
+        for _, caster in ipairs({ { 'Hunter', 34477, 53209 }, { 'Rogue', 57934, 51723 } }) do
+            cast(caster[1], 'Tank', caster[2])
+            local before = #lines
+            for i, target in ipairs({ 'Первая цель', 'Вторая цель', 'Первая цель' }) do
+                local hit = event('SPELL_DAMAGE', caster[3], caster[1], 'enemy-' .. i, 1001, i * 100)
+                hit.destName = target
+                pulls:handleEvent(hit)
+                assert.are.equal(before + i, #lines)
+                assert.is_truthy(lines[#lines]:find(caster[1] .. ' → ' .. target, 1, true))
+                assert.is_truthy(lines[#lines]:find(tostring(i * 100), 1, true))
+                assert.is_nil(lines[#lines]:find('Tank', 1, true))
+            end
+        end
+        addon:FinishCombat('test')
+        local expected = Journal.Copy(lines)
+        addon.db = assert(loadstring('return ' .. serialize(addon.db)))()
+        addon:InitializeJournal()
+        addon:DisplayCombat(addon.combatHistory[1])
+        addon:SetJournalView('MISDIRECTION')
+        assert.are.same(expected, lines)
+        assert.are.equal(10, #lines) -- Two starts, six individual hits, two summaries.
+    end)
+
     it('records all hunter and rogue damage independently of the view, including simultaneous hits', function()
         addon.inCombat = true
         cast('hunter', 'tank')
@@ -252,7 +356,7 @@ describe('Structured journal', function()
         assert.are.equal(100, targets[1].amount)
         assert.are.equal(200, targets[2].amount)
         addon:SetJournalView('MISDIRECTION')
-        assert.are.equal(8, #lines)
+        assert.are.equal(5, #lines) -- Auto-attacks and the Chimera proc stay out of the visible log.
         addon:SetJournalView('DEATHS')
         assert.are.equal(0, #lines)
         assert.are.equal(8, #addon.currentCombat.events)

@@ -54,7 +54,6 @@ local COMBATLOG_OBJECT_TYPE_PLAYER_FLAG = COMBATLOG_OBJECT_TYPE_PLAYER or 0x0000
 
 -- Enemy flags
 RLHelper.ENEMY_FLAGS = 0xa48 -- Маска для проверки враждебных NPC (OUTSIDER | HOSTILE | NPC | NPC_TYPE)
-RLHelper.CONTROLLED_FLAGS = 0x1248 -- Маска для проверки юнитов под контролем (OUTSIDER | CONTROLLED | NPC | NPC_TYPE)
 
 -- Default settings
 local defaults = {
@@ -95,6 +94,9 @@ RLHelper.viewingCurrentCombat = true -- Initialize to true by default
 
 RLHelper.activeEnemies = {}
 RLHelper.activePlayers = {}
+RLHelper.groupMembers = {}
+RLHelper.groupAssignments = {}
+RLHelper.hasTankAssignments = false
 RLHelper.enemyEvents = {} -- Structure to track enemies and their events
 RLHelper.lastCombatActivityAt = nil
 RLHelper.combatEndRequestedAt = nil
@@ -134,6 +136,49 @@ function RLHelper:IsInGroup()
     end
 
     return type(GetNumPartyMembers) == "function" and GetNumPartyMembers() > 0
+end
+
+-- Combat-log affiliation/reaction changes when the observer is mind-controlled.
+-- Keep group identity separate from those flags and from per-combat state.
+function RLHelper:RefreshGroupRoster()
+    wipe(self.groupMembers)
+    wipe(self.groupAssignments)
+    self.hasTankAssignments = false
+    local function addUnit(unit)
+        if UnitExists(unit) then
+            local guid = UnitGUID(unit)
+            if guid then
+                self.groupMembers[guid] = unit
+            end
+        end
+    end
+
+    addUnit("player")
+    addUnit("pet")
+    local raidSize = GetNumRaidMembers()
+    local prefix = raidSize > 0 and "raid" or "party"
+    local count = raidSize > 0 and raidSize or GetNumPartyMembers()
+    for i = 1, count do
+        addUnit(prefix .. i)
+        addUnit(prefix .. "pet" .. i)
+        if raidSize > 0 then
+            local guid = UnitGUID("raid" .. i)
+            local assignment = select(10, GetRaidRosterInfo(i))
+            if self.groupMembers[guid] and (assignment == "MAINTANK" or assignment == "MAINASSIST") then
+                self.groupAssignments[guid] = assignment
+                self.hasTankAssignments = true
+            end
+        end
+    end
+end
+
+function RLHelper:IsGroupMember(guid, flags)
+    return self.groupMembers[guid] ~= nil or bit.band(flags or 0, self.GROUP_AFFILIATION_ANY) > 0
+end
+
+function RLHelper:IsAssignedTank(guid)
+    local assignment = self.groupAssignments[guid]
+    return assignment == "MAINTANK" or assignment == "MAINASSIST"
 end
 
 function RLHelper:ShouldShowMainFrame()
@@ -378,24 +423,22 @@ function RLHelper:OnEnable()
     self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     self:RegisterEvent("PARTY_MEMBERS_CHANGED")
     self:RegisterEvent("RAID_ROSTER_UPDATE")
+    self:RegisterEvent("UNIT_PET", "RefreshGroupRoster")
+    self:RefreshGroupRoster()
     self:UpdateZoneContext()
     self:RefreshMainFrameVisibility()
 end
 
-local function isEnemy(flags)
-    return bit.band(flags or 0, RLHelper.ENEMY_FLAGS) > 0
-end
-
-local function isPlayer(flags)
-    return bit.band(flags or 0, RLHelper.GROUP_AFFILIATION_ANY) > 0
+local function isEnemy(flags, guid)
+    return not RLHelper:IsGroupMember(guid, flags) and bit.band(flags or 0, RLHelper.ENEMY_FLAGS) > 0
 end
 
 local function isPlayerType(flags)
     return bit.band(flags or 0, COMBATLOG_OBJECT_TYPE_PLAYER_FLAG) > 0
 end
 
-local function isOutsidePlayer(flags)
-    return isPlayerType(flags) and not isPlayer(flags)
+local function isOutsidePlayer(flags, guid)
+    return isPlayerType(flags) and not RLHelper:IsGroupMember(guid, flags)
 end
 
 local function shouldIgnoreCombatEnemy(name)
@@ -437,7 +480,8 @@ local function isValithriaHealTrigger(event, npcId)
         return true
     end
 
-    return (event.event == "SPELL_HEAL" or event.event == "SPELL_PERIODIC_HEAL") and isPlayer(event.sourceFlags) and
+    return (event.event == "SPELL_HEAL" or event.event == "SPELL_PERIODIC_HEAL") and
+        RLHelper:IsGroupMember(event.sourceGUID, event.sourceFlags) and
         (event.amount or 0) > 0
 end
 
@@ -478,12 +522,13 @@ local function involvesEnemy(event)
     return isEnemy(event.sourceFlags) or isEnemy(event.destFlags)
 end
 
-local function isTrackableEnemy(flags, name)
-    return isEnemy(flags) and not shouldIgnoreCombatEnemy(name)
+local function isTrackableEnemy(flags, name, guid)
+    return isEnemy(flags, guid) and not shouldIgnoreCombatEnemy(name)
 end
 
 local function involvesTrackableEnemy(event)
-    return isTrackableEnemy(event.sourceFlags, event.sourceName) or isTrackableEnemy(event.destFlags, event.destName)
+    return isTrackableEnemy(event.sourceFlags, event.sourceName, event.sourceGUID) or
+        isTrackableEnemy(event.destFlags, event.destName, event.destGUID)
 end
 
 local function isEnemyDeathEvent(event)
@@ -491,7 +536,7 @@ local function isEnemyDeathEvent(event)
 end
 
 local function involvesOutsidePlayer(event)
-    return isOutsidePlayer(event.sourceFlags) or isOutsidePlayer(event.destFlags)
+    return isOutsidePlayer(event.sourceFlags, event.sourceGUID) or isOutsidePlayer(event.destFlags, event.destGUID)
 end
 
 function RLHelper:MarkEnemyInactive(guid)
@@ -654,22 +699,22 @@ function RLHelper:trackCombatants(event)
     self.lastCombatActivityAt = now
     self.combatEndRequestedAt = nil
 
-    if isPlayer(event.sourceFlags) and event.sourceGUID then
+    if RLHelper:IsGroupMember(event.sourceGUID, event.sourceFlags) and event.sourceGUID then
         self.activePlayers[event.sourceGUID] = true
     end
-    if isPlayer(event.destFlags) and event.destGUID then
+    if RLHelper:IsGroupMember(event.destGUID, event.destFlags) and event.destGUID then
         self.activePlayers[event.destGUID] = true
     end
 
-    if isTrackableEnemy(event.sourceFlags, event.sourceName) then
+    if isTrackableEnemy(event.sourceFlags, event.sourceName, event.sourceGUID) then
         self:MarkEnemyActivity(event.sourceGUID, event.sourceName, event.event, now)
     end
-    if isTrackableEnemy(event.destFlags, event.destName) then
+    if isTrackableEnemy(event.destFlags, event.destName, event.destGUID) then
         self:MarkEnemyActivity(event.destGUID, event.destName, event.event, now)
     end
 
     if isEnemyDeathEvent(event) then
-        if isEnemy(event.destFlags) then
+        if isEnemy(event.destFlags, event.destGUID) then
             self:MarkEnemyInactive(event.destGUID)
         end
     end
@@ -747,6 +792,7 @@ function RLHelper:UpdateZoneContext(reason, silent)
 end
 
 function RLHelper:PLAYER_ENTERING_WORLD()
+    self:RefreshGroupRoster()
     self:UpdateZoneContext("PLAYER_ENTERING_WORLD")
 end
 
@@ -755,10 +801,12 @@ function RLHelper:ZONE_CHANGED_NEW_AREA()
 end
 
 function RLHelper:PARTY_MEMBERS_CHANGED()
+    self:RefreshGroupRoster()
     self:RefreshMainFrameVisibility()
 end
 
 function RLHelper:RAID_ROSTER_UPDATE()
+    self:RefreshGroupRoster()
     self:RefreshMainFrameVisibility()
 end
 
@@ -788,16 +836,22 @@ function RLHelper:DispatchCombatEvent(eventData)
 end
 
 function affectingGroup(event)
-    local sourceFlags = event.sourceFlags
-    local destFlags = event.destFlags
+    return RLHelper:IsGroupMember(event.sourceGUID, event.sourceFlags) or
+        RLHelper:IsGroupMember(event.destGUID, event.destFlags)
+end
 
-    -- Игнорируем события, где источник или цель под контролем
-    if bit.band(sourceFlags, RLHelper.CONTROLLED_FLAGS) == RLHelper.CONTROLLED_FLAGS or
-        bit.band(destFlags, RLHelper.CONTROLLED_FLAGS) == RLHelper.CONTROLLED_FLAGS then
-        return false
+function RLHelper:IsBossGUID(guid)
+    if self:IsGroupMember(guid) then return false end
+    local npcId = creatureIdFromGuid(guid)
+    if bossNameFromRegistry(self.currentInstanceId, npcId) then return true end
+    if type(self.IterateModules) == "function" then
+        for _, module in self:IterateModules() do
+            if self:ShouldDispatchCombatEventToModule(module) and bossNameFromModule(module, npcId) then
+                return true
+            end
+        end
     end
-
-    return isPlayer(sourceFlags) or isPlayer(destFlags)
+    return false
 end
 
 function RLHelper:GetKnownBossNameFromCombatEvent(event)
@@ -870,9 +924,9 @@ function RLHelper:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
 
     if not self.currentCombat.firstEnemy and affectingGroup(eventData) then
         -- Save first enemy name if not set yet
-        if isEnemy(eventData.sourceFlags) and not shouldIgnoreCombatEnemy(eventData.sourceName) then
+        if isEnemy(eventData.sourceFlags, eventData.sourceGUID) and not shouldIgnoreCombatEnemy(eventData.sourceName) then
             self.currentCombat.firstEnemy = eventData.sourceName
-        elseif isEnemy(eventData.destFlags) and not shouldIgnoreCombatEnemy(eventData.destName) then
+        elseif isEnemy(eventData.destFlags, eventData.destGUID) and not shouldIgnoreCombatEnemy(eventData.destName) then
             self.currentCombat.firstEnemy = eventData.destName
         end
     end
@@ -1631,7 +1685,7 @@ function RLHelper:CreateMainFrame()
         frame.journalFilters = filters
         frame.journalFilterButtons = {}
         local previous
-        for _, choice in ipairs({ { "ALL", "Все" }, { "DEATHS", "Смерти" }, { "MISDIRECTION", "Напулы" } }) do
+        for _, choice in ipairs({ { "ALL", "Все" }, { "ERRORS", "Ошибки" }, { "MISDIRECTION", "Напулы" } }) do
             local view, label = choice[1], choice[2]
             local button = CreateFrame("Button", nil, filters, "UIPanelButtonTemplate")
             button:SetSize(80, 22)

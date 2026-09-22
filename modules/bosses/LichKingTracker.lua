@@ -6,7 +6,6 @@ LichKingTracker.zoneGateInstanceId = 631 -- Icecrown Citadel
 local SHADOW_TRAP_DAMAGE = 73529
 local SHADOW_TRAP_ICON = 'Interface\\Icons\\spell_shadow_gathershadows'
 local RAGING_SPIRIT = 69200
-local PLAYER_FLAGS = 0x7
 
 function LichKingTracker:OnInitialize()
     self.log = function(...)
@@ -21,10 +20,6 @@ end
 
 function LichKingTracker:reset()
     self.lastShadowTrapTimestamp = nil
-end
-
-local function isPlayer(flags)
-    return bit.band(flags or 0, PLAYER_FLAGS) > 0
 end
 
 local function formatShadowTrap(ts, playerName)
@@ -43,7 +38,7 @@ function LichKingTracker:handleEvent(event)
     end
 
     if event.event ~= 'SPELL_DAMAGE' or event.spellId ~= SHADOW_TRAP_DAMAGE or not event.destName or
-        not isPlayer(event.destFlags) then
+        not RLHelper:IsGroupMember(event.destGUID, event.destFlags) then
         return
     end
 

@@ -1,4 +1,5 @@
 require('tests.mocks')
+require('../Core')
 require('../lib/blizzardEvent')
 
 local spy = require('luassert.spy')

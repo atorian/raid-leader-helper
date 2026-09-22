@@ -29,11 +29,14 @@ describe("Боевая система", function()
     local originalIterateModules
     local originalSendMessage
     local displayedMessages
+    local originalGroupMembers
 
     before_each(function()
         originalIterateModules = RLHelper.IterateModules
         originalSendMessage = RLHelper.SendMessage
         displayedMessages = {}
+        originalGroupMembers = RLHelper.groupMembers
+        RLHelper.groupMembers = {}
         RLHelper:StopCombatTicker()
         RLHelper.inCombat = false
         RLHelper.lastCombatActivityAt = nil
@@ -85,6 +88,7 @@ describe("Боевая система", function()
     after_each(function()
         RLHelper.IterateModules = originalIterateModules
         RLHelper.SendMessage = originalSendMessage
+        RLHelper.groupMembers = originalGroupMembers
     end)
 
     it("начинает бой когда игрок входит в бой", function()
@@ -658,4 +662,195 @@ describe("Боевая система", function()
         assert.are.equal("Йогг-Сарон", RLHelper.combatHistory[1].firstEnemy)
     end)
 
+
+    describe("group identity during mind control", function()
+        local observer = "0x00000000003F0563"
+        local raider = "0x000000000036AE73"
+        local lady = "0xF130008FF75CADA4"
+        local spirit = "0xF13000954E5D128E"
+
+        before_each(function()
+            M.raidSize = 2
+            M:SetUnitGUID("player", observer)
+            M:SetUnitGUID("raid1", observer)
+            M:SetUnitGUID("raid2", raider)
+            RLHelper:RAID_ROSTER_UPDATE("RAID_ROSTER_UPDATE")
+            RLHelper.currentInstanceId = 631
+        end)
+
+        after_each(function()
+            M:ClearUnitGUIDs()
+            M.raidSize = 0
+            M.partySize = 0
+        end)
+
+        it("recognizes raid members and controlled players independently of their flags", function()
+            assert.is_true(RLHelper:IsGroupMember(raider, 0x548))
+            assert.is_true(RLHelper:IsGroupMember(observer, 0x801218))
+            assert.is_true(affectingGroup({ sourceGUID = observer, sourceFlags = 0x1248 }))
+            assert.is_true(affectingGroup({ destGUID = raider, destFlags = 0x548 }))
+            assert.is_false(RLHelper:IsGroupMember("outsider", 0x548))
+        end)
+
+        it("rebuilds the roster when switching from raid to party and then solo", function()
+            M.raidSize = 0
+            M.partySize = 1
+            M:SetUnitGUID("party1", "party-member")
+            M:SetUnitGUID("partypet1", "party-pet")
+            M:SetUnitGUID("pet", "own-pet")
+            RLHelper:PARTY_MEMBERS_CHANGED("PARTY_MEMBERS_CHANGED")
+            assert.is_false(RLHelper:IsGroupMember(raider, 0x548))
+            assert.is_true(RLHelper:IsGroupMember("party-member", 0x548))
+            assert.is_true(RLHelper:IsGroupMember("party-pet", 0x1148))
+            assert.is_true(RLHelper:IsGroupMember("own-pet", 0x1148))
+
+            M.partySize = 0
+            RLHelper:PLAYER_ENTERING_WORLD("PLAYER_ENTERING_WORLD")
+            assert.is_false(RLHelper:IsGroupMember("party-member", 0x548))
+            assert.is_false(RLHelper:IsGroupMember("party-pet", 0x1148))
+            assert.is_true(RLHelper:IsGroupMember(observer, 0x1218))
+        end)
+
+        it("refreshes pet GUIDs and retains group identity across combat resets", function()
+            M:SetUnitGUID("raidpet2", "old-pet")
+            RLHelper:RefreshGroupRoster("UNIT_PET", "raid2")
+            assert.is_true(RLHelper:IsGroupMember("old-pet", 0x1148))
+            M:SetUnitGUID("raidpet2", "new-pet")
+            RLHelper:RefreshGroupRoster("UNIT_PET", "raid2")
+            RLHelper:ResetCombatState()
+            assert.is_false(RLHelper:IsGroupMember("old-pet", 0x1148))
+            assert.is_true(RLHelper:IsGroupMember("new-pet", 0x1148))
+            assert.is_true(RLHelper:IsGroupMember(raider, 0x548))
+        end)
+
+        it("dispatches raid mechanics in both directions but still rejects outside players", function()
+            local handled = 0
+            setBossModules({ { receivesCombatEvents = true, handleEvent = function()
+                handled = handled + 1
+            end } })
+            for _, flags in ipairs({ 0x514, 0x548, 0x1248, 0x1218 }) do
+                RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 100, "SWING_DAMAGE",
+                    raider, "Storm", flags, lady, "Леди Смертный Шепот", 0xa18,
+                    100, 0, 1, 0, 0, 0)
+                RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 100, "SWING_DAMAGE",
+                    lady, "Леди Смертный Шепот", 0xa18, raider, "Storm", flags,
+                    100, 0, 1, 0, 0, 0)
+            end
+            assert.are.equal(8, handled)
+            assert.is_true(RLHelper.activePlayers[raider])
+            assert.is_nil(RLHelper.activeEnemies[raider])
+            assert.are.equal("Леди Смертный Шепот", RLHelper.currentCombat.firstEnemy)
+            assert.is_true(RLHelper.currentCombat.isBoss)
+
+            RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 100, "SWING_DAMAGE",
+                lady, "Леди Смертный Шепот", 0xa18, "outsider", "Чужой", 0x548,
+                100, 0, 1, 0, 0, 0)
+            assert.are.equal(8, handled)
+        end)
+
+        it("does not start an enemy encounter for damage between known controlled raiders", function()
+            setBossModules({})
+            RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 100, "SWING_DAMAGE",
+                observer, "Бочок", 0x801218, raider, "Storm", 0x548,
+                100, 0, 1, 0, 0, 0)
+            assert.is_nil(RLHelper.currentCombat.firstEnemy)
+            assert.is_false(RLHelper.inCombat)
+            assert.are.equal(0, count(RLHelper.activeEnemies))
+        end)
+
+        it("keeps module-level mechanic filters independent of observer allegiance", function()
+            local queen = require('../modules/bosses/BloodQueenTracker')
+            local lich = require('../modules/bosses/LichKingTracker')
+            local oldQueenLog, oldLichLog = queen.log, lich.log
+            local oldTimestamp = lich.lastShadowTrapTimestamp
+            local oldV2 = RLHelper.journalV2Enabled
+            finally(function()
+                queen.log, lich.log = oldQueenLog, oldLichLog
+                lich.lastShadowTrapTimestamp = oldTimestamp
+                RLHelper.journalV2Enabled = oldV2
+            end)
+            RLHelper.journalV2Enabled = false
+            queen.log = function(message) RLHelper:OnCombatLogEvent(message) end
+            lich.log = queen.log
+            lich:reset()
+            setBossModules({ queen, lich })
+            RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 100, "SPELL_DAMAGE",
+                raider, "Storm", 0x548, observer, "Бочок", 0x1218,
+                71483, "Кровавый всплеск", 0x20, 1000, 0, 1, 0, 0, 0)
+            RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 101, "SPELL_DAMAGE",
+                "trap", "Ловушка", 0xa18, raider, "Storm", 0x548,
+                73529, "Темная ловушка", 0x20, 1000, 0, 1, 0, 0, 0)
+            assert.are.equal(2, #RLHelper.currentCombat.messages)
+        end)
+
+        it("uses the roster for first damage without treating controlled group members as enemies", function()
+            local oldLog = SpellTracker.log
+            local oldV2 = RLHelper.journalV2Enabled
+            finally(function()
+                SpellTracker.log = oldLog
+                SpellTracker:reset()
+                RLHelper.journalV2Enabled = oldV2
+            end)
+            RLHelper.journalV2Enabled = false
+            SpellTracker:reset()
+            SpellTracker.log = function(message) RLHelper:OnCombatLogEvent(message) end
+            setBossModules({ SpellTracker })
+            RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 100, "SWING_DAMAGE",
+                observer, "Бочок", 0x1218, raider, "Storm", 0x548,
+                100, 0, 1, 0, 0, 0)
+            assert.are.equal(0, #RLHelper.currentCombat.messages)
+            RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 101, "SWING_DAMAGE",
+                raider, "Storm", 0x548, lady, "Леди Смертный Шепот", 0xa18,
+                100, 0, 1, 0, 0, 0)
+            assert.are.equal(1, #RLHelper.currentCombat.messages)
+            assert.is_truthy(RLHelper.currentCombat.messages[1]:find("Первый урон"))
+        end)
+
+        it("identifies a controlled raid player's death as a player rather than a pet", function()
+            local igor = require('../modules/IgorDeathTracker')
+            local normal = igor:GetGroupDeathMessagePhrases({
+                event = "UNIT_DIED", destGUID = raider, destName = "Storm", destFlags = 0x514
+            })
+            local controlled = igor:GetGroupDeathMessagePhrases({
+                event = "UNIT_DIED", destGUID = raider, destName = "Storm", destFlags = 0x1248
+            })
+            assert.is_not_nil(normal)
+            assert.are.equal(normal, controlled)
+        end)
+
+        for _, journalV2 in ipairs({ false, true }) do
+            it("records the real spirit hit during observer control (journalV2=" .. tostring(journalV2) .. ")", function()
+                local tracker = require('../modules/bosses/DeathwhisperTracker')
+                local oldLog, oldSpirits, oldReport = tracker.log, tracker.currentSpirits, tracker.report
+                local oldV2 = RLHelper.journalV2Enabled
+                finally(function()
+                    tracker.log, tracker.currentSpirits, tracker.report = oldLog, oldSpirits, oldReport
+                    RLHelper.journalV2Enabled = oldV2
+                end)
+                tracker.currentSpirits, tracker.report = {}, {}
+                tracker.log = function(message) RLHelper:OnCombatLogEvent(message) end
+                RLHelper.journalV2Enabled = journalV2
+                if journalV2 then RLHelper.currentCombat.events = {} end
+                setBossModules({ tracker })
+
+                -- WoWCombatLog3.txt: 20:34:32.185 summon, 20:34:36.022 hit under observer control.
+                RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 100, "SPELL_SUMMON",
+                    lady, "Леди Смертный Шепот", 0xa18, spirit, "Мстительный дух", 0xa18,
+                    71426, "Призыв духа", 0x1)
+                RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 104, "SWING_DAMAGE",
+                    spirit, "Мстительный дух", 0xa18, raider, "Storm", 0x548,
+                    224, 0, 1, 0, 0, 0)
+
+                assert.are.equal(1, tracker.report.Storm)
+                assert.is_nil(tracker.currentSpirits[spirit])
+                if journalV2 then
+                    assert.are.equal(1, #RLHelper.currentCombat.events)
+                    assert.are.equal("SPIRIT_HIT", RLHelper.currentCombat.events[1].kind)
+                else
+                    assert.are.equal(1, #RLHelper.currentCombat.messages)
+                    assert.is_truthy(RLHelper.currentCombat.messages[1]:find("Storm"))
+                end
+            end)
+        end
+    end)
 end)

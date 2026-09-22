@@ -8,7 +8,8 @@ local firstDamageDone = false
 local firstValithriaHealDone = false
 local HAND_OF_RECKONING = 62124
 local HOLY_WRATH = 48817
-local DISTRACTING_SHOT = 20736
+local HAND_OF_PROTECTION = 10278
+local RIGHTEOUS_DEFENSE = 31789
 local ICECROWN_CITADEL = 631
 local VALITHRIA_DREAMWALKER = "Валитрия Сноходица"
 local LICH_KING = "Король-лич"
@@ -17,15 +18,40 @@ local TAUNTS = {
     [56222] = true, [62124] = true, [31789] = true, [5209] = true, [20736] = true
 }
 
+function SppellTracker:GetSpellClassification(event)
+    if not TAUNTS[event.spellId] and event.spellId ~= HAND_OF_PROTECTION then
+        return "INFO"
+    end
+
+    local fields = {
+        sourceAssignment = RLHelper.groupAssignments[event.sourceGUID],
+        targetAssignment = RLHelper.groupAssignments[event.destGUID],
+        targetIsBoss = RLHelper:IsBossGUID(event.destGUID)
+    }
+    if RLHelper.inCombat then
+        if event.spellId == HAND_OF_PROTECTION then
+            if RLHelper:IsAssignedTank(event.destGUID) then return "TACTIC_VIOLATION", fields end
+        elseif RLHelper.hasTankAssignments and RLHelper.groupMembers[event.sourceGUID] and
+            not RLHelper:IsAssignedTank(event.sourceGUID) then
+            local tauntsTank = event.spellId == RIGHTEOUS_DEFENSE and event.sourceGUID ~= event.destGUID and
+                RLHelper:IsAssignedTank(event.destGUID)
+            if fields.targetIsBoss or tauntsTank then return "TACTIC_VIOLATION", fields end
+        end
+    end
+    return "INFO", fields
+end
+
 function SppellTracker:logSpell(event, legacyMessage, kind)
     kind = kind or (TAUNTS[event.spellId] and "TAUNT" or "SPELL_USE")
-    local severity = "INFO"
-    if RLHelper.journalV2Enabled and kind == "TAUNT" and event.spellId == DISTRACTING_SHOT then
-        severity = "TACTIC_VIOLATION"
-    elseif RLHelper.journalV2Enabled and kind == "TAUNT" then
-        severity = RLHelperJournal.TauntType(event.sourceGUID)
+    local severity, fields = "INFO", nil
+    if RLHelper.journalV2Enabled then
+        if event.journalType then
+            severity, fields = event.journalType, event.journalFields
+        else
+            severity, fields = self:GetSpellClassification(event)
+        end
     end
-    RLHelperJournal.Log(RLHelper, self.log, kind, event, legacyMessage, severity)
+    RLHelperJournal.Log(RLHelper, self.log, kind, event, legacyMessage, severity, fields)
 end
 function SppellTracker:OnEnable()
     RLHelper:Debug("RL Быдло: TauntTracker включен")
@@ -105,15 +131,10 @@ function SppellTracker:reset()
     self.pendingHandOfReckonings = {}
 end
 
-local PLAYER_FLAGS = 0x7
 local ENEMY_FLAGS = 0xa48
 
-local function isPlayer(flags)
-    return bit.band(flags or 0, PLAYER_FLAGS) > 0
-end
-
-local function isEnemy(flags)
-    return bit.band(flags or 0, ENEMY_FLAGS) > 0
+local function isEnemy(flags, guid)
+    return not RLHelper:IsGroupMember(guid, flags) and bit.band(flags or 0, ENEMY_FLAGS) > 0
 end
 
 local function formatFirstHit(ts, source, dest)
@@ -156,6 +177,10 @@ function SppellTracker:clearPendingHandOfReckoningBySource(sourceGUID)
 end
 
 function SppellTracker:trackHandOfReckoningTarget(eventData)
+    local severity, fields
+    if RLHelper.journalV2Enabled then
+        severity, fields = self:GetSpellClassification(eventData)
+    end
     self.pendingHandOfReckonings[eventData.destGUID] = {
         timestamp = eventData.timestamp,
         spellIcon = TRACKED_SPELLS[eventData.spellId],
@@ -163,7 +188,9 @@ function SppellTracker:trackHandOfReckoningTarget(eventData)
         sourceName = eventData.sourceName,
         destName = eventData.destName,
         destGUID = eventData.destGUID,
-        spellId = eventData.spellId
+        spellId = eventData.spellId,
+        journalType = severity,
+        journalFields = fields
     }
 end
 
@@ -193,7 +220,8 @@ end
 
 function SppellTracker:handleEvent(eventData)
     if not firstDamageDone and (eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE") then
-        if isPlayer(eventData.sourceFlags) and isEnemy(eventData.destFlags) then
+        if RLHelper:IsGroupMember(eventData.sourceGUID, eventData.sourceFlags) and
+            isEnemy(eventData.destFlags, eventData.destGUID) then
             if not CombatFilters or not CombatFilters:IsIgnoredCombatEnemy(eventData.destName) then
                 firstDamageDone = true
                 RLHelperJournal.Log(RLHelper, self.log, "FIRST_DAMAGE", eventData,
@@ -203,7 +231,8 @@ function SppellTracker:handleEvent(eventData)
     end
 
     if not firstValithriaHealDone and (eventData.event == "SPELL_HEAL" or eventData.event == "SPELL_PERIODIC_HEAL") then
-        if isPlayer(eventData.sourceFlags) and eventData.destName == VALITHRIA_DREAMWALKER and (eventData.amount or 0) > 0 then
+        if RLHelper:IsGroupMember(eventData.sourceGUID, eventData.sourceFlags) and
+            eventData.destName == VALITHRIA_DREAMWALKER and (eventData.amount or 0) > 0 then
             firstValithriaHealDone = true
             RLHelperJournal.Log(RLHelper, self.log, "FIRST_HEAL", eventData,
                 formatFirstHeal(eventData.timestamp, eventData.sourceName, eventData.destName))

@@ -6,7 +6,7 @@
 - Journal V2 pull-damage rows use one format for hunters and rogues: time, source name, damage-spell icon, target, and amount; verify both live and saved views.
 - All Journal V2 rows use the same prefix order: time, source name when available, spell icon when available, then the message; omit absent fields without leaving empty placeholders.
 - Misdirection summary rows use the message `Напул окончен <amount>` after the source and pull icon; do not include the pull target in the summary row.
-- Distracting Shot (`20736`) is a tactical violation in newly recorded Journal V2 events.
+- Classify Distracting Shot (`20736`) with the current taunt rules: a known non-tank taunting a known boss during combat is a violation; casts on ordinary mobs are informational. Tank assignments include both MAINTANK and MAINASSIST.
 - For Distracting Shot, record only `SPELL_CAST_SUCCESS`; ignore the resulting aura event to avoid duplicate journal rows.
 - First-damage rows always use `Interface\\Icons\\Ability_SteelMelee`, independent of the combat-log spell icon.
 - TAUNT rows omit the textual `Провокация`; the spell icon identifies the taunt and only the target remains after it.
@@ -21,3 +21,6 @@
 - When release packaging omits a file or directory, first add its copy command to the existing Makefile. Do not replace the build process or add scripts, validation infrastructure, or CI changes unless explicitly requested. The user rejected that expansion for issue #2.
 - AceEvent handlers receive the event name before its payload. Tests must pass that argument too; calling a boss yell handler with only the message can hide a handler that never works in-game.
 - For Halion's first-cutter entry countdown on Isengard, anchor to the phase-two transition using DBM-RS's initial schedule. The cutter yell triggered the countdown about 15 seconds late in the user's raid; do not assume Warmane-specific yell timing applies here. Verify elapsed start/end times in tests and distinguish DBM estimates from in-game confirmation.
+- Keep journal filters to All, Errors, and Misdirection, as chosen by the user. Include tracked Halion mechanic deaths in Errors. Do not propose separate Deaths or Abilities filters without a new use case: ordinary abilities remain in All and flagged violations also appear in Errors.
+
+- Resolve ambiguous spell nicknames by the explicit SpellID before applying error rules. Righteous Defense (`31789`) on an assigned tank during combat is a violation when cast by another known non-tank; another assigned tank is allowed to use it for a tank swap. Hand of Protection (`10278`) on an assigned tank during combat is a violation regardless of the caster’s tank assignment. Check both source and target roles; do not infer safety from the target alone.

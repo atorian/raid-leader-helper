@@ -1,4 +1,5 @@
 require('tests.mocks')
+require('../Core')
 require("../lib/blizzardEvent")
 local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local HalionTracker = require("../modules/bosses/HalionTracker")

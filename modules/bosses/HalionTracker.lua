@@ -103,12 +103,8 @@ local function isHalionPhaseTwoEntryTimerEnabled()
     return type(RLHelper.IsHalionPhaseTwoEntryTimerEnabled) == "function" and RLHelper:IsHalionPhaseTwoEntryTimerEnabled()
 end
 
-local function isEnemy(flags)
-    return bit.band(flags or 0, RLHelper.ENEMY_FLAGS or 0xa48) > 0
-end
-
-local function isPlayer(flags)
-    return bit.band(flags or 0, 0x7) > 0
+local function isEnemy(flags, guid)
+    return not RLHelper:IsGroupMember(guid, flags) and bit.band(flags or 0, RLHelper.ENEMY_FLAGS or 0xa48) > 0
 end
 
 local function creatureIdFromGuid(guid)
@@ -213,9 +209,9 @@ function HalionTracker:GetBossSegmentName()
 end
 
 function HalionTracker:RememberBossName(event)
-    if isEnemy(event.sourceFlags) and event.sourceName then
+    if isEnemy(event.sourceFlags, event.sourceGUID) and event.sourceName then
         self.bossName = event.sourceName
-    elseif isEnemy(event.destFlags) and event.destName then
+    elseif isEnemy(event.destFlags, event.destGUID) and event.destName then
         self.bossName = event.destName
     end
 end
@@ -354,7 +350,8 @@ function HalionTracker:trackFirstLightHalionDamage(event, log)
         return
     end
 
-    if not self.firstLightDamageLogged and DAMAGE_EVENTS[event.event] and isPlayer(event.sourceFlags) and creatureIdFromGuid(event.destGUID) == LIGHT_HALION_ID then
+    if not self.firstLightDamageLogged and DAMAGE_EVENTS[event.event] and
+        RLHelper:IsGroupMember(event.sourceGUID, event.sourceFlags) and creatureIdFromGuid(event.destGUID) == LIGHT_HALION_ID then
         self.firstLightDamageLogged = true
         RLHelperJournal.Log(RLHelper, log, "FIRST_LIGHT_DAMAGE", event,
             formatFirstLightHalionDamage(event.timestamp, event.sourceName))
@@ -435,7 +432,7 @@ function HalionTracker:handleEvent(event)
     self:tryStartPullOnMaterialityDrop(event)
     self:trackFirstLightHalionDamage(event, log)
 
-    if isPlayer(event.destFlags) then
+    if RLHelper:IsGroupMember(event.destGUID, event.destFlags) then
         self:tryResetDamageMetersOnHeroism(event)
 
         if isTwilightCutter(event.spellId) then

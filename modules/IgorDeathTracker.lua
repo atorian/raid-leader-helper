@@ -64,11 +64,14 @@ function IgorDeathTracker:GetGroupDeathMessagePhrases(event)
     local destFlags = event.destFlags or 0
     local groupFlags = bit.bor and bit.bor(RLHelper.GROUP_AFFILIATION_PARTY, RLHelper.GROUP_AFFILIATION_RAID) or
         (RLHelper.GROUP_AFFILIATION_PARTY + RLHelper.GROUP_AFFILIATION_RAID)
-    if bit.band(destFlags, groupFlags) <= 0 then
+    local unit = RLHelper.groupMembers[event.destGUID]
+    local knownMember = unit and event.destGUID ~= UnitGUID("player") and event.destGUID ~= UnitGUID("pet")
+    if not knownMember and bit.band(destFlags, groupFlags) <= 0 then
         return nil
     end
 
-    if isPlayerType(destFlags) then
+    -- A controlled player can have TYPE_PET in the combat log.
+    if (knownMember and not unit:find("pet")) or isPlayerType(destFlags) then
         return IGOR_DEATH_PHRASES
     end
 

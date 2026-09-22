@@ -2,6 +2,7 @@ local mocks = require('tests.mocks')
 local Journal = require('lib.Journal')
 require('../lib/blizzardEvent')
 require('../lib/CombatFilters')
+require('../data/BossIds')
 local addon = require('../Core')
 local spells = require('../modules/SpellTracker')
 local pulls = require('../modules/Misdirection')
@@ -38,10 +39,26 @@ local function cast(source, target, spellId)
     pulls:handleEvent(event('SPELL_CAST_SUCCESS', spellId or 34477, source, target))
 end
 
+local bossGUID = '0xF130008FF75CADA4'
+
+local function setAssignedRaid(tankRole)
+    mocks.raidSize = 3
+    for i, guid in ipairs({ 'tank', 'assist', 'dps' }) do
+        mocks:SetUnitGUID('raid' .. i, guid)
+        mocks:SetRaidRosterInfo(i, guid, 1, 'Warrior', 'WARRIOR',
+            i == 1 and (tankRole or 'MAINTANK') or (i == 2 and 'MAINASSIST' or nil))
+    end
+    addon:RAID_ROSTER_UPDATE('RAID_ROSTER_UPDATE')
+end
+
 describe('Structured journal', function()
     local oldRoster, oldClass, oldIterate, oldSend, oldFrame, oldTooltip, oldSpellInfo, lines
 
+    local oldMembers, oldAssignments, oldHasTanks
+
     before_each(function()
+        oldMembers, oldAssignments, oldHasTanks = addon.groupMembers, addon.groupAssignments, addon.hasTankAssignments
+        addon.groupMembers, addon.groupAssignments, addon.hasTankAssignments = {}, {}, false
         oldRoster, oldClass = GetRaidRosterInfo, UnitClass
         oldFrame, oldTooltip = CreateFrame, GameTooltip
         oldSpellInfo = GetSpellInfo
@@ -75,6 +92,7 @@ describe('Structured journal', function()
     end)
 
     after_each(function()
+        addon.groupMembers, addon.groupAssignments, addon.hasTankAssignments = oldMembers, oldAssignments, oldHasTanks
         _G.GetRaidRosterInfo, _G.UnitClass = oldRoster, oldClass
         _G.CreateFrame, _G.GameTooltip = oldFrame, oldTooltip
         _G.GetSpellInfo = oldSpellInfo
@@ -178,26 +196,91 @@ describe('Structured journal', function()
         assert.are.equal('TACTIC_VIOLATION', records[1].type)
     end)
 
-    it('classifies only known non-tanks as taunt violations', function()
-        mocks.raidSize = 2
-        mocks:SetUnitGUID('raid1', 'tank')
-        mocks:SetUnitGUID('raid2', 'dps')
-        _G.GetRaidRosterInfo = function(i)
-            return i == 1 and 'Tank' or 'Dps', nil, 1, nil, nil, 'WARRIOR', nil, nil, nil,
-                i == 1 and 'MAINTANK' or nil
+    it('classifies only known non-tanks taunting a boss in combat as violations', function()
+        setAssignedRaid()
+        addon.inCombat = true
+        for _, guid in ipairs({ 'tank', 'assist', 'dps', 'unknown' }) do
+            spells:handleEvent(event('SPELL_AURA_APPLIED', 355, guid, bossGUID))
         end
-        spells:handleEvent(event('SPELL_AURA_APPLIED', 355, 'tank'))
-        spells:handleEvent(event('SPELL_AURA_APPLIED', 355, 'dps'))
-        spells:handleEvent(event('SPELL_AURA_APPLIED', 355, 'unknown'))
         local entries = addon.currentCombat.events
         assert.are.equal('INFO', entries[1].type)
-        assert.are.equal('TACTIC_VIOLATION', entries[2].type)
-        assert.are.equal('TAUNT', entries[2].kind)
-        assert.are.equal('INFO', entries[3].type)
-        assert.is_truthy(lines[2]:find('|cFFFF0000', 1, true))
-        _G.GetRaidRosterInfo = function() return 'Dps' end
-        spells:handleEvent(event('SPELL_AURA_APPLIED', 355, 'dps'))
+        assert.are.equal('INFO', entries[2].type)
+        assert.are.equal('TACTIC_VIOLATION', entries[3].type)
+        assert.are.equal('TAUNT', entries[3].kind)
         assert.are.equal('INFO', entries[4].type)
+        assert.is_truthy(lines[3]:find('|cFFFF0000', 1, true))
+
+        mocks:ClearRaidRoster()
+        addon:RAID_ROSTER_UPDATE('RAID_ROSTER_UPDATE')
+        spells:handleEvent(event('SPELL_AURA_APPLIED', 355, 'dps', bossGUID))
+        assert.are.equal('INFO', entries[5].type)
+    end)
+
+    it('uses the target and combat state for taunts and paladin protection', function()
+        setAssignedRaid()
+        addon.currentCombat.isBoss = true
+        addon.currentCombat.firstEnemy = 'Леди Смертный Шепот'
+        local cases = {
+            { 355, 'dps', 'ordinary-mob', true, 'INFO' },
+            { 355, 'dps', bossGUID, false, 'INFO' },
+            { 20736, 'dps', 'ordinary-mob', true, 'INFO', 'SPELL_CAST_SUCCESS' },
+            { 20736, 'dps', bossGUID, true, 'TACTIC_VIOLATION', 'SPELL_CAST_SUCCESS' },
+            { 31789, 'dps', 'tank', true, 'TACTIC_VIOLATION', 'SPELL_CAST_SUCCESS' },
+            { 31789, 'dps', 'assist', true, 'TACTIC_VIOLATION', 'SPELL_CAST_SUCCESS' },
+            { 31789, 'tank', 'assist', true, 'INFO', 'SPELL_CAST_SUCCESS' },
+            { 31789, 'assist', 'tank', true, 'INFO', 'SPELL_CAST_SUCCESS' },
+            { 31789, 'tank', 'tank', true, 'INFO', 'SPELL_CAST_SUCCESS' },
+            { 31789, 'dps', 'dps', true, 'INFO', 'SPELL_CAST_SUCCESS' },
+            { 31789, 'unknown', 'tank', true, 'INFO', 'SPELL_CAST_SUCCESS' },
+            { 31789, 'dps', 'tank', false, 'INFO', 'SPELL_CAST_SUCCESS' },
+            { 10278, 'dps', 'tank', true, 'TACTIC_VIOLATION' },
+            { 10278, 'dps', 'assist', true, 'TACTIC_VIOLATION' },
+            { 10278, 'dps', 'dps', true, 'INFO' },
+            { 10278, 'dps', 'tank', false, 'INFO' },
+        }
+        for i, case in ipairs(cases) do
+            addon.inCombat = case[4]
+            spells:handleEvent(event(case[6] or 'SPELL_AURA_APPLIED', case[1], case[2], case[3]))
+            assert.are.equal(case[5], addon.currentCombat.events[i].type, 'case ' .. i)
+        end
+    end)
+
+    it('updates assignments but preserves the classification and roles of saved events', function()
+        setAssignedRaid()
+        addon.inCombat = true
+        spells:handleEvent(event('SPELL_AURA_APPLIED', 355, 'assist', bossGUID))
+        local saved = Journal.Copy(addon.currentCombat)
+        assert.are.equal('MAINASSIST', saved.events[1].sourceAssignment)
+        assert.is_true(saved.events[1].targetIsBoss)
+
+        mocks:SetRaidRosterInfo(2, 'assist', 1, 'Warrior', 'WARRIOR')
+        addon:RAID_ROSTER_UPDATE('RAID_ROSTER_UPDATE')
+        spells:handleEvent(event('SPELL_AURA_APPLIED', 355, 'assist', bossGUID))
+        assert.are.equal('TACTIC_VIOLATION', addon.currentCombat.events[2].type)
+        assert.are.equal('INFO', saved.events[1].type)
+        assert.are.equal('MAINASSIST', saved.events[1].sourceAssignment)
+        addon:DisplayCombat(saved)
+        assert.is_nil(lines[1]:find('|cFFFF0000', 1, true))
+
+        mocks.raidSize = 0
+        addon:PARTY_MEMBERS_CHANGED('PARTY_MEMBERS_CHANGED')
+        assert.is_false(addon:IsAssignedTank('tank'))
+        assert.is_false(addon.hasTankAssignments)
+    end)
+
+    it('captures assignments when a delayed paladin taunt happens, before UNIT_TARGET arrives', function()
+        setAssignedRaid()
+        addon.inCombat = true
+        mocks:SetUnitGUID('target', bossGUID)
+        mocks:SetUnitGUID('targettarget', 'dps')
+        spells:handleEvent(event('SPELL_AURA_APPLIED', 62124, 'dps', bossGUID))
+        mocks:SetRaidRosterInfo(3, 'dps', 1, 'Warrior', 'WARRIOR', 'MAINTANK')
+        addon:RAID_ROSTER_UPDATE('RAID_ROSTER_UPDATE')
+        spells:UNIT_TARGET('UNIT_TARGET', 'target')
+        local entry = addon.currentCombat.events[1]
+        assert.are.equal('TACTIC_VIOLATION', entry.type)
+        assert.is_nil(entry.sourceAssignment)
+        assert.is_true(entry.targetIsBoss)
     end)
 
     it('keeps the delayed paladin taunt timestamp and identity', function()
@@ -273,16 +356,13 @@ describe('Structured journal', function()
     end)
 
     it('classifies distracting shot as a tactic violation and colors only its message red', function()
-        mocks.raidSize = 2
-        mocks:SetUnitGUID('raid1', 'tank')
-        mocks:SetUnitGUID('raid2', 'dps')
-        _G.GetRaidRosterInfo = function(i)
-            return i == 1 and 'Tank' or 'Dps', nil, 1, nil, nil, 'WARRIOR', nil, nil, nil,
-                i == 1 and 'MAINTANK' or nil
-        end
+        setAssignedRaid()
+        addon.inCombat = true
         _G.GetSpellInfo = function() return 'Отвлекающий выстрел', nil, 'DistractingShotTexture' end
 
-        spells:handleEvent(event('SPELL_CAST_SUCCESS', 20736, 'Dps', 'boss', 1001))
+        local shot = event('SPELL_CAST_SUCCESS', 20736, 'dps', bossGUID, 1001)
+        shot.sourceName, shot.destName = 'Dps', 'boss'
+        spells:handleEvent(shot)
         spells:handleEvent(event('SPELL_AURA_APPLIED', 20736, 'dps', 'boss', 1001))
 
         local entry = addon.currentCombat.events[1]
@@ -291,7 +371,7 @@ describe('Structured journal', function()
         assert.are.equal('TAUNT', entry.kind)
         assert.are.equal('TACTIC_VIOLATION', entry.type)
         assert.are.equal('|cFFFFFFFF' .. date('%H:%M:%S', 1001) ..
-            '|r |cFFC79C6EDps|r |TDistractingShotTexture:24:24:0:-2|t |cFFFF0000→ boss|r', lines[1])
+            '|r |cFFC79C6EDps|r |TDistractingShotTexture:24:24:0:-2|t |cFFFF0000boss|r', lines[1])
     end)
 
     it('filters hunter damage like V1 while retaining all damage in totals and saved target details', function()
@@ -398,7 +478,7 @@ describe('Structured journal', function()
         assert.are.equal(200, targets[2].amount)
         addon:SetJournalView('MISDIRECTION')
         assert.are.equal(5, #lines) -- Auto-attacks and the Chimera proc stay out of the visible log.
-        addon:SetJournalView('DEATHS')
+        addon:SetJournalView('ERRORS')
         assert.are.equal(0, #lines)
         assert.are.equal(8, #addon.currentCombat.events)
     end)
@@ -448,6 +528,40 @@ describe('Structured journal', function()
         assert.are.equal('otherTank', addon.currentCombat.events[4].target.guid)
     end)
 
+    it('shows violations, Halion deaths and error summaries live and after saving', function()
+        addon.inCombat = true
+        addon.currentCombat.startTime = 1000
+        addon:SetJournalView('ERRORS')
+        local expected = {}
+        for _, kind in ipairs({ 'TAUNT', 'SPELL_USE', 'SPIRIT_HIT', 'SHADOW_TRAP',
+            'MECHANIC_DEATH', 'SPIRIT_SUMMARY', 'MALLEABLE_GOO_SUMMARY', 'CHOKING_GAS_SUMMARY' }) do
+            local severity = #expected < 4 and 'TACTIC_VIOLATION' or 'INFO'
+            local entry = Journal.Create(kind, event('SPELL_DAMAGE'), severity)
+            addon:OnCombatLogEvent(entry)
+            expected[#expected + 1] = Journal.Format(entry)
+        end
+        for _, kind in ipairs({ 'FIRST_DAMAGE', 'SPELL_USE', 'TAUNT', 'DISPEL', 'RESURRECT',
+            'MIND_CONTROL', 'CYCLONE_APPLIED' }) do
+            addon:OnCombatLogEvent(Journal.Create(kind, event('SPELL_CAST_SUCCESS')))
+        end
+        cast('hunter', 'tank')
+        pulls:handleEvent(event('SPELL_DAMAGE', 53209, 'hunter', 'enemy', 1001, 99))
+        addon:FinishCombat('test')
+        assert.are.same(expected, lines)
+        local saved = addon.db.char.combatHistoryV2.combats[1]
+        assert.are.equal(18, #saved.events)
+
+        addon.db = assert(loadstring('return ' .. serialize(addon.db)))()
+        addon:InitializeJournal()
+        addon:DisplayCombat(addon.combatHistory[1])
+        addon:SetJournalView('ERRORS')
+        assert.are.same(expected, lines)
+        addon:SetJournalView('ALL')
+        assert.are.equal(17, #lines)
+        addon:SetJournalView('MISDIRECTION')
+        assert.are.equal(3, #lines)
+    end)
+
     it('filters saved history without switching live event collection into that combat', function()
         local historic = { events = { Journal.Create('MECHANIC_DEATH', event('UNIT_DIED')) } }
         addon:DisplayCombat(historic)
@@ -456,7 +570,7 @@ describe('Structured journal', function()
         assert.are.equal(before, #lines)
         assert.are.equal(1, #addon.currentCombat.events)
         assert.are.equal(1, #historic.events)
-        addon:SetJournalView('DEATHS')
+        addon:SetJournalView('ERRORS')
         assert.are.equal(1, #lines)
     end)
 
@@ -551,6 +665,14 @@ describe('Structured journal', function()
             Hide = function() hidden = true end,
         }
         addon:CreateMainFrame()
+        local filterNames = {}
+        for name in pairs(addon.mainFrame.journalFilterButtons) do
+            filterNames[#filterNames + 1] = name
+        end
+        table.sort(filterNames)
+        assert.are.same({ 'ALL', 'ERRORS', 'MISDIRECTION' }, filterNames)
+        addon.mainFrame.journalFilterButtons.ERRORS.scripts.OnClick()
+        assert.are.equal('ERRORS', addon.journalView)
         local history = { events = {
             Journal.Create('MISDIRECTION_DAMAGE', event('SWING_DAMAGE', nil, 'hunter', 'OldEnemy', 1001, 250),
                 'INFO', { pullId = 4 }),

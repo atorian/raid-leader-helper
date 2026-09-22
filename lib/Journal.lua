@@ -86,23 +86,6 @@ function Journal.Entity(guid, name, classToken)
     return { guid = guid, name = name, class = resolveEventClass(guid, name, classToken) }
 end
 
-function Journal.TauntType(guid)
-    local hasAssignments, isMember = false, false
-    if not guid or type(GetRaidRosterInfo) ~= "function" or type(UnitGUID) ~= "function" then
-        return "INFO"
-    end
-    for i = 1, (GetNumRaidMembers and GetNumRaidMembers() or 0) do
-        local _, _, _, _, _, _, _, _, _, role = GetRaidRosterInfo(i)
-        local memberGUID = UnitGUID("raid" .. i)
-        if memberGUID == guid then isMember = true end
-        if role == "MAINTANK" then
-            hasAssignments = true
-            if memberGUID == guid then return "INFO" end
-        end
-    end
-    return hasAssignments and isMember and "TACTIC_VIOLATION" or "INFO"
-end
-
 local descriptions = {
     FIRST_DAMAGE = "Первый урон",
     FIRST_HEAL = "Первый хил",
@@ -170,7 +153,11 @@ end
 
 function Journal.Visible(entry, view)
     if view == "MISDIRECTION" then return entry.pullId ~= nil and not entry.hidden end
-    if view == "DEATHS" then return entry.kind == "MECHANIC_DEATH" end
+    if view == "ERRORS" then
+        return entry.type == "TACTIC_VIOLATION" or entry.kind == "MECHANIC_DEATH" or
+            entry.kind == "SPIRIT_SUMMARY" or entry.kind == "MALLEABLE_GOO_SUMMARY" or
+            entry.kind == "CHOKING_GAS_SUMMARY"
+    end
     return entry.kind ~= "MISDIRECTION_DAMAGE"
 end
 
@@ -190,7 +177,7 @@ function Journal.Format(entry)
     elseif entry.kind == "MISDIRECTION_SUMMARY" then
         message = string.format("Напул окончен %s", entry.amount or 0)
     elseif entry.kind == "TAUNT" then
-        message = entry.target and "→ " .. formatEntityName(entry.target) or ""
+        message = entry.target and formatEntityName(entry.target) or ""
     elseif entry.kind == "FIRST_DAMAGE" or entry.kind == "FIRST_HEAL" then
         message = string.format("%s по %s", descriptions[entry.kind], formatEntityName(entry.target, true))
     else

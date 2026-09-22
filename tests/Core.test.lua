@@ -1981,6 +1981,74 @@ describe("RLHelper main frame raid check button", function()
         assert.are.same({ "BOTTOMRIGHT", bottomPanel, "TOPRIGHT", -48, 4 }, logText.points[2])
     end)
 
+    it("shows filters only when five icon rows fit and reclaims their space when hidden", function()
+        local frame = newFrame("Frame")
+        frame.buttonContainer = newFrame("Frame", nil, frame)
+        frame.journalFilters = newFrame("Frame", nil, frame)
+        frame.logText = newFrame("ScrollingMessageFrame", nil, frame)
+        local logText = frame.logText
+        local fontSize, spacing = 12, 0
+        function logText:GetFont() return "Fonts\\FRIZQT__.TTF", fontSize end
+        function logText:GetSpacing() return spacing end
+        function logText:SetPoint(...)
+            local point = { ... }
+            for i, existing in ipairs(self.points) do
+                if existing[1] == point[1] then
+                    self.points[i] = point
+                    return
+                end
+            end
+            table.insert(self.points, point)
+        end
+        function logText:GetHeight()
+            -- Header: 2 + 25; filters: 4 + 22; log top gap: 8.
+            local topInset = self.points[1][2] == frame.journalFilters and 61 or 35
+            local bottomInset = self.points[2][2] == frame and 8 or 28
+            return frame.height - topInset - bottomInset
+        end
+        local previousView = RLHelper.journalView
+        RLHelper.journalView = "ERRORS"
+        RLHelper.mainFrame = frame
+
+        frame:SetHeight(189) -- Exactly five 24-pixel rows below the filters.
+        originalLayoutMainFrame(RLHelper)
+        assert.is_true(frame.journalFilters.visible)
+        assert.are.equal(120, logText:GetHeight())
+
+        frame:SetHeight(188)
+        originalLayoutMainFrame(RLHelper)
+        assert.is_false(frame.journalFilters.visible)
+        assert.are.equal(frame.buttonContainer, logText.points[1][2])
+        assert.are.equal(145, logText:GetHeight())
+        originalLayoutMainFrame(RLHelper)
+        assert.is_false(frame.journalFilters.visible) -- Extra space must not toggle filters back on.
+
+        frame:SetHeight(189)
+        originalLayoutMainFrame(RLHelper)
+        assert.is_true(frame.journalFilters.visible)
+        frame.bottomPanel = newFrame("Frame", nil, frame)
+        originalLayoutMainFrame(RLHelper)
+        assert.is_false(frame.journalFilters.visible)
+        frame:SetHeight(209)
+        originalLayoutMainFrame(RLHelper)
+        assert.is_true(frame.journalFilters.visible)
+
+        spacing = 2
+        originalLayoutMainFrame(RLHelper)
+        assert.is_false(frame.journalFilters.visible)
+        frame:SetHeight(219)
+        originalLayoutMainFrame(RLHelper)
+        assert.is_true(frame.journalFilters.visible)
+        fontSize = 30
+        originalLayoutMainFrame(RLHelper)
+        assert.is_false(frame.journalFilters.visible)
+        frame:SetHeight(249)
+        originalLayoutMainFrame(RLHelper)
+        assert.is_true(frame.journalFilters.visible)
+        assert.are.equal("ERRORS", RLHelper.journalView)
+        RLHelper.journalView = previousView
+    end)
+
     it("calls the global DoReadyCheck function", function()
         local readyCheckCalls = 0
         _G.DoReadyCheck = function()

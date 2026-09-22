@@ -1453,6 +1453,18 @@ function RLHelper:LayoutMainFrame()
     else
         frame.logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -48, 8)
     end
+
+    if frame.journalFilters then
+        local _, fontSize = frame.logText:GetFont()
+        -- Journal rows can contain 24-pixel spell icons.
+        local rowHeight = math.max(fontSize, 24) + frame.logText:GetSpacing()
+        if frame.logText:GetHeight() >= rowHeight * 5 then
+            frame.journalFilters:Show()
+        else
+            frame.journalFilters:Hide()
+            frame.logText:SetPoint("TOPLEFT", frame.buttonContainer, "BOTTOMLEFT", 0, -8)
+        end
+    end
 end
 
 function RLHelper:SetMainFrameBottomPanel(panel)

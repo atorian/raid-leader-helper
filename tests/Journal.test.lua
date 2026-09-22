@@ -653,6 +653,9 @@ describe('Structured journal', function()
                 if key == 'SetScript' then return function(self, name, fn) self.scripts[name] = fn end end
                 if key == 'GetFontString' or key == 'CreateFontString' then return frame end
                 if key == 'IsShown' then return function() return false end end
+                if key == 'GetFont' then return function() return 'Fonts\\FRIZQT__.TTF', 12 end end
+                if key == 'GetSpacing' then return function() return 0 end end
+                if key == 'GetHeight' then return function() return 400 end end
                 -- Data fields must stay nil; only emulate frame methods.
                 if key:match('^[A-Z]') then return function() end end
             end })

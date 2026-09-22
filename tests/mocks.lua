@@ -1,6 +1,12 @@
 local M = {}
 require('lib.Journal')
 
+UIDropDownMenu_SetWidth = function(frame, width) frame.dropdownWidth = width end
+UIDropDownMenu_CreateInfo = function() return {} end
+UIDropDownMenu_AddButton = function() end
+UIDropDownMenu_Initialize = function(frame, initialize) frame.initialize = initialize end
+UIDropDownMenu_SetText = function(frame, text) frame.text = text end
+
 -- Mock для AceEvent-3.0
 local AceEvent = {
     RegisterEvent = function(self, eventName)

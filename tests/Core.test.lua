@@ -990,6 +990,7 @@ describe("RLHelper settings helpers", function()
         assert.is_true(table.concat(texts, " "):find("Показывать только в группе", 1, true) ~= nil)
         assert.are.same({
             "RL Helper",
+            "Тема оформления",
             "Текст сообщения отмены пула",
             "Ссылка Discord",
             "Показывать только в группе",

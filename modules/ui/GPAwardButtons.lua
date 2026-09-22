@@ -1,5 +1,6 @@
 local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local GPAwardButtons = RLHelper:NewModule("GPAwardButtons", "AceEvent-3.0")
+local UITheme = RLHelper.UITheme
 
 local BUTTONS = {
     { label = "100", amount = 100, defaultReason = "Каспер" },
@@ -197,6 +198,7 @@ function GPAwardButtons:createButton(parent, anchor, buttonInfo)
         self:handleButtonClick(buttonInfo)
     end)
 
+    UITheme.RegisterButton(RLHelper, button)
     return button
 end
 

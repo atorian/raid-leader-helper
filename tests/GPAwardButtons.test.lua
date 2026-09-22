@@ -1,5 +1,6 @@
 require('tests.mocks')
 local mocks = require('tests.mocks')
+require('Core')
 local GPAwardButtons = require("../modules/ui/GPAwardButtons")
 local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 

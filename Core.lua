@@ -5,6 +5,116 @@ local GetUnitIdFromGUID = RLHelper.GetUnitIdFromGUID
 local CombatFilters = RLHelperCombatFilters
 local BossIds = RLHelperBossIds
 local Journal = RLHelperJournal
+local UITheme = {}
+RLHelper.UITheme = UITheme
+
+-- Keep theme initialization in Core so an existing client's cached TOC can load it.
+do
+    local Theme = UITheme
+    local TEXTURE_STATES = { "Normal", "Pushed", "Highlight", "Disabled" }
+    local FONT_STATES = { "Normal", "Highlight", "Disabled" }
+    local BUTTON_COLORS = {
+        Normal = { 0.17, 0.20, 0.23, 1 },
+        Pushed = { 0.10, 0.12, 0.15, 1 },
+        Highlight = { 0.75, 0.85, 0.92, 0.12 },
+        Disabled = { 0.12, 0.14, 0.17, 1 }
+    }
+
+    function Theme.GetName(addon)
+        local profile = addon.db and addon.db.profile
+        return profile and profile.theme == "minimal" and "minimal" or "current"
+    end
+
+    function Theme.ApplyButton(addon, button, view)
+        local minimal = Theme.GetName(addon) == "minimal"
+        if not minimal and not button.originalThemeButton then return end
+        if not button.originalThemeButton then
+            local original = { textures = {}, fonts = {}, font = { button:GetFontString():GetFont() } }
+            button.originalThemeButton = original
+            button.minimalTextures = {}
+            for _, state in ipairs(TEXTURE_STATES) do
+                original.textures[state] = button["Get" .. state .. "Texture"](button)
+                local texture = button:CreateTexture(nil, state == "Highlight" and "HIGHLIGHT" or "ARTWORK")
+                texture:SetAllPoints(button)
+                texture:SetTexture(unpack(BUTTON_COLORS[state]))
+                texture:Hide()
+                button.minimalTextures[state] = texture
+            end
+            for _, state in ipairs(FONT_STATES) do
+                original.fonts[state] = button["Get" .. state .. "FontObject"](button)
+            end
+            if view then
+                local marker = button:CreateTexture(nil, "OVERLAY")
+                marker:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 0, 0)
+                marker:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 0, 0)
+                marker:SetHeight(2)
+                marker:SetTexture(0.74, 0.85, 0.92, 1)
+                button.themeSelection = marker
+            end
+        end
+
+        local original = button.originalThemeButton
+        for _, state in ipairs(TEXTURE_STATES) do
+            local previous = button["Get" .. state .. "Texture"](button)
+            local texture = minimal and button.minimalTextures[state] or original.textures[state]
+            -- Reapplying the same texture must not hide the active button state.
+            if previous ~= texture then
+                if previous then previous:Hide() end
+                if texture then texture:Show() end
+                if state == "Highlight" then
+                    button:SetHighlightTexture(texture, minimal and "BLEND" or "ADD")
+                else
+                    button["Set" .. state .. "Texture"](button, texture)
+                end
+            end
+        end
+        for _, state in ipairs(FONT_STATES) do
+            local font = original.fonts[state]
+            if minimal then
+                font = state == "Disabled" and not view and "GameFontDisable" or "GameFontHighlight"
+            end
+            button["Set" .. state .. "FontObject"](button, font)
+        end
+        if not minimal then button:GetFontString():SetFont(unpack(original.font)) end
+        if button.themeSelection then
+            if minimal and addon.journalView == view then button.themeSelection:Show()
+            else button.themeSelection:Hide() end
+        end
+    end
+
+    function Theme.RegisterButton(addon, button, view)
+        addon.themeButtons = addon.themeButtons or {}
+        addon.themeButtons[button] = view or false
+        Theme.ApplyButton(addon, button, view)
+    end
+
+    function Theme.Apply(addon)
+        local frame = addon.mainFrame
+        if not frame then return end
+        local minimal = Theme.GetName(addon) == "minimal"
+        -- Leave the original UI untouched until the user first selects minimalism.
+        if minimal or frame.originalThemeFont then
+            if not frame.originalThemeFont then
+                frame.originalThemeFont = { frame.logText:GetFont() }
+            end
+            frame.buttonContainer:ClearAllPoints()
+            if minimal then
+                frame.buttonContainer:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -2)
+                frame.buttonContainer:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -2)
+                local font = frame.originalThemeFont
+                frame.logText:SetFont(font[1], font[2], "")
+            else
+                frame.buttonContainer:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
+                frame.buttonContainer:SetPoint("TOPRIGHT", -2, -2)
+                frame.logText:SetFont(unpack(frame.originalThemeFont))
+            end
+        end
+        for button, view in pairs(addon.themeButtons or {}) do
+            Theme.ApplyButton(addon, button, view or nil)
+        end
+        addon:LayoutMainFrame()
+    end
+end
 
 local COMBAT_END_CHECK_INTERVAL = 1
 local COMBAT_END_GRACE = 3
@@ -61,6 +171,7 @@ local defaults = {
         enabled = true,
         debug = false,
         journalV2 = false,
+        theme = "current",
         pullCancelMessage = "ГАЛЯ, ОТМЕНА!",
         discordLink = "",
         gpAwardButtonsEnabled = false,
@@ -981,6 +1092,7 @@ function RLHelper:SetJournalView(view)
     self.journalView = view
     for name, button in pairs(self.mainFrame and self.mainFrame.journalFilterButtons or {}) do
         if name == view then button:Disable() else button:Enable() end
+        UITheme.ApplyButton(self, button, name)
     end
     self:DisplayCombat(self.displayedCombat or self.currentCombat)
 end
@@ -1439,6 +1551,11 @@ function RLHelper:ShowCurrentCombat()
     self:DisplayCombat(self.currentCombat)
 end
 
+function RLHelper:SetTheme(theme)
+    self.db.profile.theme = theme == "minimal" and "minimal" or "current"
+    UITheme.Apply(self)
+end
+
 function RLHelper:LayoutMainFrame()
     local frame = self.mainFrame
     if not frame or not frame.logText or not frame.buttonContainer then
@@ -1448,10 +1565,11 @@ function RLHelper:LayoutMainFrame()
     frame.logText:ClearAllPoints()
     frame.logText:SetPoint("TOPLEFT", frame.journalFilters or frame.buttonContainer, "BOTTOMLEFT", 0, -8)
 
+    local rightInset = UITheme.GetName(self) == "minimal" and -10 or -48
     if frame.bottomPanel then
-        frame.logText:SetPoint("BOTTOMRIGHT", frame.bottomPanel, "TOPRIGHT", -48, 4)
+        frame.logText:SetPoint("BOTTOMRIGHT", frame.bottomPanel, "TOPRIGHT", rightInset, 4)
     else
-        frame.logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -48, 8)
+        frame.logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", rightInset, 8)
     end
 
     if frame.journalFilters then
@@ -1494,10 +1612,6 @@ function RLHelper:CreateMainFrame()
         tile = true,
         tileSize = 32
     })
-
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", 2, 12)
-    title:SetText("RL Пупсик")
 
     -- Close button
     -- local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
@@ -1731,8 +1845,15 @@ function RLHelper:CreateMainFrame()
     end)
 
     self.mainFrame = frame
+    for _, button in ipairs({ frame.raidCheckBtn, pull15Btn, pull75Btn, frame.cancelBtn,
+        frame.resetBtn }) do
+        UITheme.RegisterButton(self, button)
+    end
+    for view, button in pairs(frame.journalFilterButtons or {}) do
+        UITheme.RegisterButton(self, button, view)
+    end
     self:RefreshDiscordButton()
-    self:LayoutMainFrame()
+    UITheme.Apply(self)
     self:SendMessage("RLHelper_MainFrameCreated", frame)
     frame:Hide()
 end
@@ -1750,7 +1871,7 @@ function RLHelper:CreateOptionsPanel()
     scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -30, 12)
 
     local content = CreateFrame("Frame", "RLHelperOptionsPanelContent", scrollFrame)
-    content:SetSize(440, 640)
+    content:SetSize(440, 710)
     if scrollFrame.SetScrollChild then
         scrollFrame:SetScrollChild(content)
     end
@@ -1759,8 +1880,28 @@ function RLHelper:CreateOptionsPanel()
     title:SetPoint("TOPLEFT", content, "TOPLEFT", 12, 0)
     title:SetText("RL Helper")
 
+    local themeLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    themeLabel:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -24)
+    themeLabel:SetText("Тема оформления")
+    local themeDropdown = CreateFrame("Frame", "RLHelperThemeDropdown", content, "UIDropDownMenuTemplate")
+    themeDropdown:SetPoint("TOPLEFT", themeLabel, "BOTTOMLEFT", -16, -4)
+    UIDropDownMenu_SetWidth(themeDropdown, 200)
+    local themeLabels = { current = "Текущая (по умолчанию)", minimal = "Минимализм" }
+    UIDropDownMenu_Initialize(themeDropdown, function()
+        for _, theme in ipairs({ "current", "minimal" }) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = themeLabels[theme]
+            info.checked = UITheme.GetName(RLHelper) == theme
+            info.func = function()
+                RLHelper:SetTheme(theme)
+                UIDropDownMenu_SetText(themeDropdown, themeLabels[theme])
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+
     local cancelLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    cancelLabel:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -24)
+    cancelLabel:SetPoint("TOPLEFT", themeDropdown, "BOTTOMLEFT", 16, -12)
     cancelLabel:SetText("Текст сообщения отмены пула")
 
     local cancelEditBox = CreateFrame("EditBox", "RLHelperPullCancelEditBox", content, "InputBoxTemplate")
@@ -1900,6 +2041,7 @@ function RLHelper:CreateOptionsPanel()
     end
 
     panel:SetScript("OnShow", function()
+        UIDropDownMenu_SetText(themeDropdown, themeLabels[UITheme.GetName(RLHelper)])
         cancelEditBox:SetText(RLHelper.db.profile.pullCancelMessage or "")
         discordEditBox:SetText(RLHelper.db.profile.discordLink or "")
         displayOnlyInGroup:SetChecked(RLHelper.db.profile.displayOnlyInGroup)

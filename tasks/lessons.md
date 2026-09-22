@@ -24,3 +24,11 @@
 - Keep journal filters to All, Errors, and Misdirection, as chosen by the user. Include tracked Halion mechanic deaths in Errors. Do not propose separate Deaths or Abilities filters without a new use case: ordinary abilities remain in All and flagged violations also appear in Errors.
 
 - Resolve ambiguous spell nicknames by the explicit SpellID before applying error rules. Righteous Defense (`31789`) on an assigned tank during combat is a violation when cast by another known non-tank; another assigned tank is allowed to use it for a tank swap. Hand of Protection (`10278`) on an assigned tank during combat is a violation regardless of the caster’s tank assignment. Check both source and target roles; do not infer safety from the target alone.
+
+- The minimalist theme must retain the existing window background and its transparency. The user explicitly prefers the current background; limit theme changes to controls, text, spacing, and selected-filter styling.
+
+- Theme startup must not rely on a newly added TOC entry being loaded by an already running client. Initialize the theme with Core, share it through the addon, and test startup/resizing without preloading a separate theme file in mocks.
+
+- Do not display an addon-name heading in the RLHelper window or reserve a header row for it. Removing a heading must reclaim its space in every theme.
+
+- Theme application must be idempotent: never hide an already assigned button texture when reapplying the same theme. Test first display and repeated application before any clicks. Minimize and anchor (A) controls must keep empty backgrounds in every theme and button state.

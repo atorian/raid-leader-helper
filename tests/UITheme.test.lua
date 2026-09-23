@@ -43,6 +43,9 @@ describe('UI themes', function()
         function frame:SetTextColor(...) self.color = { ... } end
         function frame:GetTextColor() return unpack(self.color) end
         function frame:SetTexture(...) self.texture = { ... } end
+        function frame:GetTexture() return self.texture and self.texture[1] end
+        function frame:SetBlendMode(mode) self.blendMode = mode end
+        function frame:GetBlendMode() return self.blendMode or 'BLEND' end
         function frame:SetBackdrop(backdrop) self.backdrop = backdrop end
         function frame:SetScript(event, fn) self.scripts[event] = fn end
         function frame:Show() self.visible = true end
@@ -65,11 +68,12 @@ describe('UI themes', function()
         end
         for _, state in ipairs({ 'Normal', 'Pushed', 'Highlight', 'Disabled' }) do
             frame['Get' .. state .. 'Texture'] = function(self) return self.textures[state] end
-            frame['Set' .. state .. 'Texture'] = function(self, texture)
+            frame['Set' .. state .. 'Texture'] = function(self, texture, blendMode)
                 if type(texture) == 'string' then
                     local path = texture
                     texture = self:CreateTexture()
                     texture:SetTexture(path)
+                    texture:SetBlendMode(blendMode or (state == 'Highlight' and 'ADD' or 'BLEND'))
                 end
                 -- Reassigning the same texture does not trigger a button-state change.
                 if self.textures[state] ~= texture then
@@ -171,6 +175,60 @@ describe('UI themes', function()
             assert.are.equal('OUTLINE', log.font[3])
             assert.are.equal(backdrop, frame.backdrop)
         end
+    end)
+
+    it('changes texture contents without replacing button-owned objects or forcing their visibility', function()
+        addon:CreateMainFrame()
+        local saved = {}
+        for button in pairs(addon.themeButtons) do
+            saved[button] = {}
+            for _, state in ipairs({ 'Normal', 'Pushed', 'Highlight', 'Disabled' }) do
+                local texture = button['Get' .. state .. 'Texture'](button)
+                saved[button][state] = {
+                    object = texture, path = texture:GetTexture(), blend = texture:GetBlendMode(),
+                    visible = texture.visible
+                }
+                button['Set' .. state .. 'Texture'] = function()
+                    error('Theme must not replace a button-owned texture')
+                end
+                texture.Show = function() error('Button controls texture visibility') end
+                texture.Hide = function() error('Button controls texture visibility') end
+            end
+        end
+        for _, theme in ipairs({ 'minimal', 'current', 'minimal', 'current' }) do
+            addon:SetTheme(theme)
+            for button, states in pairs(saved) do
+                for state, original in pairs(states) do
+                    local texture = button['Get' .. state .. 'Texture'](button)
+                    assert.are.equal(original.object, texture)
+                    assert.are.equal(original.visible, texture.visible)
+                    if theme == 'current' then
+                        assert.are.equal(original.path, texture:GetTexture())
+                        assert.are.equal(original.blend, texture:GetBlendMode())
+                    else
+                        assert.are.equal('number', type(texture:GetTexture()))
+                        assert.are.equal('BLEND', texture:GetBlendMode())
+                    end
+                end
+            end
+        end
+    end)
+
+    it('handles a template without a disabled texture and clears its fill on restoration', function()
+        addon:CreateMainFrame()
+        local button = addon.mainFrame.raidCheckBtn
+        button.textures.Disabled = nil
+        addon:SetTheme('minimal')
+        local texture = button:GetDisabledTexture()
+        assert.is_not_nil(texture)
+        button:Disable()
+        assert.is_true(texture.visible)
+        addon:SetTheme('current')
+        assert.are.equal(texture, button:GetDisabledTexture())
+        assert.is_nil(texture:GetTexture())
+        addon:SetTheme('minimal')
+        assert.are.equal(texture, button:GetDisabledTexture())
+        assert.are.equal('number', type(texture:GetTexture()))
     end)
 
     it('shows action backgrounds immediately with a saved minimal theme and on reapplication', function()

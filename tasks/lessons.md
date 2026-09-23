@@ -46,3 +46,5 @@
 - Align the top controls and GP footer to the same 2px side margins; V2 row text has no extra horizontal inset.
 
 - V2 journal rows run oldest to newest from top to bottom. Each newly displayed event immediately scrolls to the bottom, even after manual scrolling; opening a combat or filter also shows the latest matching rows. Preserve the newest 1000 matching events when limiting rendered rows.
+
+- A repeatable client crash during theme switching is not covered by Lua frame mocks. Avoid detaching and reusing button-owned Texture objects: change their contents in place, preserve the original texture path/blend, and leave visibility to the button state. Test repeated switches and missing template textures, and require an in-client retest before claiming the native crash is fixed. The user confirmed on 2026-09-23 that updating texture contents in place resolved the repeatable crash.

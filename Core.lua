@@ -31,14 +31,11 @@ do
         if not button.originalThemeButton then
             local original = { textures = {}, fonts = {}, font = { button:GetFontString():GetFont() } }
             button.originalThemeButton = original
-            button.minimalTextures = {}
             for _, state in ipairs(TEXTURE_STATES) do
-                original.textures[state] = button["Get" .. state .. "Texture"](button)
-                local texture = button:CreateTexture(nil, state == "Highlight" and "HIGHLIGHT" or "ARTWORK")
-                texture:SetAllPoints(button)
-                texture:SetTexture(unpack(BUTTON_COLORS[state]))
-                texture:Hide()
-                button.minimalTextures[state] = texture
+                local texture = button["Get" .. state .. "Texture"](button)
+                original.textures[state] = texture and {
+                    path = texture:GetTexture(), blend = texture:GetBlendMode()
+                } or {}
             end
             for _, state in ipairs(FONT_STATES) do
                 original.fonts[state] = button["Get" .. state .. "FontObject"](button)
@@ -54,17 +51,22 @@ do
         end
 
         local original = button.originalThemeButton
+        -- Keep button-owned textures attached: swapping and reusing Texture objects
+        -- can crash the old client. Let the button manage their state visibility.
         for _, state in ipairs(TEXTURE_STATES) do
-            local previous = button["Get" .. state .. "Texture"](button)
-            local texture = minimal and button.minimalTextures[state] or original.textures[state]
-            -- Reapplying the same texture must not hide the active button state.
-            if previous ~= texture then
-                if previous then previous:Hide() end
-                if texture then texture:Show() end
-                if state == "Highlight" then
-                    button:SetHighlightTexture(texture, minimal and "BLEND" or "ADD")
+            local texture = button["Get" .. state .. "Texture"](button)
+            if not texture and minimal then
+                button["Set" .. state .. "Texture"](button, "Interface\\Buttons\\WHITE8X8")
+                texture = button["Get" .. state .. "Texture"](button)
+            end
+            if texture then
+                local saved = original.textures[state]
+                if minimal then
+                    texture:SetTexture(unpack(BUTTON_COLORS[state]))
+                    texture:SetBlendMode("BLEND")
                 else
-                    button["Set" .. state .. "Texture"](button, texture)
+                    texture:SetTexture(saved.path)
+                    texture:SetBlendMode(saved.blend or "BLEND")
                 end
             end
         end

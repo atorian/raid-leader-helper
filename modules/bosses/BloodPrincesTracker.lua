@@ -66,7 +66,8 @@ function BloodPrincesTracker:handleEvent(event)
     end
 
     RLHelperJournal.Log(RLHelper, self.log, event.event == "SPELL_MISSED" and "VORTEX_MISSED" or "VORTEX_HIT", event,
-        formatVortexHealerHit(event.timestamp, event.sourceName or "Unknown", event.destName))
+        formatVortexHealerHit(event.timestamp, event.sourceName or "Unknown", event.destName),
+        event.event == "SPELL_DAMAGE" and "TACTIC_VIOLATION" or "INFO")
 end
 
 function BloodPrincesTracker:demo()

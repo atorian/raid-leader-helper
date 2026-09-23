@@ -475,7 +475,7 @@ function HalionTracker:ProcessPlayerDeath(log, playerName, timestamp, playerGUID
                     timestamp = timestamp, destGUID = playerGUID, destName = playerName,
                     sourceGUID = lastDamage.sourceGUID, sourceName = lastDamage.source,
                     spellId = lastDamage.spellId
-                }, msg .. spells[lastDamage.spellId])
+                }, msg .. spells[lastDamage.spellId], "TACTIC_VIOLATION")
                 break
             end
         end

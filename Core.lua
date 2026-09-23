@@ -99,8 +99,8 @@ do
             end
             frame.buttonContainer:ClearAllPoints()
             if minimal then
-                frame.buttonContainer:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -2)
-                frame.buttonContainer:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -2)
+                frame.buttonContainer:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
+                frame.buttonContainer:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
                 local font = frame.originalThemeFont
                 frame.logText:SetFont(font[1], font[2], "")
             else
@@ -112,7 +112,17 @@ do
         for button, view in pairs(addon.themeButtons or {}) do
             Theme.ApplyButton(addon, button, view or nil)
         end
+        if frame.v2Rows then
+            local font, size, flags = unpack(frame.originalThemeFont or { frame.logText:GetFont() })
+            flags = minimal and "" or flags
+            frame.v2Measure:SetFont(font, size, flags)
+            for _, row in ipairs(frame.v2Rows) do row.text:SetFont(font, size, flags) end
+            frame.v2Heights = setmetatable({}, { __mode = "k" })
+        end
         addon:LayoutMainFrame()
+        if frame.v2Scroll and addon.currentCombat and #(addon.currentCombat.events or {}) > 0 then
+            addon:RefreshJournalRows(addon.displayedCombat or addon.currentCombat, true)
+        end
     end
 end
 
@@ -1062,6 +1072,7 @@ function RLHelper:OnCombatLogEvent(message)
             combat.droppedEvents = (combat.droppedEvents or 0) + 1
             if combat.droppedEvents == 1 and self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() then
                 self.mainFrame.logText:AddMessage("|cFFFF5555Достигнут лимит истории: дальнейшие события не сохраняются|r")
+                self:RefreshJournalRows(combat)
             end
             return
         end
@@ -1071,6 +1082,7 @@ function RLHelper:OnCombatLogEvent(message)
         if self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() and
             Journal.Visible(entry, self.journalView) then
             self.mainFrame.logText:AddMessage(self:FormatJournalEntry(entry))
+            self:RefreshJournalRows(combat)
         end
         return
     end
@@ -1081,7 +1093,7 @@ function RLHelper:OnCombatLogEvent(message)
 end
 
 function RLHelper:FormatJournalEntry(entry)
-    local text = Journal.Format(entry)
+    local text = Journal.Format(entry, self.journalView == "ERRORS")
     if entry.kind == "MISDIRECTION_SUMMARY" then
         text = "|Hrlhpull:" .. entry.pullId .. "|h" .. text .. "|h"
     end
@@ -1541,6 +1553,7 @@ function RLHelper:DisplayCombat(combat)
         end
     end
 
+    if self.journalV2Enabled then self:RefreshJournalRows(combat) end
     self:RefreshCombatListOverlay()
 end
 
@@ -1556,6 +1569,144 @@ function RLHelper:SetTheme(theme)
     UITheme.Apply(self)
 end
 
+-- Reuse visible V2 rows so a violation can have its own background.
+function RLHelper:RenderJournalRows()
+    local frame = self.mainFrame
+    local scroll = frame and frame.v2Scroll
+    if not scroll then return end
+    local offset = scroll:GetVerticalScroll()
+    local bottom = offset + scroll:GetHeight()
+    local visible = 0
+    for _, item in ipairs(frame.v2Items or {}) do
+        if item.top < bottom and item.top + item.height > offset then
+            visible = visible + 1
+            local row = frame.v2Rows[visible]
+            if not row then break end
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", frame.v2Content, "TOPLEFT", 0, -item.top)
+            row:SetPoint("TOPRIGHT", frame.v2Content, "TOPRIGHT", 0, -item.top)
+            row:SetHeight(item.height)
+            row.text:SetText(item.text)
+            row.entry = item.entry
+            if item.highlighted then row.background:Show()
+            else row.background:Hide() end
+            row:Show()
+        end
+    end
+    for i = visible + 1, #frame.v2Rows do frame.v2Rows[i]:Hide() end
+end
+
+function RLHelper:RefreshJournalRows(combat, preservePosition)
+    local frame = self.mainFrame
+    local scroll = frame and frame.v2Scroll
+    if not scroll then return end
+    local width = math.max(scroll:GetWidth(), 1)
+    local previousOffset = preservePosition and scroll:GetVerticalScroll() or 0
+    local items, top = {}, 0
+    frame.v2Measure:SetWidth(math.max(width, 1))
+    local events = combat and combat.events or {}
+    local first, count = 1, 0
+    for i = #events, 1, -1 do
+        if Journal.Visible(events[i], self.journalView) then
+            count = count + 1
+            if count == 1000 then first = i; break end
+        end
+    end
+    for i = first, #events do
+        local entry = events[i]
+        if Journal.Visible(entry, self.journalView) then
+            local cached = frame.v2Heights[entry]
+            local highlighted = self.journalView == "ALL" and Journal.Visible(entry, "ERRORS")
+            local text = Journal.Format(entry, highlighted or self.journalView == "ERRORS"):gsub(":24:24:0:%-2|t", ":20:20:0:-1|t")
+            if not cached or cached.width ~= width or cached.text ~= text then
+                frame.v2Measure:SetText(text)
+                cached = { width = width, text = text,
+                    height = math.max(21, frame.v2Measure:GetStringHeight() + 1) }
+                frame.v2Heights[entry] = cached
+            end
+            items[#items + 1] = { entry = entry, text = text, top = top, height = cached.height,
+                highlighted = highlighted }
+            top = top + cached.height
+        end
+    end
+    if combat and combat.droppedEvents then
+        local warning = "|cFFFF5555Лимит истории: пропущено событий " .. combat.droppedEvents .. "|r"
+        frame.v2Measure:SetText(warning)
+        local height = math.max(21, frame.v2Measure:GetStringHeight() + 1)
+        frame.v2WarningEntry = frame.v2WarningEntry or { type = "INFO" }
+        items[#items + 1] = { entry = frame.v2WarningEntry, text = warning, top = top, height = height }
+        top = top + height
+    end
+    frame.v2Items = items
+    frame.v2Content:SetSize(width, math.max(top, scroll:GetHeight(), 1))
+    local maximumOffset = math.max(top - scroll:GetHeight(), 0)
+    scroll:SetVerticalScroll(preservePosition and math.min(previousOffset, maximumOffset) or maximumOffset)
+    self:RenderJournalRows()
+end
+
+function RLHelper:CreateJournalRows(frame)
+    local scroll = CreateFrame("ScrollFrame", nil, frame)
+    scroll:SetAllPoints(frame.logText)
+    scroll:EnableMouse(true)
+    scroll:EnableMouseWheel(true)
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(1, 1)
+    content:EnableMouse(true)
+    scroll:SetScrollChild(content)
+    local function dragWindow(region)
+        region:RegisterForDrag("LeftButton")
+        region:SetScript("OnDragStart", function() frame:StartMoving() end)
+        region:SetScript("OnDragStop", function() frame:StopMovingOrSizing() end)
+    end
+    dragWindow(scroll)
+    dragWindow(content)
+    frame.v2Scroll, frame.v2Content, frame.v2Rows = scroll, content, {}
+    frame.v2Heights = setmetatable({}, { __mode = "k" })
+    local measure = content:CreateFontString(nil, "ARTWORK")
+    measure:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    frame.v2Measure = measure
+
+    for i = 1, 40 do
+        local row = CreateFrame("Frame", nil, content)
+        row:EnableMouse(true)
+        dragWindow(row)
+        local background = row:CreateTexture(nil, "BACKGROUND")
+        background:SetAllPoints(row)
+        background:SetTexture(0.55, 0.07, 0.08, 0.55)
+        background:Hide()
+        row.background = background
+        local label = row:CreateFontString(nil, "ARTWORK")
+        label:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+        label:SetJustifyH("LEFT")
+        label:SetJustifyV("TOP")
+        label:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -1)
+        label:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, -1)
+        row.text = label
+        row:SetScript("OnEnter", function(self)
+            local entry = self.entry
+            if not entry or entry.kind ~= "MISDIRECTION_SUMMARY" or not entry.pullId or not GameTooltip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+            GameTooltip:AddLine("Урон напула по целям")
+            local combat = RLHelper.displayedCombat or RLHelper.currentCombat
+            for _, detail in ipairs(Journal.PullTargets(combat, entry.pullId)) do
+                GameTooltip:AddDoubleLine(detail.target.name or "?", tostring(detail.amount))
+            end
+            if combat.droppedEvents then GameTooltip:AddLine("Данные неполные: достигнут лимит истории") end
+            GameTooltip:Show()
+        end)
+        row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        row:Hide()
+        frame.v2Rows[i] = row
+    end
+    scroll:SetScript("OnMouseWheel", function(self, delta)
+        local offset = self:GetVerticalScroll() - delta * 60
+        self:SetVerticalScroll(math.max(0, math.min(offset, self:GetVerticalScrollRange())))
+        RLHelper:RenderJournalRows()
+    end)
+    scroll:SetScript("OnVerticalScroll", function() RLHelper:RenderJournalRows() end)
+    frame.logText:Hide()
+end
+
 function RLHelper:LayoutMainFrame()
     local frame = self.mainFrame
     if not frame or not frame.logText or not frame.buttonContainer then
@@ -1565,9 +1716,9 @@ function RLHelper:LayoutMainFrame()
     frame.logText:ClearAllPoints()
     frame.logText:SetPoint("TOPLEFT", frame.journalFilters or frame.buttonContainer, "BOTTOMLEFT", 0, -8)
 
-    local rightInset = UITheme.GetName(self) == "minimal" and -10 or -48
+    local rightInset = self.journalV2Enabled and -2 or (UITheme.GetName(self) == "minimal" and -10 or -48)
     if frame.bottomPanel then
-        frame.logText:SetPoint("BOTTOMRIGHT", frame.bottomPanel, "TOPRIGHT", rightInset, 4)
+        frame.logText:SetPoint("BOTTOMRIGHT", frame.bottomPanel, "TOPRIGHT", self.journalV2Enabled and 0 or rightInset, 4)
     else
         frame.logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", rightInset, 8)
     end
@@ -1620,7 +1771,7 @@ function RLHelper:CreateMainFrame()
     -- Minimize button
     local minimizeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     minimizeButton:SetSize(20, 25)
-    minimizeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -2)
+    minimizeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
     minimizeButton:SetText("_")
     minimizeButton:GetFontString():SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
     minimizeButton:GetFontString():SetPoint("TOP", 0, -2)
@@ -1787,7 +1938,7 @@ function RLHelper:CreateMainFrame()
     logText:EnableMouseWheel(true)
     logText:SetHyperlinksEnabled(false)
     logText:SetIndentedWordWrap(true)
-    logText:SetInsertMode("TOP")
+    logText:SetInsertMode(self.journalV2Enabled and "BOTTOM" or "TOP")
 
     -- Mouse wheel handler
     logText:SetScript("OnMouseWheel", function(self, delta)
@@ -1803,6 +1954,7 @@ function RLHelper:CreateMainFrame()
     -- Store references
     frame.buttonContainer = buttonContainer
     frame.logText = logText
+    if self.journalV2Enabled then self:CreateJournalRows(frame) end
 
     if self.journalV2Enabled then
         local filters = CreateFrame("Frame", nil, frame)
@@ -1842,6 +1994,9 @@ function RLHelper:CreateMainFrame()
     -- Size changed handler
     frame:SetScript("OnSizeChanged", function()
         RLHelper:LayoutMainFrame()
+        if RLHelper.mainFrame and RLHelper.mainFrame.v2Scroll then
+            RLHelper:RefreshJournalRows(RLHelper.displayedCombat or RLHelper.currentCombat, true)
+        end
     end)
 
     self.mainFrame = frame
@@ -2147,7 +2302,7 @@ function RLHelper:HandleSlashCommand(input)
         print("/rlh config|options - открыть настройки")
         print("/rlh debug - включить/выключить режим отладки")
         print("/rlh clear - очистить историю боев")
-        print("/rlh demo - show all messages")
+        print("/rlh demo - показать демонстрационный бой")
         print("/rlh journal v1|v2 - выбрать историю, затем /reload между боями")
     elseif input == "journal v1" or input == "journal v2" then
         self.db.profile.journalV2 = input == "journal v2"
@@ -2165,6 +2320,8 @@ function RLHelper:HandleSlashCommand(input)
     elseif input == "demo" then
         self:StartCombat("demo")
         if self.journalV2Enabled then
+            self:ShowCurrentCombat()
+            self:SetMainFrameVisible(true)
             self:DemoJournal()
         else
             self:SendMessage("RLHelper_Demo")
@@ -2174,21 +2331,119 @@ function RLHelper:HandleSlashCommand(input)
 end
 
 function RLHelper:DemoJournal()
-    local event = { timestamp = time(), sourceName = "DemoPlayer", destName = "DemoTarget" }
-    for _, kind in ipairs({ "FIRST_DAMAGE", "FIRST_HEAL", "TAUNT", "SPELL_USE", "DISPEL", "RESURRECT",
-        "VORTEX_HIT", "VORTEX_MISSED", "BLOODBOLT_SPLASH", "MANA_BARRIER_REMOVED", "MIND_CONTROL",
-        "CYCLONE_APPLIED", "CYCLONE_MISSED", "SPIRIT_HIT", "SPIRIT_MISSED", "SPIRIT_SUMMARY",
-        "MALLEABLE_GOO", "CHOKING_GAS", "MALLEABLE_GOO_SUMMARY", "CHOKING_GAS_SUMMARY", "SHADOW_TRAP",
-        "RAGING_SPIRIT", "TRAMPLE_HIT", "FIRST_TWILIGHT_ENTRY", "FIRST_LIGHT_DAMAGE",
-        "LIGHT_DAMAGE_WINDOW_CLOSED", "MECHANIC_DEATH" }) do
-        self:OnCombatLogEvent(Journal.Create(kind, event, kind == "TAUNT" and "TACTIC_VIOLATION" or "INFO"))
-    end
+    local players = {
+        { guid = "demo-warrior", name = "Бочок", class = "WARRIOR" },
+        { guid = "demo-hunter", name = "Стрелок", class = "HUNTER" },
+        { guid = "demo-priest", name = "Целитель", class = "PRIEST" },
+        { guid = "demo-mage", name = "Чародей", class = "MAGE" },
+        { guid = "demo-paladin", name = "Светоч", class = "PALADIN" },
+    }
+    local boss = { guid = "demo-putricide", name = "Профессор Мерзоцид" }
+    local spiritOne = { guid = "demo-spirit-1", name = "Мстительный дух" }
+    local spiritTwo = { guid = "demo-spirit-2", name = "Мстительный дух" }
+    local orb = { guid = "demo-orb", name = "Темный шар" }
     local tracker = self:FindModuleByName("MisdirectionTracker")
-    -- Reserve an ID from the same sequence as real pulls in this combat.
     local pullId = tracker and (tracker.nextJournalPullId or 1) or 1
-    if tracker then tracker.nextJournalPullId = pullId + 1 end
-    for _, kind in ipairs({ "MISDIRECTION_START", "MISDIRECTION_DAMAGE", "MISDIRECTION_SUMMARY" }) do
-        self:OnCombatLogEvent(Journal.Create(kind, event, "INFO", { pullId = pullId, amount = 1000 }))
+    if tracker then tracker.nextJournalPullId = pullId + 2 end
+    -- These are fixed examples of records emitted by the existing trackers.
+    local rows = {
+        { "FIRST_DAMAGE", players[1], boss },
+        { "MISDIRECTION_START", players[2], players[1], 34477, nil,
+            { pullId = pullId } },
+        { "MISDIRECTION_DAMAGE", players[2], boss, 53209, nil,
+            { pullId = pullId, amount = 1000 } },
+        { "MISDIRECTION_SUMMARY", players[2], players[1], 34477, nil,
+            { pullId = pullId, amount = 1000 } },
+        { "SPELL_USE", players[5], nil, 31821 },
+        { "TAUNT", players[1], boss, 355 },
+        { "DISPEL", players[3], players[1], 988 },
+        { "TAUNT", players[2], boss, 20736, "TACTIC_VIOLATION" },
+        { "SPELL_USE", players[5], players[1], 10278, "TACTIC_VIOLATION" },
+        { "MALLEABLE_GOO", boss, players[4], 70853, "TACTIC_VIOLATION" },
+        { "CHOKING_GAS", nil, players[2], 71278, "TACTIC_VIOLATION" },
+        { "MALLEABLE_GOO_SUMMARY", nil, nil, nil, nil,
+            { text = "Вязкая гадость: всего 1 Чародей(1)" } },
+        { "CHOKING_GAS_SUMMARY", nil, nil, nil, nil,
+            { text = "Удушливый газ: всего 1 Стрелок(1)" } },
+        { "SPIRIT_HIT", spiritOne, players[4], nil, "TACTIC_VIOLATION", nil, 344 },
+        { "SPIRIT_HIT", spiritTwo, players[3], nil, "TACTIC_VIOLATION", nil, 194 },
+        { "SPIRIT_SUMMARY", nil, nil, nil, nil,
+            { text = "Духов взорвали: всего 2 Целитель(1) Чародей(1)" } },
+        { "MECHANIC_DEATH", orb, players[4], 77846, "TACTIC_VIOLATION" },
+        { "MECHANIC_DEATH", orb, players[2], 77846, "TACTIC_VIOLATION" },
+        { "VORTEX_HIT", players[4], players[3], 72817, "TACTIC_VIOLATION", nil, 5000 },
+        { "VORTEX_MISSED", players[4], players[3], 72817, nil, { missType = "IMMUNE" } },
+    }
+    local warrior = { guid = "demo-warrior-dps", name = "Клинок", class = "WARRIOR" }
+    local deathKnight = { guid = "demo-dk", name = "Мороз", class = "DEATHKNIGHT" }
+    local druid = { guid = "demo-druid", name = "Лист", class = "DRUID" }
+    local rogue = { guid = "demo-rogue", name = "Тень", class = "ROGUE" }
+    local shaman = { guid = "demo-shaman", name = "Гром", class = "SHAMAN" }
+    local lady = { guid = "demo-lady", name = "Леди Смертный Шепот" }
+    local lich = { guid = "demo-lich", name = "Король-лич" }
+    local halion = { guid = "demo-halion", name = "Халион" }
+    local function add(kind, source, target, spellId, severity, fields, amount)
+        rows[#rows + 1] = { kind, source, target, spellId, severity, fields, amount }
+    end
+
+    -- Complete the SpellTracker ability list, including every tracked dispel.
+    for _, spell in ipairs({ { 694, warrior }, { 1161, warrior },
+        { 49560, deathKnight }, { 51399, deathKnight }, { 56222, deathKnight },
+        { 62124, players[5] }, { 31789, players[5] }, { 5209, druid } }) do
+        local target = spell[1] == 31789 and players[1] or boss
+        add("TAUNT", spell[2], target, spell[1], "TACTIC_VIOLATION",
+            { targetIsBoss = target == boss, targetAssignment = target == players[1] and "MAINTANK" or nil })
+    end
+    for _, spellId in ipairs({ 1044, 19752, 6940, 48817 }) do
+        add("SPELL_USE", players[5], spellId == 48817 and lich or players[1], spellId)
+    end
+    add("SPELL_USE", deathKnight, players[1], 49016)
+    for _, spellId in ipairs({ 26994, 48477 }) do
+        add("RESURRECT", druid, players[4], spellId)
+    end
+    for _, spell in ipairs({ { 475, players[4] }, { 526, shaman }, { 527, players[3] },
+        { 528, players[3] }, { 552, players[3] }, { 1152, players[5] }, { 2782, druid },
+        { 4987, players[5] }, { 10872, players[3] }, { 32375, players[3] },
+        { 32592, players[3] }, { 51886, shaman } }) do
+        add("DISPEL", spell[2], players[1], spell[1])
+    end
+    add("FIRST_HEAL", players[3], { guid = "demo-valithria", name = "Валитрия Сноходица" }, 48782, nil, nil, 12000)
+
+    add("MANA_BARRIER_REMOVED", lady, lady, 70842)
+    add("MIND_CONTROL", lady, players[4], 71289)
+    add("CYCLONE_APPLIED", druid, players[4], 33786)
+    add("CYCLONE_MISSED", druid, players[4], 33786, nil, { missType = "IMMUNE" })
+    add("SPIRIT_MISSED", { guid = "demo-spirit-3", name = "Мстительный дух" }, players[2], nil, nil,
+        { missType = "DODGE" })
+    add("BLOODBOLT_SPLASH", players[4], players[3], 71483, "TACTIC_VIOLATION", nil, 9000)
+    add("SHADOW_TRAP", lich, players[2], 73529, "TACTIC_VIOLATION", nil, 15000)
+    add("RAGING_SPIRIT", lich, players[1], 69200)
+    add("TRAMPLE_HIT", { guid = "demo-icehowl", name = "Ледяной Рев" }, players[4], 66734,
+        "TACTIC_VIOLATION", nil, 30000)
+    add("FIRST_TWILIGHT_ENTRY", halion, players[1], 75483)
+    add("FIRST_LIGHT_DAMAGE", players[2], halion, 53209, nil, nil, 10000)
+    add("LIGHT_DAMAGE_WINDOW_CLOSED", shaman, players[1], 32182)
+    for _, spellId in ipairs({ 75879, 75949, 77844, 77845 }) do
+        add("MECHANIC_DEATH", spellId >= 77844 and orb or halion, players[4], spellId, "TACTIC_VIOLATION")
+    end
+    add("MISDIRECTION_START", rogue, players[1], 57934, nil, { pullId = pullId + 1 })
+    add("MISDIRECTION_DAMAGE", rogue, boss, 48638, nil, { pullId = pullId + 1, amount = 1500 })
+    add("MISDIRECTION_SUMMARY", rogue, players[1], 57934, nil, { pullId = pullId + 1, amount = 1500 })
+
+    local timestamp = time() - #rows
+    for i, row in ipairs(rows) do
+        local kind, source, target = row[1], row[2], row[3]
+        local spellId, severity, fields = row[4], row[5], row[6]
+        local event = {
+            timestamp = timestamp + i,
+            sourceGUID = source and source.guid, sourceName = source and source.name,
+            sourceClass = source and source.class,
+            destGUID = target and target.guid, destName = target and target.name,
+            destClass = target and target.class,
+            spellId = spellId,
+            amount = row[7],
+        }
+        self:OnCombatLogEvent(Journal.Create(kind, event, severity or "INFO", fields))
     end
 end
 

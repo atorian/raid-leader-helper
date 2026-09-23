@@ -338,7 +338,7 @@ describe('Structured journal', function()
 
         assert.are.equal('HUNTER', entry.source.class)
         assert.are.equal(date('%H:%M:%S', 1001) ..
-            ' |cFFABD473hunter|r |TSpellTexture:24:24:0:-2|t Применение способности → boss',
+            ' |cFFABD473hunter|r |TSpellTexture:24:24:0:-2|t |cFFFFFFFFboss|r',
             Journal.Format(entry))
     end)
 
@@ -528,20 +528,21 @@ describe('Structured journal', function()
         assert.are.equal('otherTank', addon.currentCombat.events[4].target.guid)
     end)
 
-    it('shows violations, Halion deaths and error summaries live and after saving', function()
+    it('shows violations and Halion deaths but excludes summaries live and after saving', function()
         addon.inCombat = true
         addon.currentCombat.startTime = 1000
         addon:SetJournalView('ERRORS')
         local expected = {}
         for _, kind in ipairs({ 'TAUNT', 'SPELL_USE', 'SPIRIT_HIT', 'SHADOW_TRAP',
-            'MECHANIC_DEATH', 'SPIRIT_SUMMARY', 'MALLEABLE_GOO_SUMMARY', 'CHOKING_GAS_SUMMARY' }) do
-            local severity = #expected < 4 and 'TACTIC_VIOLATION' or 'INFO'
+            'VORTEX_HIT', 'MECHANIC_DEATH' }) do
+            local severity = (kind == 'MECHANIC_DEATH' or kind == 'VORTEX_HIT') and 'INFO' or 'TACTIC_VIOLATION'
             local entry = Journal.Create(kind, event('SPELL_DAMAGE'), severity)
             addon:OnCombatLogEvent(entry)
-            expected[#expected + 1] = Journal.Format(entry)
+            expected[#expected + 1] = Journal.Format(entry, true)
         end
         for _, kind in ipairs({ 'FIRST_DAMAGE', 'SPELL_USE', 'TAUNT', 'DISPEL', 'RESURRECT',
-            'MIND_CONTROL', 'CYCLONE_APPLIED' }) do
+            'MIND_CONTROL', 'CYCLONE_APPLIED', 'VORTEX_MISSED',
+            'SPIRIT_SUMMARY', 'MALLEABLE_GOO_SUMMARY', 'CHOKING_GAS_SUMMARY' }) do
             addon:OnCombatLogEvent(Journal.Create(kind, event('SPELL_CAST_SUCCESS')))
         end
         cast('hunter', 'tank')
@@ -549,7 +550,7 @@ describe('Structured journal', function()
         addon:FinishCombat('test')
         assert.are.same(expected, lines)
         local saved = addon.db.char.combatHistoryV2.combats[1]
-        assert.are.equal(18, #saved.events)
+        assert.are.equal(20, #saved.events)
 
         addon.db = assert(loadstring('return ' .. serialize(addon.db)))()
         addon:InitializeJournal()
@@ -557,7 +558,7 @@ describe('Structured journal', function()
         addon:SetJournalView('ERRORS')
         assert.are.same(expected, lines)
         addon:SetJournalView('ALL')
-        assert.are.equal(17, #lines)
+        assert.are.equal(19, #lines)
         addon:SetJournalView('MISDIRECTION')
         assert.are.equal(3, #lines)
     end)
@@ -590,14 +591,202 @@ describe('Structured journal', function()
         assert.are.equal(0, #addon.currentCombat.events)
     end)
 
-    it('writes structured demo records only', function()
+    it('writes fixed demo records shaped like the tracked encounters', function()
         addon:DemoJournal()
-        assert.is_true(#addon.currentCombat.events > 20)
+        assert.are.equal(67, #addon.currentCombat.events)
+        local errors, misdirections = 0, 0
         for _, entry in ipairs(addon.currentCombat.events) do
             assert.is_string(entry.kind)
             assert.is_string(entry.text)
             assert.is_nil(entry.text:find('|c', 1, true))
+            assert.is_nil(entry.text:find('Демо-босс', 1, true))
+            assert.is_nil(entry.text:find('→', 1, true))
+            if entry.source then assert.is_string(entry.source.name) end
+            if Journal.Visible(entry, 'ERRORS') then errors = errors + 1 end
+            if Journal.Visible(entry, 'MISDIRECTION') then misdirections = misdirections + 1 end
         end
+        assert.are.equal(24, errors)
+        assert.are.equal(6, misdirections)
+        local first = addon.currentCombat.events[1]
+        assert.are.equal('Бочок', first.source.name)
+        assert.are.equal('WARRIOR', first.source.class)
+        assert.is_truthy(Journal.Format(first):find('|cFFC79C6EБочок|r', 1, true))
+        local taunt = addon.currentCombat.events[6]
+        assert.is_nil(taunt.icon)
+        assert.are.equal(355, taunt.spellId)
+        local goo = addon.currentCombat.events[10]
+        assert.are.equal('Профессор Мерзоцид', goo.source.name)
+        assert.are.equal('Чародей', goo.target.name)
+        assert.is_truthy(Journal.Format(goo):find('|cFF69CCF0Чародей|r', 1, true))
+        assert.is_nil(Journal.Format(goo):find('Профессор Мерзоцид', 1, true))
+        local gas = addon.currentCombat.events[11]
+        assert.is_nil(gas.source)
+        assert.are.equal('Стрелок', gas.target.name)
+        assert.is_truthy(Journal.Format(gas):find('|cFFABD473Стрелок|r', 1, true))
+        assert.is_nil(addon.currentCombat.events[12].source)
+        for i, player in ipairs({ 'Чародей', 'Целитель' }) do
+            local spirit = addon.currentCombat.events[13 + i]
+            assert.are.equal('SPIRIT_HIT', spirit.kind)
+            assert.are.equal('Мстительный дух', spirit.source.name)
+            assert.are.equal(player, spirit.target.name)
+            assert.are.equal('TACTIC_VIOLATION', spirit.type)
+            assert.are.equal(i == 1 and 344 or 194, spirit.amount)
+            assert.are.equal('Взорвал духа ' .. spirit.amount, spirit.text)
+        end
+        assert.are.equal('Духов взорвали: всего 2 Целитель(1) Чародей(1)',
+            addon.currentCombat.events[16].text)
+        for i = 17, 18 do
+            local death = addon.currentCombat.events[i]
+            assert.are.equal('MECHANIC_DEATH', death.kind)
+            assert.are.equal('TACTIC_VIOLATION', death.type)
+            assert.are.equal('Темный шар', death.source.name)
+            assert.are.equal(77846, death.spellId)
+            assert.are.equal('Смерть после попадания механики', death.text)
+            assert.is_nil(death.icon)
+            assert.is_truthy(Journal.Format(death):find(death.target.name, 1, true))
+        end
+    end)
+
+    it('matches demo spirit hits and blade deaths to records emitted by their trackers', function()
+        addon:DemoJournal()
+        local demoSpirit = addon.currentCombat.events[14]
+        local demoDeath = addon.currentCombat.events[17]
+
+        lady:handleEvent(blizzardEvent(2000, 'SPELL_SUMMON', 'demo-lady', 'Леди Смертный Шепот',
+            0xa48, 'demo-spirit-1', 'Мстительный дух', 0xa48, 71426, 'Призыв духа', 1))
+        lady:handleEvent(blizzardEvent(2001, 'SWING_DAMAGE', 'demo-spirit-1', 'Мстительный дух',
+            0xa48, 'demo-mage', 'Чародей', 0x514, 344, 0, 1, 0, 0, 0))
+        local actualSpirit = addon.currentCombat.events[#addon.currentCombat.events]
+
+        halion:handleEvent(blizzardEvent(2002, 'SPELL_DAMAGE', 'demo-orb', 'Темный шар',
+            0xa48, 'demo-mage', 'Чародей', 0x514, 77846, 'Лезвие сумерек', 0x20,
+            26977, 0, 32, 0, 0, 0))
+        halion:handleEvent(blizzardEvent(2005, 'UNIT_DIED', nil, nil, 0x80000000,
+            'demo-mage', 'Чародей', 0x514))
+        local actualDeath = addon.currentCombat.events[#addon.currentCombat.events]
+
+        for _, field in ipairs({ 'kind', 'type', 'source', 'target', 'spellId', 'amount', 'text', 'icon' }) do
+            assert.are.same(demoSpirit[field], actualSpirit[field])
+            assert.are.same(demoDeath[field], actualDeath[field])
+        end
+    end)
+
+    it('includes every journal kind and every SpellTracker ability in V2 demo', function()
+        addon:DemoJournal()
+        local kinds, abilities = {}, {}
+        for _, entry in ipairs(addon.currentCombat.events) do
+            kinds[entry.kind] = true
+            if entry.spellId then abilities[entry.spellId] = true end
+        end
+        for _, kind in ipairs({ 'FIRST_DAMAGE', 'FIRST_HEAL', 'TAUNT', 'SPELL_USE', 'DISPEL', 'RESURRECT',
+            'VORTEX_HIT', 'VORTEX_MISSED', 'BLOODBOLT_SPLASH', 'MANA_BARRIER_REMOVED', 'MIND_CONTROL',
+            'CYCLONE_APPLIED', 'CYCLONE_MISSED', 'SPIRIT_HIT', 'SPIRIT_MISSED', 'SPIRIT_SUMMARY',
+            'MALLEABLE_GOO', 'CHOKING_GAS', 'MALLEABLE_GOO_SUMMARY', 'CHOKING_GAS_SUMMARY',
+            'SHADOW_TRAP', 'RAGING_SPIRIT', 'TRAMPLE_HIT', 'FIRST_TWILIGHT_ENTRY', 'FIRST_LIGHT_DAMAGE',
+            'LIGHT_DAMAGE_WINDOW_CLOSED', 'MECHANIC_DEATH', 'MISDIRECTION_START', 'MISDIRECTION_DAMAGE',
+            'MISDIRECTION_SUMMARY' }) do
+            assert.is_true(kinds[kind], kind)
+        end
+        for _, spellId in ipairs({ 355, 694, 1161, 49560, 51399, 56222, 62124, 31789, 5209, 20736,
+            10278, 1044, 19752, 6940, 31821, 48817, 49016, 26994, 48477,
+            475, 526, 527, 528, 552, 988, 1152, 2782, 4987, 10872, 32375, 32592, 51886 }) do
+            assert.is_true(abilities[spellId], tostring(spellId))
+        end
+    end)
+
+    it('keeps Lady cyclones informational in live tracking and V2 demo', function()
+        addon:DemoJournal()
+        local examples = {}
+        for _, entry in ipairs(addon.currentCombat.events) do examples[entry.kind] = entry end
+        addon.currentCombat.firstEnemy = 'Леди Смертный Шепот'
+        for i, subevent in ipairs({ 'SPELL_AURA_APPLIED', 'SPELL_MISSED' }) do
+            local raw = event(subevent, 33786, 'demo-druid', 'demo-mage')
+            raw.sourceName, raw.destName = 'Лист', 'Чародей'
+            raw.sourceClass, raw.destClass = 'DRUID', 'MAGE'
+            if i == 2 then raw.missType = 'IMMUNE' end
+            lady:handleEvent(raw)
+            local actual = addon.currentCombat.events[#addon.currentCombat.events]
+            assert.are.equal(i == 1 and 'CYCLONE_APPLIED' or 'CYCLONE_MISSED', actual.kind)
+            assert.are.equal('INFO', actual.type)
+            assert.is_false(Journal.Visible(actual, 'ERRORS'))
+            for _, field in ipairs({ 'kind', 'type', 'source', 'target', 'spellId', 'missType', 'text', 'icon' }) do
+                assert.are.same(examples[actual.kind][field], actual[field])
+            end
+        end
+    end)
+
+    it('keeps demo summaries informational and identical to tracker totals', function()
+        addon:DemoJournal()
+        local demo = addon.currentCombat.events
+        local expected = { demo[12], demo[13], demo[16] }
+        local count = #demo
+        professor.malleableGooReport = { ['Чародей'] = 1 }
+        professor.chokingGasReport = { ['Стрелок'] = 1 }
+        lady.report = { ['Целитель'] = 1, ['Чародей'] = 1 }
+        professor:summarizeCombat()
+        lady:summarizeCombat()
+        for i, example in ipairs(expected) do
+            local actual = addon.currentCombat.events[count + i]
+            assert.are.equal('INFO', actual.type)
+            assert.is_false(Journal.Visible(actual, 'ERRORS'))
+            assert.is_false(Journal.Visible(example, 'ERRORS'))
+            assert.is_true(Journal.Visible(actual, 'ALL'))
+            for _, field in ipairs({ 'kind', 'type', 'source', 'target', 'spellId', 'text', 'icon' }) do
+                assert.are.same(example[field], actual[field])
+            end
+        end
+    end)
+
+    it('matches demo vortex hits and misses to the healer tracker classification', function()
+        addon:DemoJournal()
+        mocks.raidSize = 1
+        mocks:SetRaidRosterInfo(1, 'Целитель', 5, 'Жрец', 'PRIEST')
+        for i, subevent in ipairs({ 'SPELL_DAMAGE', 'SPELL_MISSED' }) do
+            local demoEntry = addon.currentCombat.events[18 + i]
+            local raw = event(subevent, 72817, 'demo-mage', 'demo-priest', 2000)
+            raw.sourceName, raw.destName = 'Чародей', 'Целитель'
+            raw.sourceClass, raw.destClass = 'MAGE', 'PRIEST'
+            if i == 1 then raw.amount = 5000 else raw.missType = 'IMMUNE' end
+            princes:handleEvent(raw)
+            local actual = addon.currentCombat.events[#addon.currentCombat.events]
+            assert.are.equal(i == 1 and 'VORTEX_HIT' or 'VORTEX_MISSED', actual.kind)
+            assert.are.equal(i == 1 and 'TACTIC_VIOLATION' or 'INFO', actual.type)
+            assert.are.equal(i == 1, Journal.Visible(actual, 'ERRORS'))
+            for _, field in ipairs({ 'kind', 'type', 'source', 'target', 'spellId', 'amount', 'missType', 'text', 'icon' }) do
+                assert.are.same(demoEntry[field], actual[field])
+            end
+        end
+    end)
+
+    it('classifies each tracked Halion mechanic death as a violation', function()
+        for _, spellId in ipairs({ 75879, 75949, 77844, 77845, 77846 }) do
+            local damage = event('SPELL_DAMAGE', spellId, 'orb', 'player')
+            damage.destFlags = 0x514
+            halion:handleEvent(damage)
+            local death = event('UNIT_DIED', nil, 'orb', 'player')
+            death.destFlags = 0x514
+            halion:handleEvent(death)
+            local entry = addon.currentCombat.events[#addon.currentCombat.events]
+            assert.are.equal('MECHANIC_DEATH', entry.kind)
+            assert.are.equal(spellId, entry.spellId)
+            assert.are.equal('TACTIC_VIOLATION', entry.type)
+            assert.is_true(Journal.Visible(entry, 'ERRORS'))
+        end
+    end)
+
+    it('opens the V2 demo from a saved combat so its filters show the new records', function()
+        addon.displayedCombat = { events = {} }
+        local shown = false
+        addon.mainFrame.Show = function() shown = true end
+        addon:HandleSlashCommand('demo')
+        assert.are.equal('current', addon.selectedCombatKind)
+        assert.are.equal(addon.currentCombat, addon.displayedCombat)
+        assert.is_true(shown)
+        assert.are.equal(67, #addon.currentCombat.events)
+        addon:SetJournalView('ERRORS')
+        assert.is_true(#lines > 0)
+        addon:SetJournalView('MISDIRECTION')
+        assert.is_true(#lines > 0)
     end)
 
     it('records existing boss mechanics using addon kinds', function()
@@ -651,11 +840,14 @@ describe('Structured journal', function()
         local function frame()
             return setmetatable({ scripts = {} }, { __index = function(_, key)
                 if key == 'SetScript' then return function(self, name, fn) self.scripts[name] = fn end end
-                if key == 'GetFontString' or key == 'CreateFontString' then return frame end
+                if key == 'GetFontString' or key == 'CreateFontString' or key == 'CreateTexture' then return frame end
                 if key == 'IsShown' then return function() return false end end
                 if key == 'GetFont' then return function() return 'Fonts\\FRIZQT__.TTF', 12 end end
                 if key == 'GetSpacing' then return function() return 0 end end
                 if key == 'GetHeight' then return function() return 400 end end
+                if key == 'GetWidth' then return function() return 400 end end
+                if key == 'GetStringHeight' then return function() return 24 end end
+                if key == 'GetVerticalScroll' or key == 'GetVerticalScrollRange' then return function() return 0 end end
                 -- Data fields must stay nil; only emulate frame methods.
                 if key:match('^[A-Z]') then return function() end end
             end })

@@ -119,6 +119,11 @@ local descriptions = {
     MISDIRECTION_SUMMARY = "Напул окончен, урон",
 }
 
+local playerTargetKinds = {
+    MIND_CONTROL = true, SPIRIT_HIT = true, MALLEABLE_GOO = true,
+    CHOKING_GAS = true, SHADOW_TRAP = true, MECHANIC_DEATH = true,
+}
+
 function Journal.Create(kind, event, severity, fields)
     event = event or {}
     local source = type(event.source) == "table" and event.source or nil
@@ -141,8 +146,8 @@ function Journal.Create(kind, event, severity, fields)
         local parts = { descriptions[kind] or kind }
         if kind == "FIRST_DAMAGE" or kind == "FIRST_HEAL" then
             if entry.target then parts[#parts + 1] = "по " .. (entry.target.name or "?") end
-        elseif entry.target then
-            parts[#parts + 1] = "→ " .. (entry.target.name or "?")
+        elseif entry.target and not playerTargetKinds[kind] then
+            parts[#parts + 1] = ": " .. (entry.target.name or "?")
         end
         if entry.amount then parts[#parts + 1] = tostring(entry.amount) end
         if entry.missType then parts[#parts + 1] = entry.missType end
@@ -155,21 +160,23 @@ function Journal.Visible(entry, view)
     if view == "MISDIRECTION" then return entry.pullId ~= nil and not entry.hidden end
     if view == "ERRORS" then
         return entry.type == "TACTIC_VIOLATION" or entry.kind == "MECHANIC_DEATH" or
-            entry.kind == "SPIRIT_SUMMARY" or entry.kind == "MALLEABLE_GOO_SUMMARY" or
-            entry.kind == "CHOKING_GAS_SUMMARY"
+            entry.kind == "VORTEX_HIT"
     end
     return entry.kind ~= "MISDIRECTION_DAMAGE"
 end
 
-function Journal.Format(entry)
+function Journal.Format(entry, neutralMessage)
     local spellIcon = ""
     if entry.kind == "FIRST_DAMAGE" then
         spellIcon = "|T" .. FIRST_DAMAGE_ICON .. ":24:24:0:-2|t"
+    elseif entry.icon then
+        spellIcon = "|T" .. entry.icon .. ":24:24:0:-2|t"
     elseif entry.spellId and type(GetSpellInfo) == "function" then
         local _, _, texture = GetSpellInfo(entry.spellId)
         if texture then spellIcon = "|T" .. texture .. ":24:24:0:-2|t" end
     end
 
+    local actor = playerTargetKinds[entry.kind] and entry.target and entry.target.class and entry.target or entry.source
     local message
     if entry.kind == "MISDIRECTION_DAMAGE" then
         local target = formatEntityName(entry.target)
@@ -180,6 +187,9 @@ function Journal.Format(entry)
         message = entry.target and formatEntityName(entry.target) or ""
     elseif entry.kind == "FIRST_DAMAGE" or entry.kind == "FIRST_HEAL" then
         message = string.format("%s по %s", descriptions[entry.kind], formatEntityName(entry.target, true))
+    elseif entry.kind == "SPELL_USE" or entry.kind == "DISPEL" or entry.kind == "RESURRECT" or
+        entry.kind == "MISDIRECTION_START" then
+        message = entry.target and formatEntityName(entry.target, true) or ""
     else
         message = entry.text or ""
         local source = entry.source and entry.source.name
@@ -190,15 +200,16 @@ function Journal.Format(entry)
     end
 
     local parts = { date("%H:%M:%S", entry.timestamp) }
-    if entry.source then parts[#parts + 1] = formatEntityName(entry.source, true) end
+    if actor then parts[#parts + 1] = formatEntityName(actor, true) end
     if spellIcon ~= "" then parts[#parts + 1] = spellIcon end
     if message ~= "" then parts[#parts + 1] = message end
     local text = table.concat(parts, " ")
     if entry.type == "TACTIC_VIOLATION" then
         local cleanMessage = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
         local whiteTime = "|cFFFFFFFF" .. date("%H:%M:%S", entry.timestamp) .. "|r"
-        local sourceName = entry.source and " " .. formatEntityName(entry.source, true) or ""
-        local redMessage = cleanMessage ~= "" and " |cFFFF0000" .. cleanMessage .. "|r" or ""
+        local sourceName = actor and " " .. formatEntityName(actor, true) or ""
+        local messageColor = neutralMessage and "|cFFFFFFFF" or "|cFFFF0000"
+        local redMessage = cleanMessage ~= "" and " " .. messageColor .. cleanMessage .. "|r" or ""
         return whiteTime .. sourceName ..
             (spellIcon ~= "" and " " .. spellIcon or "") .. redMessage
     end

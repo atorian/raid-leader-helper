@@ -24,6 +24,16 @@ describe('UI themes', function()
         function frame:SetHeight(h) self.height = h end
         function frame:SetWidth(w) self.width = w end
         function frame:GetHeight() return self.height or 400 end
+        function frame:GetWidth() return self.width or 400 end
+        function frame:GetStringHeight()
+            return self.text and self.text:find(':20:20:0:-1|t', 1, true) and 20 or 14
+        end
+        function frame:SetScrollChild(child) self.scrollChild = child end
+        function frame:GetVerticalScroll() return self.verticalScroll or 0 end
+        function frame:GetVerticalScrollRange()
+            return math.max(0, (self.scrollChild and self.scrollChild.height or 0) - self:GetHeight())
+        end
+        function frame:SetVerticalScroll(value) self.verticalScroll = value end
         function frame:GetName() return self.name end
         function frame:SetText(text) self.text = text end
         function frame:GetText() return self.text or '' end
@@ -81,9 +91,11 @@ describe('UI themes', function()
         for _, method in ipairs({ 'SetAllPoints', 'SetFrameStrata', 'SetMovable', 'SetResizable',
             'SetMinResize', 'SetMaxResize', 'EnableMouse', 'RegisterForDrag', 'SetJustifyV', 'SetJustifyH',
             'SetFading', 'SetMaxLines', 'EnableMouseWheel', 'SetHyperlinksEnabled', 'SetIndentedWordWrap',
-            'SetInsertMode', 'SetAutoFocus', 'SetScrollChild', 'ClearFocus', 'Clear', 'AddMessage' }) do
+            'SetInsertMode', 'SetAutoFocus', 'ClearFocus', 'Clear', 'AddMessage' }) do
             frame[method] = function() end
         end
+        function frame:StartMoving() self.moving = true end
+        function frame:StopMovingOrSizing() self.moving = false end
         if name then
             namedFrames[name] = frame
             if kind == 'CheckButton' then
@@ -215,6 +227,173 @@ describe('UI themes', function()
         assert.is_true(buttons.ERRORS.themeSelection.visible)
         assert.is_false(buttons.ERRORS.enabled)
         assert.is_true(buttons.ALL.enabled)
+    end)
+
+    it('highlights every Errors entry only in All for live and saved V2 views', function()
+        local Journal = require('lib.Journal')
+        addon:CreateMainFrame()
+        local frame = addon.mainFrame
+        local event = { timestamp = 1000, sourceGUID = 'demo-hunter', sourceName = 'Стрелок',
+            sourceClass = 'HUNTER', destName = 'Босс' }
+        local ordinary = Journal.Create('FIRST_DAMAGE', event, 'INFO')
+        local violation = Journal.Create('SHADOW_TRAP', event, 'TACTIC_VIOLATION', { text = 'Взорвал ловушку' })
+        local summary = Journal.Create('MALLEABLE_GOO_SUMMARY', {}, 'INFO', { text = 'Вязкая гадость: всего 1' })
+        addon:OnCombatLogEvent(ordinary)
+        addon:OnCombatLogEvent(violation)
+        addon:OnCombatLogEvent(summary)
+        assert.are.equal(3, #frame.v2Items)
+        assert.are.equal(21, frame.v2Items[1].height)
+        assert.is_truthy(frame.v2Rows[1].text.text:find(':20:20:0:-1|t', 1, true))
+        assert.is_false(frame.v2Rows[1].background.visible)
+        assert.is_true(frame.v2Rows[2].background.visible)
+        assert.is_false(frame.v2Rows[3].background.visible)
+        assert.is_truthy(frame.v2Rows[2].text.text:find('|cFFABD473Стрелок|r', 1, true))
+        assert.is_truthy(frame.v2Rows[2].text.text:find('|cFFFFFFFFВзорвал ловушку|r', 1, true))
+        addon:SetJournalView('ERRORS')
+        assert.are.equal(1, #frame.v2Items)
+        assert.is_false(frame.v2Rows[1].background.visible)
+        assert.is_nil(frame.v2Rows[1].text.text:find('|cFFFF0000', 1, true))
+        assert.is_truthy(frame.v2Rows[1].text.text:find('|cFFFFFFFFВзорвал ловушку|r', 1, true))
+        assert.is_truthy(frame.v2Rows[1].text.text:find('|cFFABD473Стрелок|r', 1, true))
+        assert.is_false(frame.v2Rows[2].visible)
+        addon:DisplayCombat(Journal.Copy(addon.currentCombat))
+        assert.is_false(frame.v2Rows[1].background.visible)
+        assert.is_nil(frame.v2Rows[1].text.text:find('|cFFFF0000', 1, true))
+        addon:SetJournalView('ALL')
+        assert.is_false(frame.v2Rows[1].background.visible)
+        assert.is_true(frame.v2Rows[2].background.visible)
+        addon:SetJournalView('MISDIRECTION')
+        assert.are.equal(0, #frame.v2Items)
+        assert.is_false(frame.v2Rows[1].visible)
+        addon.currentCombat.droppedEvents = 2
+        addon:DisplayCombat(addon.currentCombat)
+        assert.are.equal(1, #frame.v2Items)
+        assert.is_truthy(frame.v2Rows[1].text.text:find('пропущено событий 2', 1, true))
+        assert.is_false(frame.v2Rows[1].background.visible)
+    end)
+
+    it('drags the main window from the scroll area and occupied journal rows', function()
+        addon:CreateMainFrame()
+        local frame = addon.mainFrame
+        local Journal = require('lib.Journal')
+        addon:OnCombatLogEvent(Journal.Create('FIRST_DAMAGE', { timestamp = 1000,
+            sourceName = 'Бочок', destName = 'Профессор Мерзоцид' }))
+        for _, region in ipairs({ frame.v2Scroll, frame.v2Content, frame.v2Rows[1] }) do
+            region.scripts.OnDragStart(region)
+            assert.is_true(frame.moving)
+            region.scripts.OnDragStop(region)
+            assert.is_false(frame.moving)
+        end
+    end)
+
+    it('aligns controls and V2 text to the same side margins in both themes', function()
+        addon:CreateMainFrame()
+        local frame = addon.mainFrame
+        local minimize
+        for _, control in ipairs(createdFrames) do
+            if control.text == '_' then minimize = control end
+        end
+        for _, theme in ipairs({ 'minimal', 'current', 'minimal' }) do
+            addon:SetTheme(theme)
+            assert.are.same({ 'TOPLEFT', frame, 'TOPLEFT', 2, -2 }, frame.buttonContainer.points[1])
+            assert.are.same({ 'TOPRIGHT', frame, 'TOPRIGHT', -2, -2 }, minimize.points[1])
+            assert.are.equal(0, frame.v2Rows[1].text.points[1][4])
+            assert.are.equal(0, frame.v2Rows[1].text.points[2][4])
+            assert.are.equal(-2, frame.logText.points[2][4])
+        end
+        addon.db.profile.gpAwardButtonsEnabled = true
+        local gp = dofile('modules/ui/GPAwardButtons.lua')
+        gp:attachToMainFrame()
+        assert.are.same({ 'BOTTOMLEFT', frame, 'BOTTOMLEFT', 2, 2 }, gp.footerFrame.points[1])
+        assert.are.same({ 'BOTTOMRIGHT', frame, 'BOTTOMRIGHT', -2, 2 }, gp.footerFrame.points[2])
+        assert.are.equal(0, frame.logText.points[2][4])
+    end)
+
+    it('keeps compact single lines while giving wrapped V2 messages their measured height', function()
+        local Journal = require('lib.Journal')
+        addon:CreateMainFrame()
+        local frame = addon.mainFrame
+        addon:OnCombatLogEvent(Journal.Create('FIRST_DAMAGE', { timestamp = 1000,
+            sourceName = 'Бочок', destName = 'Профессор Мерзоцид' }))
+        assert.are.equal(21, frame.v2Items[1].height)
+        frame.v2Measure.GetStringHeight = function() return 36 end
+        addon:OnCombatLogEvent(Journal.Create('SPIRIT_SUMMARY', { timestamp = 1001 }, 'INFO',
+            { text = 'Духов взорвали: всего 2 Целитель(1) Чародей(1)' }))
+        assert.are.equal(37, frame.v2Items[2].height)
+    end)
+
+    it('matches demo error counts to red rows in All and removes backgrounds in Errors', function()
+        addon:CreateMainFrame()
+        addon:DemoJournal()
+        local allErrors = 0
+        for _, item in ipairs(addon.mainFrame.v2Items) do
+            if item.highlighted then allErrors = allErrors + 1 end
+        end
+        assert.are.equal(24, allErrors)
+        addon:SetJournalView('ERRORS')
+        assert.are.equal(24, #addon.mainFrame.v2Items)
+        for _, item in ipairs(addon.mainFrame.v2Items) do
+            assert.is_false(item.highlighted)
+        end
+    end)
+
+    it('appends live rows chronologically and scrolls to the latest after manual scrolling', function()
+        local Journal = require('lib.Journal')
+        addon:CreateMainFrame()
+        local frame = addon.mainFrame
+        frame.v2Scroll:SetHeight(100)
+        for i = 1, 10 do
+            addon:OnCombatLogEvent(Journal.Create('SHADOW_TRAP', { timestamp = i }, 'TACTIC_VIOLATION'))
+        end
+        for i, item in ipairs(frame.v2Items) do assert.are.equal(i, item.entry.timestamp) end
+        assert.are.equal(110, frame.v2Scroll:GetVerticalScroll())
+        frame.v2Scroll.scripts.OnMouseWheel(frame.v2Scroll, 1)
+        assert.are.equal(50, frame.v2Scroll:GetVerticalScroll())
+        addon:OnCombatLogEvent(Journal.Create('SHADOW_TRAP', { timestamp = 11 }, 'TACTIC_VIOLATION'))
+        assert.are.equal(131, frame.v2Scroll:GetVerticalScroll())
+        assert.are.equal(11, frame.v2Items[#frame.v2Items].entry.timestamp)
+        addon:SetJournalView('ERRORS')
+        assert.are.equal(131, frame.v2Scroll:GetVerticalScroll())
+        addon:DisplayCombat(Journal.Copy(addon.currentCombat))
+        assert.are.equal(131, frame.v2Scroll:GetVerticalScroll())
+        assert.are.equal(1, frame.v2Items[1].entry.timestamp)
+    end)
+
+    it('keeps the newest thousand matching rows in chronological order', function()
+        local Journal = require('lib.Journal')
+        addon:CreateMainFrame()
+        local frame = addon.mainFrame
+        local combat = { events = {}, droppedEvents = 2 }
+        for i = 1, 1005 do
+            combat.events[#combat.events + 1] = Journal.Create('SHADOW_TRAP', { timestamp = i }, 'TACTIC_VIOLATION')
+            combat.events[#combat.events + 1] = Journal.Create('SPELL_USE', { timestamp = i })
+        end
+        addon:SetJournalView('ERRORS')
+        addon:DisplayCombat(combat)
+        assert.are.equal(1001, #frame.v2Items)
+        assert.are.equal(6, frame.v2Items[1].entry.timestamp)
+        assert.are.equal(1005, frame.v2Items[1000].entry.timestamp)
+        assert.is_truthy(frame.v2Items[1001].text:find('пропущено событий 2', 1, true))
+        assert.are.equal(frame.v2Scroll:GetVerticalScrollRange(), frame.v2Scroll:GetVerticalScroll())
+    end)
+
+    it('keeps the demo pull detail tooltip on the V2 summary row', function()
+        local previousTooltip = _G.GameTooltip
+        local details = {}
+        _G.GameTooltip = {
+            SetOwner = function() end, AddLine = function() end, Show = function() end, Hide = function() end,
+            AddDoubleLine = function(_, name, amount) details[#details + 1] = { name, amount } end,
+        }
+        addon:CreateMainFrame()
+        addon:DemoJournal()
+        local summary
+        for _, row in ipairs(addon.mainFrame.v2Rows) do
+            if row.entry and row.entry.kind == 'MISDIRECTION_SUMMARY' then summary = row; break end
+        end
+        assert.is_not_nil(summary)
+        summary.scripts.OnEnter(summary)
+        _G.GameTooltip = previousTooltip
+        assert.are.same({ { 'Профессор Мерзоцид', '1500' } }, details)
     end)
 
     it('loads a saved theme with V1 and themes GP buttons created later, including disabled undo', function()

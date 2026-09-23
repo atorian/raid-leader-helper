@@ -209,7 +209,7 @@ function GPAwardButtons:attachToMainFrame()
 
     local footer = CreateFrame("Frame", nil, RLHelper.mainFrame)
     footer:SetPoint("BOTTOMLEFT", RLHelper.mainFrame, "BOTTOMLEFT", 2, 2)
-    footer:SetPoint("BOTTOMRIGHT", RLHelper.mainFrame, "BOTTOMRIGHT", 2, 2)
+    footer:SetPoint("BOTTOMRIGHT", RLHelper.mainFrame, "BOTTOMRIGHT", -2, 2)
     footer:SetHeight(22)
 
     self.buttons = {}

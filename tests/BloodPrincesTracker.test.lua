@@ -1,3 +1,4 @@
+local assertRecord = require('tests.journal_assertions')
 local mocks = require('tests.mocks')
 local spy = require("luassert.spy")
 local BloodPrincesTracker = require("../modules/bosses/BloodPrincesTracker")
@@ -46,8 +47,7 @@ describe('BloodPrincesTracker', function()
 
         BloodPrincesTracker:handleEvent(vortexDamage("Заблудшый", "Вольно"))
 
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFЗаблудшый|r |TInterface\\Icons\\Spell_Shadow_Teleport:24:24:0:0|t |cFFFFFFFFВольно|r")
+        assertRecord(log, { sourceName = "Заблудшый", targetName = "Вольно", spellId = 72817, kind = "VORTEX_HIT", type = "TACTIC_VIOLATION" })
     end)
 
     it('logs all Powerful Vortex knockback spell ids', function()
@@ -122,8 +122,7 @@ describe('BloodPrincesTracker', function()
 
         BloodPrincesTracker:handleEvent(vortexMiss("Источник", "Прист"))
 
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFИсточник|r |TInterface\\Icons\\Spell_Shadow_Teleport:24:24:0:0|t |cFFFFFFFFПрист|r")
+        assertRecord(log, { sourceName = "Источник", targetName = "Прист", spellId = 72817, kind = "VORTEX_MISSED", type = "INFO" })
     end)
 
     it('does not filter the source player', function()
@@ -136,12 +135,4 @@ describe('BloodPrincesTracker', function()
         assert.spy(log).was_called()
     end)
 
-    it('demo logs vortex healer hit', function()
-        assert.is_function(BloodPrincesTracker.demo)
-
-        BloodPrincesTracker:demo()
-
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFDemoSource|r |TInterface\\Icons\\Spell_Shadow_Teleport:24:24:0:0|t |cFFFFFFFFDemoHealer|r")
-    end)
 end)

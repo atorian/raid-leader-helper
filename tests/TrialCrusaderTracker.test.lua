@@ -1,3 +1,4 @@
+local assertRecord = require('tests.journal_assertions')
 require('tests.mocks')
 require("../lib/blizzardEvent")
 local TrialCrusaderTracker = require("../modules/bosses/TrialCrusaderTracker")
@@ -78,18 +79,9 @@ describe('TrialCrusaderTracker', function()
         dispatch(TrialCrusaderTracker, Builder:New():FromEnemy("Ледяной Рев"):ToPlayer("Игрок1")
             :SpellDamage(66734, "Trample", 50000):Build())
 
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFИгрок1|r |TInterface\\Icons\\Ability_Druid_DemoralizingRoar:24:24:0:0|t размазало об стену")
+        assertRecord(log, { targetName = "Игрок1", spellId = 66734, kind = "TRAMPLE_HIT", type = "TACTIC_VIOLATION" })
     end)
 
-    it('demo logs Icehowl trample', function()
-        assert.is_function(TrialCrusaderTracker.demo)
-
-        TrialCrusaderTracker:demo()
-
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFDemoPlayer|r |TInterface\\Icons\\Ability_Druid_DemoralizingRoar:24:24:0:0|t размазало об стену")
-    end)
 
     it('ignores unrelated damage events', function()
         dispatch(TrialCrusaderTracker, Builder:New():FromEnemy("Ледяной Рев"):ToPlayer("Игрок1")

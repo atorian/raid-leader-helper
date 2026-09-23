@@ -1,3 +1,4 @@
+local assertRecord = require('tests.journal_assertions')
 require('tests.mocks')
 require('../lib/blizzardEvent')
 
@@ -55,8 +56,7 @@ describe('PutricideTracker', function()
             dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
                 :ApplyAura(spellId, "Вязкая гадость", "DEBUFF"):Build())
 
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\INV_Misc_Herb_EvergreenMoss:24:24:0:0|t Вязкая гадость")
+            assertRecord(log, { targetName = "Темшамя", kind = "MALLEABLE_GOO", type = "TACTIC_VIOLATION" })
         end)
     end
 
@@ -66,8 +66,7 @@ describe('PutricideTracker', function()
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
             :ApplyAura(72297, "Вязкая гадость", "DEBUFF"):Build())
 
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\INV_Misc_Herb_EvergreenMoss:24:24:0:0|t Вязкая гадость")
+        assertRecord(log, { targetName = "Темшамя", kind = "MALLEABLE_GOO", type = "TACTIC_VIOLATION" })
     end)
 
     it('ignores the no-target Malleable Goo cast trigger', function()
@@ -90,8 +89,7 @@ describe('PutricideTracker', function()
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
             :ApplyAura(72297, "Вязкая гадость", "DEBUFF"):Build())
 
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\INV_Misc_Herb_EvergreenMoss:24:24:0:0|t Вязкая гадость")
+        assertRecord(log, { targetName = "Темшамя", kind = "MALLEABLE_GOO", type = "TACTIC_VIOLATION" })
     end)
 
     it('logs combat-end Malleable Goo summary sorted by count then name', function()
@@ -105,7 +103,7 @@ describe('PutricideTracker', function()
         log:clear()
         summarizeCombat(PutricideTracker)
 
-        assert.spy(log).was_called_with("SOME DATE Вязкая гадость: всего 3 Player2(2) Player1(1)")
+        assertRecord(log, { text = "Вязкая гадость: всего 3 Player2(2) Player1(1)", kind = "MALLEABLE_GOO_SUMMARY", type = "INFO" })
     end)
 
     it('counts Malleable Goo summary during Festergut combat', function()
@@ -117,7 +115,7 @@ describe('PutricideTracker', function()
         log:clear()
         summarizeCombat(PutricideTracker)
 
-        assert.spy(log).was_called_with("SOME DATE Вязкая гадость: всего 1 Темшамя(1)")
+        assertRecord(log, { text = "Вязкая гадость: всего 1 Темшамя(1)", kind = "MALLEABLE_GOO_SUMMARY", type = "INFO" })
     end)
 
     it('does not log Malleable Goo summary when report is empty', function()
@@ -141,16 +139,14 @@ describe('PutricideTracker', function()
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
             :ApplyAura(71278, "Удушливый газ", "DEBUFF"):Build())
 
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\Ability_Creature_Cursed_01:24:24:0:0|t Удушливый газ")
+        assertRecord(log, { targetName = "Темшамя", kind = "CHOKING_GAS", type = "TACTIC_VIOLATION" })
     end)
 
     it('logs heroic 10-player Choking Gas aura applications', function()
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Глорихол")
             :ApplyAura(72619, "Удушливый газ", "DEBUFF"):Build())
 
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFГлорихол|r |TInterface\\Icons\\Ability_Creature_Cursed_01:24:24:0:0|t Удушливый газ")
+        assertRecord(log, { targetName = "Глорихол", kind = "CHOKING_GAS", type = "TACTIC_VIOLATION" })
     end)
 
     it('logs Choking Gas by spell id without checking current combat enemy', function()
@@ -159,8 +155,7 @@ describe('PutricideTracker', function()
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
             :ApplyAura(71278, "Удушливый газ", "DEBUFF"):Build())
 
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\Ability_Creature_Cursed_01:24:24:0:0|t Удушливый газ")
+        assertRecord(log, { targetName = "Темшамя", kind = "CHOKING_GAS", type = "TACTIC_VIOLATION" })
     end)
 
     it('logs Choking Gas during Festergut combat', function()
@@ -169,8 +164,7 @@ describe('PutricideTracker', function()
         dispatch(PutricideTracker, Builder:New():FromEnemy("Профессор Мерзоцид"):ToPlayer("Темшамя")
             :ApplyAura(71278, "Удушливый газ", "DEBUFF"):Build())
 
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFТемшамя|r |TInterface\\Icons\\Ability_Creature_Cursed_01:24:24:0:0|t Удушливый газ")
+        assertRecord(log, { targetName = "Темшамя", kind = "CHOKING_GAS", type = "TACTIC_VIOLATION" })
     end)
 
     it('logs combat-end Choking Gas summary sorted by count then name', function()
@@ -184,7 +178,7 @@ describe('PutricideTracker', function()
         log:clear()
         summarizeCombat(PutricideTracker)
 
-        assert.spy(log).was_called_with("SOME DATE Удушливый газ: всего 3 Player2(2) Player1(1)")
+        assertRecord(log, { text = "Удушливый газ: всего 3 Player2(2) Player1(1)", kind = "CHOKING_GAS_SUMMARY", type = "INFO" })
     end)
 
     it('does not log Choking Gas summary when report is empty', function()
@@ -204,16 +198,4 @@ describe('PutricideTracker', function()
         assert.spy(log).was_not_called()
     end)
 
-    it('demo logs Putricide visible mechanics and summaries', function()
-        assert.is_function(PutricideTracker.demo)
-
-        PutricideTracker:demo()
-
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFDemoPlayer|r |TInterface\\Icons\\INV_Misc_Herb_EvergreenMoss:24:24:0:0|t Вязкая гадость")
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFDemoPlayer|r |TInterface\\Icons\\Ability_Creature_Cursed_01:24:24:0:0|t Удушливый газ")
-        assert.spy(log).was_called_with("SOME DATE Вязкая гадость: всего 1 DemoPlayer(1)")
-        assert.spy(log).was_called_with("SOME DATE Удушливый газ: всего 1 DemoPlayer(1)")
-    end)
 end)

@@ -19,4 +19,4 @@ When the observer is mind-controlled, their raid members can appear as hostile o
 - Keep genuinely outside players filtered out.
 - Remove departed members and replaced pets when rebuilding the roster.
 - Do not clear group membership at the end of a fight.
-- Verify mechanics through the complete dispatcher in both journal versions.
+- Verify mechanics through the complete dispatcher and verify the saved journal.

@@ -113,7 +113,7 @@ describe('UI themes', function()
             'UIDropDownMenu_AddButton' }) do
             originalGlobals[key] = _G[key] or false
         end
-        for _, key in ipairs({ 'db', 'mainFrame', 'themeButtons', 'journalV2Enabled', 'journalView',
+        for _, key in ipairs({ 'db', 'mainFrame', 'themeButtons', 'journalView',
             'optionsPanel', 'displayedCombat', 'currentCombat', 'SendMessage' }) do
             originalAddon[key] = addon[key] or false
         end
@@ -123,7 +123,7 @@ describe('UI themes', function()
         _G.UIDropDownMenu_AddButton = function(info) dropdownItems[#dropdownItems + 1] = info end
         addon.db = { profile = {}, char = {} }
         addon.themeButtons, addon.mainFrame = nil, nil
-        addon.journalV2Enabled, addon.journalView = true, 'ALL'
+        addon.journalView = 'ALL'
         addon.currentCombat = { events = {}, messages = {} }
         addon.displayedCombat = addon.currentCombat
         addon.SendMessage = function() end
@@ -396,12 +396,11 @@ describe('UI themes', function()
         assert.are.same({ { 'Профессор Мерзоцид', '1500' } }, details)
     end)
 
-    it('loads a saved theme with V1 and themes GP buttons created later, including disabled undo', function()
-        addon.journalV2Enabled = false
+    it('loads a saved theme and themes GP buttons created later, including disabled undo', function()
         addon.db.profile.theme = 'minimal'
         addon.db.profile.gpAwardButtonsEnabled = true
         addon:CreateMainFrame()
-        assert.is_nil(addon.mainFrame.journalFilters)
+        assert.is_not_nil(addon.mainFrame.journalFilters)
         assert.are.equal('GameFontHighlight', addon.mainFrame.raidCheckBtn.fonts.Normal)
         local gp = dofile('modules/ui/GPAwardButtons.lua')
         gp:attachToMainFrame()

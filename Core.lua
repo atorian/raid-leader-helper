@@ -180,7 +180,6 @@ local defaults = {
     profile = {
         enabled = true,
         debug = false,
-        journalV2 = false,
         theme = "current",
         pullCancelMessage = "ГАЛЯ, ОТМЕНА!",
         discordLink = "",
@@ -197,16 +196,14 @@ local defaults = {
         },
         savedPosition = nil -- Add saved position storage
     },
-    char = {
-        combatHistory = {}
-    }
+    char = {}
 }
 
 -- Combat history structures
 RLHelper.combatHistory = {} -- Array for combat history
 RLHelper.currentCombat = {
     startTime = nil,
-    messages = {},
+    events = {},
     firstEnemy = nil, -- Name of the first enemy in combat
     isBoss = false
 }
@@ -506,33 +503,27 @@ function RLHelper:OnInitialize()
 end
 
 function RLHelper:InitializeJournal()
-    -- The choice is latched until /reload, including when the option changes mid-fight.
-    self.journalV2Enabled = self.db.profile.journalV2 == true
+    self.db.profile.journalV2 = nil
+    self.db.profile.combatHistory = nil
+    for _, profile in pairs(self.db.sv and self.db.sv.profiles or {}) do
+        profile.journalV2 = nil
+        profile.combatHistory = nil
+    end
+    self.db.char.combatHistory = nil
+    for _, character in pairs(self.db.sv and self.db.sv.char or {}) do
+        character.combatHistory = nil
+    end
     self.journalView = "ALL"
     self.followNextCombat = false
-    self.combatHistory = {}
-    if self.journalV2Enabled then
-        local store = self.db.char.combatHistoryV2
-        if not store then
-            store = { schemaVersion = 2, nextCombatId = 1, combats = {} }
-            self.db.char.combatHistoryV2 = store
-        end
-        assert(store.schemaVersion == 2, "Unsupported combatHistoryV2 schema")
-        self.combatHistory = Journal.Copy(store.combats)
-        self.currentCombat = { events = {}, isBoss = false }
-        self.displayedCombat = self.currentCombat
-        return
+    local store = self.db.char.combatHistoryV2
+    if not store then
+        store = { schemaVersion = 2, nextCombatId = 1, combats = {} }
+        self.db.char.combatHistoryV2 = store
     end
-    local combatHistory = self.db.char and self.db.char.combatHistory or {}
-    for _, combat in ipairs(combatHistory) do
-        table.insert(self.combatHistory, {
-            startTime = combat.startTime,
-            endTime = combat.endTime,
-            messages = combat.messages,
-            firstEnemy = combat.firstEnemy,
-            isBoss = combat.isBoss
-        })
-    end
+    assert(store.schemaVersion == 2, "Unsupported combatHistoryV2 schema")
+    self.combatHistory = Journal.Copy(store.combats)
+    self.currentCombat = { events = {}, isBoss = false }
+    self.displayedCombat = self.currentCombat
 end
 
 function RLHelper:OnEnable()
@@ -736,7 +727,7 @@ function RLHelper:StartCombat(reason)
     end
 
     self:EnsureCombatTicker()
-    if self:IsDisplayingCurrentCombat() or (self.journalV2Enabled and self.followNextCombat) then
+    if self:IsDisplayingCurrentCombat() or self.followNextCombat then
         self:ShowCurrentCombat()
     end
     self:Debug("Combat started", reason)
@@ -754,14 +745,10 @@ function RLHelper:ResetCombatState()
 
     self.currentCombat = {
         startTime = nil,
-        messages = {},
+        events = {},
         firstEnemy = nil,
         isBoss = false
     }
-    if self.journalV2Enabled then
-        self.currentCombat.messages = nil
-        self.currentCombat.events = {}
-    end
 
     if wasDisplayingCurrentCombat then
         self.displayedCombat = self.currentCombat
@@ -779,31 +766,27 @@ function RLHelper:FinishCombat(reason)
     self:SendMessage("RLHelper_CombatEnding")
 
     local combat = nil
-    local records = self.journalV2Enabled and self.currentCombat.events or self.currentCombat.messages
+    local records = self.currentCombat.events
     if self.currentCombat.startTime and #(records or {}) > 0 then
         combat = {
             startTime = self.currentCombat.startTime,
             endTime = time(),
-            messages = self.currentCombat.messages,
+            events = self.currentCombat.events,
+            id = self.currentCombat.id,
+            droppedEvents = self.currentCombat.droppedEvents,
             firstEnemy = self.currentCombat.firstEnemy,
             isBoss = self.currentCombat.isBoss
         }
-        if self.journalV2Enabled then
-            combat.id = self.currentCombat.id
-            combat.messages = nil
-            combat.events = self.currentCombat.events
-            combat.droppedEvents = self.currentCombat.droppedEvents
-        end
     end
 
     self:ResetCombatState()
 
     if combat and self:ShouldSaveCombatToHistory(combat) then
-        self:SaveCombatToProfile(combat, self.db.profile)
+        self:SaveCombatToProfile(combat)
         self:Debug("Combat Saved to history")
     end
 
-    if self.journalV2Enabled and combat and wasDisplayingCurrentCombat then
+    if combat and wasDisplayingCurrentCombat then
         self:DisplayCombat(combat)
         self.followNextCombat = true
     end
@@ -1055,40 +1038,25 @@ function RLHelper:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     self:DispatchCombatEvent(eventData)
 end
 
-local function formatLogMessageForDisplay(message)
-    if type(message) ~= "string" then
-        return message
-    end
-
-    return message:gsub(":24:24:0:0|t", ":24:24:0:-2|t")
-end
-
 function RLHelper:OnCombatLogEvent(message)
-    if self.journalV2Enabled then
-        assert(type(message) == "table" and message.kind and message.type, "V2 requires a structured event")
-        local combat = self.currentCombat
-        combat.events = combat.events or {}
-        if #combat.events >= Journal.MAX_EVENTS then
-            combat.droppedEvents = (combat.droppedEvents or 0) + 1
-            if combat.droppedEvents == 1 and self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() then
-                self.mainFrame.logText:AddMessage("|cFFFF5555Достигнут лимит истории: дальнейшие события не сохраняются|r")
-                self:RefreshJournalRows(combat)
-            end
-            return
-        end
-        local entry = Journal.Copy(message)
-        entry.seq = #combat.events + 1
-        table.insert(combat.events, entry)
-        if self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() and
-            Journal.Visible(entry, self.journalView) then
-            self.mainFrame.logText:AddMessage(self:FormatJournalEntry(entry))
+    assert(type(message) == "table" and message.kind and message.type, "Journal requires a structured event")
+    local combat = self.currentCombat
+    combat.events = combat.events or {}
+    if #combat.events >= Journal.MAX_EVENTS then
+        combat.droppedEvents = (combat.droppedEvents or 0) + 1
+        if combat.droppedEvents == 1 and self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() then
+            self.mainFrame.logText:AddMessage("|cFFFF5555Достигнут лимит истории: дальнейшие события не сохраняются|r")
             self:RefreshJournalRows(combat)
         end
         return
     end
-    table.insert(self.currentCombat.messages, message)
-    if self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() then
-        self.mainFrame.logText:AddMessage(formatLogMessageForDisplay(message))
+    local entry = Journal.Copy(message)
+    entry.seq = #combat.events + 1
+    table.insert(combat.events, entry)
+    if self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() and
+        Journal.Visible(entry, self.journalView) then
+        self.mainFrame.logText:AddMessage(self:FormatJournalEntry(entry))
+        self:RefreshJournalRows(combat)
     end
 end
 
@@ -1109,32 +1077,18 @@ function RLHelper:SetJournalView(view)
     self:DisplayCombat(self.displayedCombat or self.currentCombat)
 end
 
-function RLHelper:SaveCombatToProfile(combat, profile)
-    if self.journalV2Enabled then
-        local store = self.db.char.combatHistoryV2
-        if not combat.id then
-            combat.id = store.nextCombatId
-            store.nextCombatId = store.nextCombatId + 1
-        end
-        for _, saved in ipairs(store.combats) do
-            if saved.id == combat.id then return end
-        end
-        table.insert(store.combats, 1, Journal.Copy(combat))
-        while #store.combats > Journal.MAX_COMBATS do table.remove(store.combats) end
-        self.combatHistory = Journal.Copy(store.combats)
-        return
+function RLHelper:SaveCombatToProfile(combat)
+    local store = self.db.char.combatHistoryV2
+    if not combat.id then
+        combat.id = store.nextCombatId
+        store.nextCombatId = store.nextCombatId + 1
     end
-    table.insert(self.combatHistory, 1, combat)
-
-    while #self.combatHistory > 30 do
-        table.remove(self.combatHistory)
+    for _, saved in ipairs(store.combats) do
+        if saved.id == combat.id then return end
     end
-
-    local charDb = self.db.char
-    charDb.combatHistory = {}
-    for _, savedCombat in ipairs(self.combatHistory) do
-        table.insert(charDb.combatHistory, savedCombat)
-    end
+    table.insert(store.combats, 1, Journal.Copy(combat))
+    while #store.combats > Journal.MAX_COMBATS do table.remove(store.combats) end
+    self.combatHistory = Journal.Copy(store.combats)
 end
 
 function RLHelper:EndCombat(reason)
@@ -1538,7 +1492,7 @@ function RLHelper:DisplayCombat(combat)
     end
 
     self.mainFrame.logText:Clear()
-    if self.journalV2Enabled and combat then
+    if combat then
         for _, entry in ipairs(combat.events or {}) do
             if Journal.Visible(entry, self.journalView) then
                 self.mainFrame.logText:AddMessage(self:FormatJournalEntry(entry))
@@ -1547,13 +1501,9 @@ function RLHelper:DisplayCombat(combat)
         if combat.droppedEvents then
             self.mainFrame.logText:AddMessage("|cFFFF5555Лимит истории: пропущено событий " .. combat.droppedEvents .. "|r")
         end
-    elseif combat and combat.messages then
-        for _, message in ipairs(combat.messages) do
-            self.mainFrame.logText:AddMessage(formatLogMessageForDisplay(message))
-        end
     end
 
-    if self.journalV2Enabled then self:RefreshJournalRows(combat) end
+    self:RefreshJournalRows(combat)
     self:RefreshCombatListOverlay()
 end
 
@@ -1716,9 +1666,9 @@ function RLHelper:LayoutMainFrame()
     frame.logText:ClearAllPoints()
     frame.logText:SetPoint("TOPLEFT", frame.journalFilters or frame.buttonContainer, "BOTTOMLEFT", 0, -8)
 
-    local rightInset = self.journalV2Enabled and -2 or (UITheme.GetName(self) == "minimal" and -10 or -48)
+    local rightInset = -2
     if frame.bottomPanel then
-        frame.logText:SetPoint("BOTTOMRIGHT", frame.bottomPanel, "TOPRIGHT", self.journalV2Enabled and 0 or rightInset, 4)
+        frame.logText:SetPoint("BOTTOMRIGHT", frame.bottomPanel, "TOPRIGHT", 0, 4)
     else
         frame.logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", rightInset, 8)
     end
@@ -1938,7 +1888,7 @@ function RLHelper:CreateMainFrame()
     logText:EnableMouseWheel(true)
     logText:SetHyperlinksEnabled(false)
     logText:SetIndentedWordWrap(true)
-    logText:SetInsertMode(self.journalV2Enabled and "BOTTOM" or "TOP")
+    logText:SetInsertMode("BOTTOM")
 
     -- Mouse wheel handler
     logText:SetScript("OnMouseWheel", function(self, delta)
@@ -1954,9 +1904,9 @@ function RLHelper:CreateMainFrame()
     -- Store references
     frame.buttonContainer = buttonContainer
     frame.logText = logText
-    if self.journalV2Enabled then self:CreateJournalRows(frame) end
+    self:CreateJournalRows(frame)
 
-    if self.journalV2Enabled then
+    do
         local filters = CreateFrame("Frame", nil, frame)
         filters:SetPoint("TOPLEFT", buttonContainer, "BOTTOMLEFT", 0, -4)
         filters:SetSize(260, 22)
@@ -2227,11 +2177,7 @@ end
 
 function RLHelper:ClearCombatHistory()
     self.combatHistory = {}
-    if self.journalV2Enabled then
-        self.db.char.combatHistoryV2.combats = {}
-    else
-        self.db.char.combatHistory = {}
-    end
+    self.db.char.combatHistoryV2.combats = {}
     self:Print("История боев очищена")
 end
 
@@ -2303,10 +2249,6 @@ function RLHelper:HandleSlashCommand(input)
         print("/rlh debug - включить/выключить режим отладки")
         print("/rlh clear - очистить историю боев")
         print("/rlh demo - показать демонстрационный бой")
-        print("/rlh journal v1|v2 - выбрать историю, затем /reload между боями")
-    elseif input == "journal v1" or input == "journal v2" then
-        self.db.profile.journalV2 = input == "journal v2"
-        self:Print("Версия истории выбрана. Примените /reload между боями.")
     elseif input == "debug" then
         self.db.profile.debug = not self.db.profile.debug
         print("Режим отладки: " .. (self.db.profile.debug and "включен" or "выключен"))
@@ -2319,13 +2261,9 @@ function RLHelper:HandleSlashCommand(input)
         self:ClearCombatHistory()
     elseif input == "demo" then
         self:StartCombat("demo")
-        if self.journalV2Enabled then
-            self:ShowCurrentCombat()
-            self:SetMainFrameVisible(true)
-            self:DemoJournal()
-        else
-            self:SendMessage("RLHelper_Demo")
-        end
+        self:ShowCurrentCombat()
+        self:SetMainFrameVisible(true)
+        self:DemoJournal()
         self.combatEndRequestedAt = self:GetCombatNow()
     end
 end

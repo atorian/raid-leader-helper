@@ -1,3 +1,4 @@
+local assertRecord = require('tests.journal_assertions')
 require('tests.mocks')
 local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local DeathwhisperTracker = require("../modules/bosses/DeathwhisperTracker")
@@ -46,7 +47,7 @@ describe('DeathwhisperTracker', function()
                 timestamp = time()
             })
 
-            assert.spy(log).was_called_with("SOME DATE Леди: Щит разбит")
+            assertRecord(log, { spellId = 70842, kind = "MANA_BARRIER_REMOVED", type = "INFO" })
         end)
 
         it('logs mind controlled player on dominate mind cast', function()
@@ -58,7 +59,7 @@ describe('DeathwhisperTracker', function()
                 destName = "Jatagun"
             })
 
-            assert.spy(log).was_called_with("SOME DATE |cFFFFFFFFJatagun|r получил контроль разума")
+            assertRecord(log, { targetName = "Jatagun", spellId = 71289, kind = "MIND_CONTROL", type = "INFO" })
         end)
 
         it('logs successful cyclone during Lady Deathwhisper combat', function()
@@ -72,8 +73,7 @@ describe('DeathwhisperTracker', function()
                 destName = "Nudge"
             })
 
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFВольно|r |TInterface\\Icons\\Spell_Nature_EarthBind:24:24:0:0|t |cFFFFFFFFNudge|r")
+            assertRecord(log, { sourceName = "Вольно", targetName = "Nudge", spellId = 33786, kind = "CYCLONE_APPLIED", type = "INFO" })
         end)
 
         it('logs failed cyclone attempts during Lady Deathwhisper combat', function()
@@ -96,10 +96,8 @@ describe('DeathwhisperTracker', function()
                 missType = "RESIST"
             })
 
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFMovagorn|r |TInterface\\Icons\\Spell_Nature_EarthBind:24:24:0:0|t |cFFFFFFFFШафит|r: IMMUNE")
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFВольно|r |TInterface\\Icons\\Spell_Nature_EarthBind:24:24:0:0|t |cFFFFFFFFNudge|r: RESIST")
+            assertRecord(log, { sourceName = "Movagorn", targetName = "Шафит", spellId = 33786, missType = "IMMUNE", kind = "CYCLONE_MISSED", type = "INFO" })
+            assertRecord(log, { sourceName = "Вольно", targetName = "Nudge", spellId = 33786, missType = "RESIST", kind = "CYCLONE_MISSED", type = "INFO" })
         end)
 
         it('does not log cyclone outside Lady Deathwhisper combat', function()
@@ -156,8 +154,7 @@ describe('DeathwhisperTracker', function()
             DeathwhisperTracker:handleEvent(summonEvent)
             DeathwhisperTracker:handleEvent(swingEvent)
 
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFTestTarget|r |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t взорвал духа")
+            assertRecord(log, { targetName = "TestTarget", kind = "SPIRIT_HIT", type = "TACTIC_VIOLATION" })
         end)
 
         it('logs miss on SWING_MISSED', function()
@@ -182,7 +179,7 @@ describe('DeathwhisperTracker', function()
             DeathwhisperTracker:handleEvent(summonEvent)
             DeathwhisperTracker:handleEvent(missEvent)
 
-            assert.spy(log).was_called_with("SOME DATE Дух автоатачил |cFFFFFFFFTestTarget|r")
+            assertRecord(log, { targetName = "TestTarget", kind = "SPIRIT_MISSED", type = "INFO" })
         end)
 
         it('does not double log when swing damage is followed by vengeful blast', function()
@@ -214,8 +211,7 @@ describe('DeathwhisperTracker', function()
             DeathwhisperTracker:handleEvent(blastEvent)
 
             assert.spy(log).was_called(1)
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFTestTarget|r |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t взорвал духа")
+            assertRecord(log, { targetName = "TestTarget", kind = "SPIRIT_HIT", type = "TACTIC_VIOLATION" })
         end)
 
         it('does not add misses to spirit explosion report', function()
@@ -257,7 +253,7 @@ describe('DeathwhisperTracker', function()
 
             DeathwhisperTracker:summarizeCombat()
 
-            assert.spy(log).was.called_with("SOME DATE Духов взорвали: всего 3 Player1(2) Player2(1)")
+            assertRecord(log, { text = "Духов взорвали: всего 3 Player1(2) Player2(1)", kind = "SPIRIT_SUMMARY", type = "INFO" })
         end)
 
         it("does not log summary when there were no spirit explosions", function()
@@ -293,24 +289,4 @@ describe('DeathwhisperTracker', function()
         end)
     end)
 
-    describe("demo", function()
-        it("logs all visible Deathwhisper mechanics", function()
-            local log = spy.new(function()
-            end)
-            DeathwhisperTracker.log = log
-
-            DeathwhisperTracker:demo()
-
-            assert.spy(log).was_called_with("SOME DATE Леди: Щит разбит")
-            assert.spy(log).was_called_with("SOME DATE |cFFFFFFFFDemoPlayer|r получил контроль разума")
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFDemoDruid|r |TInterface\\Icons\\Spell_Nature_EarthBind:24:24:0:0|t |cFFFFFFFFDemoTarget|r")
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFDemoDruid|r |TInterface\\Icons\\Spell_Nature_EarthBind:24:24:0:0|t |cFFFFFFFFImmuneTarget|r: IMMUNE")
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFPlayer|r |TInterface\\Icons\\spell_shadow_deathsembrace:24:24:0:0|t взорвал духа")
-            assert.spy(log).was_called_with("SOME DATE Дух автоатачил |cFFFFFFFFLucky|r")
-            assert.spy(log).was_called_with("SOME DATE Духов взорвали: всего 2 Player(2)")
-        end)
-    end)
 end)

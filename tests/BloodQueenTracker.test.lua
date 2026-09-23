@@ -1,3 +1,4 @@
+local assertRecord = require('tests.journal_assertions')
 require('tests.mocks')
 require('../Core')
 require("../lib/blizzardEvent")
@@ -27,8 +28,7 @@ describe('BloodQueenTracker', function()
         dispatch(BloodQueenTracker, Builder:New():FromPlayer("Stikers"):ToPlayer("Райва")
             :SpellDamage(71483, "Кровавый всплеск", 6141):Build())
 
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFStikers|r |TInterface\\Icons\\Spell_Shadow_BloodBoil:24:24:0:0|t |cFFFFFFFFРайва|r")
+        assertRecord(log, { sourceName = "Stikers", targetName = "Райва", spellId = 71483, amount = 6141, kind = "BLOODBOLT_SPLASH", type = "TACTIC_VIOLATION" })
     end)
 
     it('logs all Bloodbolt Splash difficulty spell ids', function()
@@ -65,12 +65,4 @@ describe('BloodQueenTracker', function()
         assert.spy(log).was_not_called()
     end)
 
-    it('demo logs Bloodbolt Splash hit', function()
-        assert.is_function(BloodQueenTracker.demo)
-
-        BloodQueenTracker:demo()
-
-        assert.spy(log).was_called_with(
-            "SOME DATE |cFFFFFFFFDemoSource|r |TInterface\\Icons\\Spell_Shadow_BloodBoil:24:24:0:0|t |cFFFFFFFFDemoTarget|r")
-    end)
 end)

@@ -1,3 +1,4 @@
+local assertRecord = require('tests.journal_assertions')
 require('tests.mocks')
 require("../lib/blizzardEvent")
 require("../lib/CombatFilters")
@@ -27,8 +28,7 @@ describe('SpellTracker', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("TestPlayer"):ToEnemy("TestTarget")
                 :SpellDamage(12345, "Test Spell", 100):Build())
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r Первый урон по |cFFFFFFFF%s|r",
-                date("%H:%M:%S", GetTime()), "TestPlayer", "TestTarget"))
+            assertRecord(log, { sourceName = "TestPlayer", targetName = "TestTarget", kind = "FIRST_DAMAGE", type = "INFO" })
         end)
 
         it('does not log first damage to ignored combat enemy', function()
@@ -42,16 +42,14 @@ describe('SpellTracker', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("Всёпадаем"):ToEnemy("Валитрия Сноходица")
                 :SpellHeal(54968, "Символ Света небес", 6038):Build())
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r Первый хил по |cFFFFFFFF%s|r",
-                date("%H:%M:%S", GetTime()), "Всёпадаем", "Валитрия Сноходица"))
+            assertRecord(log, { sourceName = "Всёпадаем", targetName = "Валитрия Сноходица", kind = "FIRST_HEAL", type = "INFO" })
         end)
 
         it('logs first periodic heal to Valithria', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("Bultuzor"):ToEnemy("Валитрия Сноходица")
                 :PeriodicHeal(61301, "Быстрина", 1674):Build())
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r Первый хил по |cFFFFFFFF%s|r",
-                date("%H:%M:%S", GetTime()), "Bultuzor", "Валитрия Сноходица"))
+            assertRecord(log, { sourceName = "Bultuzor", targetName = "Валитрия Сноходица", kind = "FIRST_HEAL", type = "INFO" })
         end)
 
         it('ignores zero amount Valithria heals', function()
@@ -74,42 +72,35 @@ describe('SpellTracker', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("TestWarrior"):ToEnemy("TestTarget")
                 :ApplyAura(355, "Taunt"):Build())
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "TestWarrior", "Interface\\Icons\\spell_nature_reincarnation", "TestTarget"))
+            assertRecord(log, { spellId = 355, sourceName = "TestWarrior", targetName = "TestTarget", kind = "TAUNT", type = "INFO" })
         end)
 
         it('logs death grip spell cast', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("TestDK"):ToEnemy("TestTarget"):ApplyAura(
                 49560, "Death Grip"):Build())
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "TestDK", "Interface\\Icons\\Spell_DeathKnight_Strangulate", "TestTarget"))
+            assertRecord(log, { spellId = 49560, sourceName = "TestDK", targetName = "TestTarget", kind = "TAUNT", type = "INFO" })
         end)
 
         it('logs Корона', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("TestPaladin"):ToEnemy("TestTarget")
                 :ApplyAura(10278, "Seal of Protection"):Build())
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "TestPaladin", "Interface\\Icons\\Spell_Holy_SealOfProtection",
-                "TestTarget"))
+            assertRecord(log, { spellId = 10278, sourceName = "TestPaladin", targetName = "TestTarget", kind = "SPELL_USE", type = "INFO" })
         end)
 
         it('logs Divine Intervention on spell cast success', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("TestPaladin"):ToPlayer("TargetPlayer")
                 :CastSuccess(19752, "Божественное вмешательство"):Build())
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "TestPaladin", "Interface\\Icons\\Spell_Nature_TimeStop",
-                "TargetPlayer"))
+            assertRecord(log, { spellId = 19752, sourceName = "TestPaladin", targetName = "TargetPlayer", kind = "SPELL_USE", type = "INFO" })
         end)
 
         it('logs Righteous Defense on spell cast success', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("Julian"):ToPlayer("Soxen")
                 :CastSuccess(31789, "Праведная защита"):Build())
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "Julian", "Interface\\Icons\\inv_shoulder_37", "Soxen"))
+            assertRecord(log, { spellId = 31789, sourceName = "Julian", targetName = "Soxen", kind = "TAUNT", type = "INFO" })
         end)
 
         it('logs Aura Mastery on spell cast success without target', function()
@@ -117,8 +108,7 @@ describe('SpellTracker', function()
                 "0x0000000000000001", "Palanessa", 0x512, "0x0000000000000000", nil, 0x80000000,
                 31821, "Мастер аур", 0x1)
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t",
-                date("%H:%M:%S", GetTime()), "Palanessa", "Interface\\Icons\\Spell_Holy_AuraMastery"))
+            assertRecord(log, { spellId = 31821, sourceName = "Palanessa", kind = "SPELL_USE", type = "INFO" })
         end)
 
         it('logs Aura Mastery only on spell cast success', function()
@@ -130,8 +120,7 @@ describe('SpellTracker', function()
                 31821, "Мастер аур", 0x1, "BUFF")
 
             assert.spy(log).was_called(1)
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t",
-                date("%H:%M:%S", GetTime()), "Palanessa", "Interface\\Icons\\Spell_Holy_AuraMastery"))
+            assertRecord(log, { spellId = 31821, sourceName = "Palanessa", kind = "SPELL_USE", type = "INFO" })
         end)
 
         it('logs Hand of Freedom on spell cast success with target', function()
@@ -139,9 +128,7 @@ describe('SpellTracker', function()
                 "0x0000000000000001", "Tilasha", 0x511, "0x000000000016742E", "Sensei", 0x4000514,
                 1044, "Длань свободы", 0x2)
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "Tilasha", "Interface\\Icons\\Spell_Holy_SealOfValor",
-                "Sensei"))
+            assertRecord(log, { spellId = 1044, sourceName = "Tilasha", targetName = "Sensei", kind = "SPELL_USE", type = "INFO" })
         end)
 
         it('logs Hand of Freedom only on spell cast success', function()
@@ -153,9 +140,7 @@ describe('SpellTracker', function()
                 1044, "Длань свободы", 0x2, "BUFF")
 
             assert.spy(log).was_called(1)
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "Tilasha", "Interface\\Icons\\Spell_Holy_SealOfValor",
-                "Sensei"))
+            assertRecord(log, { spellId = 1044, sourceName = "Tilasha", targetName = "Sensei", kind = "SPELL_USE", type = "INFO" })
         end)
 
         it('does not log Holy Wrath on spell cast success', function()
@@ -181,9 +166,7 @@ describe('SpellTracker', function()
                 48817, "Гнев небес", 0x2, 4166, 0, 2, 0, 0, 0, nil, nil, nil)
 
             assert.spy(log).was_called(1)
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "Tilasha", "Interface\\Icons\\Spell_Holy_Excorcism",
-                "Нерубский землеглот"))
+            assertRecord(log, { spellId = 48817, sourceName = "Tilasha", targetName = "Нерубский землеглот", kind = "SPELL_USE", type = "INFO" })
         end)
 
         it('does not log Holy Wrath aura applications', function()
@@ -229,18 +212,14 @@ describe('SpellTracker', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("Всёпадаем"):ToPlayer("Брюсуиллис")
                 :ApplyAura(6940, "Длань жертвенности"):Build())
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "Всёпадаем", "Interface\\Icons\\Spell_Holy_SealOfSacrifice",
-                "Брюсуиллис"))
+            assertRecord(log, { spellId = 6940, sourceName = "Всёпадаем", targetName = "Брюсуиллис", kind = "SPELL_USE", type = "INFO" })
         end)
 
         it('logs Death Knight Hysteria target on aura applied', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("Дк"):ToPlayer("Рога")
                 :ApplyAura(49016, "Истерия", "BUFF"):Build())
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "Дк", "Interface\\Icons\\Spell_DeathKnight_BladedArmor",
-                "Рога"))
+            assertRecord(log, { spellId = 49016, sourceName = "Дк", targetName = "Рога", kind = "SPELL_USE", type = "INFO" })
         end)
 
         it('ignores non-tracked spells', function()
@@ -254,18 +233,14 @@ describe('SpellTracker', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("Вольнож"):ToPlayer("Valgallaa")
                 :Dispel(988, "Рассеивание заклинаний", 74792, "Пожирание души", 32, "BUFF"):Build())
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "Вольнож", "Interface\\Icons\\Spell_Holy_DispelMagic",
-                "Valgallaa"))
+            assertRecord(log, { spellId = 988, sourceName = "Вольнож", targetName = "Valgallaa", kind = "DISPEL", type = "INFO" })
         end)
 
         it('logs successful Remove Curse dispel', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("Волыно"):ToPlayer("Биполярник")
                 :Dispel(2782, "Снятие проклятия", 74795, "Метка пожирания", 32, "BUFF"):Build())
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "Волыно", "Interface\\Icons\\Spell_Nature_RemoveCurse",
-                "Биполярник"))
+            assertRecord(log, { spellId = 2782, sourceName = "Волыно", targetName = "Биполярник", kind = "DISPEL", type = "INFO" })
         end)
 
         it('ignores non-whitelisted dispels', function()
@@ -295,18 +270,14 @@ describe('SpellTracker', function()
             SpellTracker:UNIT_TARGET("UNIT_TARGET", "target")
 
             assert.spy(log).was_called(1)
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "TestPaladin", "Interface\\Icons\\Spell_Holy_UnyieldingFaith",
-                "TestTarget"))
+            assertRecord(log, { spellId = 62124, sourceName = "TestPaladin", targetName = "TestTarget", kind = "TAUNT", type = "INFO" })
         end)
 
         it('logs druid battle resurrection on spell resurrect', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("TestDruid"):ToPlayer("DeadPlayer")
                 :Resurrect(48477, "Rebirth"):Build())
 
-            assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s",
-                date("%H:%M:%S", GetTime()), "TestDruid", "Interface\\Icons\\spell_nature_reincarnation",
-                "DeadPlayer"))
+            assertRecord(log, { spellId = 48477, sourceName = "TestDruid", targetName = "DeadPlayer", kind = "RESURRECT", type = "INFO" })
         end)
 
         it('clears pending hand of reckoning on the next paladin spell', function()
@@ -329,37 +300,4 @@ describe('SpellTracker', function()
         end)
     end)
 
-    describe('demo', function()
-        local log
-
-        before_each(function()
-            log = spy.new(function()
-            end)
-            SpellTracker.log = log
-            SpellTracker:reset()
-        end)
-
-        it('logs representative spell tracker features', function()
-            SpellTracker:demo()
-
-            assert.spy(log).was_called_with("SOME DATE |cFFFFFFFFCrazyDkPet|r Первый урон по |cFFFFFFFFHalion|r")
-            assert.spy(log).was_called_with("SOME DATE |cFFFFFFFFHealer|r Первый хил по |cFFFFFFFFВалитрия Сноходица|r")
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFNotTank|r |TInterface\\Icons\\Spell_DeathKnight_Strangulate:24:24:0:0|t Halion")
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFPaladin|r |TInterface\\Icons\\Spell_Holy_SealOfValor:24:24:0:0|t OtherPlayer")
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFPaladin|r |TInterface\\Icons\\Spell_Holy_SealOfSacrifice:24:24:0:0|t OtherPlayer")
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFDeathKnight|r |TInterface\\Icons\\Spell_DeathKnight_BladedArmor:24:24:0:0|t OtherPlayer")
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFPaladin|r |TInterface\\Icons\\Spell_Holy_AuraMastery:24:24:0:0|t")
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFPaladin|r |TInterface\\Icons\\Spell_Holy_Excorcism:24:24:0:0|t Нерубский землеглот")
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFDruid|r |TInterface\\Icons\\spell_nature_reincarnation:24:24:0:0|t DeadPlayer")
-            assert.spy(log).was_called_with(
-                "SOME DATE |cFFFFFFFFPriest|r |TInterface\\Icons\\Spell_Holy_DispelMagic:24:24:0:0|t OtherPlayer")
-        end)
-    end)
 end)

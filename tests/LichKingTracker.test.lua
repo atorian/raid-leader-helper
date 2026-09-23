@@ -1,3 +1,4 @@
+local assertRecord = require('tests.journal_assertions')
 require('tests.mocks')
 require('../Core')
 require('../lib/blizzardEvent')
@@ -30,8 +31,7 @@ describe('LichKingTracker', function()
             :SpellDamage(73529, 'Теневая ловушка', 13594):Build())
 
         assert.spy(log).was_called(1)
-        assert.spy(log).was_called_with(
-            'SOME DATE |cFFFFFFFFJatagun|r |TInterface\\Icons\\spell_shadow_gathershadows:24:24:0:0|t взорвал ловушку')
+        assertRecord(log, { targetName = "Jatagun", spellId = 73529, kind = "SHADOW_TRAP", type = "TACTIC_VIOLATION" })
     end)
 
     it('ignores later Shadow Trap damage at the same timestamp', function()
@@ -41,8 +41,7 @@ describe('LichKingTracker', function()
             :SpellDamage(73529, 'Теневая ловушка', 17211):Build())
 
         assert.spy(log).was_called(1)
-        assert.spy(log).was_called_with(
-            'SOME DATE |cFFFFFFFFJatagun|r |TInterface\\Icons\\spell_shadow_gathershadows:24:24:0:0|t взорвал ловушку')
+        assertRecord(log, { targetName = "Jatagun", spellId = 73529, kind = "SHADOW_TRAP", type = "TACTIC_VIOLATION" })
     end)
 
     it('logs another Shadow Trap explosion at a different timestamp', function()
@@ -52,10 +51,8 @@ describe('LichKingTracker', function()
             :SpellDamage(73529, 'Теневая ловушка', 17211):Build())
 
         assert.spy(log).was_called(2)
-        assert.spy(log).was_called_with(
-            'SOME DATE |cFFFFFFFFJatagun|r |TInterface\\Icons\\spell_shadow_gathershadows:24:24:0:0|t взорвал ловушку')
-        assert.spy(log).was_called_with(
-            'SOME DATE |cFFFFFFFFRagnboe|r |TInterface\\Icons\\spell_shadow_gathershadows:24:24:0:0|t взорвал ловушку')
+        assertRecord(log, { targetName = "Jatagun", spellId = 73529, kind = "SHADOW_TRAP", type = "TACTIC_VIOLATION" })
+        assertRecord(log, { targetName = "Ragnboe", spellId = 73529, kind = "SHADOW_TRAP", type = "TACTIC_VIOLATION" })
     end)
 
     it('ignores Shadow Trap damage to non-players', function()
@@ -77,7 +74,7 @@ describe('LichKingTracker', function()
             :CastSuccess(69200, 'Гневный дух'):Build())
 
         assert.spy(log).was_called(1)
-        assert.spy(log).was_called_with('SOME DATE Гневный дух: Руперт')
+        assertRecord(log, { targetName = "Руперт", spellId = 69200, kind = "RAGING_SPIRIT", type = "INFO" })
     end)
 
     it('ignores Raging Spirit named casts with another spell id', function()
@@ -97,14 +94,7 @@ describe('LichKingTracker', function()
             :SpellDamage(73529, 'Теневая ловушка', 17211):Build())
 
         assert.spy(log).was_called(2)
-        assert.spy(log).was_called_with(
-            'SOME DATE |cFFFFFFFFRagnboe|r |TInterface\\Icons\\spell_shadow_gathershadows:24:24:0:0|t взорвал ловушку')
+        assertRecord(log, { targetName = "Ragnboe", spellId = 73529, kind = "SHADOW_TRAP", type = "TACTIC_VIOLATION" })
     end)
 
-    it('logs representative Shadow Trap message in demo', function()
-        LichKingTracker:demo()
-
-        assert.spy(log).was_called_with(
-            'SOME DATE |cFFFFFFFFDemoPlayer|r |TInterface\\Icons\\spell_shadow_gathershadows:24:24:0:0|t взорвал ловушку')
-    end)
 end)

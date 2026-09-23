@@ -1,3 +1,4 @@
+local assertRecord = require('tests.journal_assertions')
 require('tests.mocks')
 require('../Core')
 require("../lib/blizzardEvent")
@@ -69,10 +70,7 @@ describe('HalionTracker', function()
 
         dispatch(HalionTracker, Builder:New():ToPlayer("Игрок1"):Death():Build())
 
-        assert.spy(log).was_called_with(string.format(
-            "%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t от метеорита |T%s:24:24:0:0|t",
-            date("%H:%M:%S", deathTimestamp), "Игрок1", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8",
-            "Interface\\Icons\\spell_fire_meteorstorm"))
+        assertRecord(log, { targetName = "Игрок1", spellId = 75879, kind = "MECHANIC_DEATH", type = "TACTIC_VIOLATION" })
     end)
 
     it('logs player death with last damage from blades', function()
@@ -81,10 +79,7 @@ describe('HalionTracker', function()
 
         dispatch(HalionTracker, Builder:New():ToPlayer("Игрок1"):Death():Build())
 
-        assert.spy(log).was_called_with(string.format(
-            "%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t в лезвиях |T%s:24:24:0:0|t", date("%H:%M:%S", deathTimestamp),
-            "Игрок1", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8",
-            "Interface\\Icons\\Spell_Shadow_ShadowMend"))
+        assertRecord(log, { targetName = "Игрок1", spellId = 77844, kind = "MECHANIC_DEATH", type = "TACTIC_VIOLATION" })
     end)
 
     it('checks up to the last 10 damage events on player death', function()
@@ -98,10 +93,7 @@ describe('HalionTracker', function()
 
         dispatch(HalionTracker, Builder:New():ToPlayer("Игрок1"):Death():Build())
 
-        assert.spy(log).was_called_with(string.format(
-            "%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t от метеорита |T%s:24:24:0:0|t",
-            date("%H:%M:%S", deathTimestamp), "Игрок1", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8",
-            "Interface\\Icons\\spell_fire_meteorstorm"))
+        assertRecord(log, { targetName = "Игрок1", spellId = 75879, kind = "MECHANIC_DEATH", type = "TACTIC_VIOLATION" })
     end)
 
     it('drops damage events older than the last 10', function()
@@ -132,8 +124,7 @@ describe('HalionTracker', function()
             :SpellDamage(75483, "Пелена Тени", 1000):Build())
 
         assert.spy(log).was_called(1)
-        assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r зашел во тьму первый",
-            date("%H:%M:%S", GetTime()), "Игрок1"))
+        assertRecord(log, { targetName = "Игрок1", spellId = 75483, kind = "FIRST_TWILIGHT_ENTRY", type = "INFO" })
     end)
 
     it('logs first Shadow Trap SPELL_MISSED', function()
@@ -144,8 +135,7 @@ describe('HalionTracker', function()
             :SpellMissed(75483, "Пелена Тени", "MISS"):Build())
 
         assert.spy(log).was_called(1)
-        assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r зашел во тьму первый",
-            date("%H:%M:%S", GetTime()), "Игрок1"))
+        assertRecord(log, { targetName = "Игрок1", spellId = 75483, kind = "FIRST_TWILIGHT_ENTRY", type = "INFO" })
     end)
 
     it('logs first Shadow Trap DAMAGE_SHIELD_MISSED', function()
@@ -156,8 +146,7 @@ describe('HalionTracker', function()
             :DamageShieldMissed(75483, "Пелена Тени", "MISS"):Build())
 
         assert.spy(log).was_called(1)
-        assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r зашел во тьму первый",
-            date("%H:%M:%S", GetTime()), "Игрок1"))
+        assertRecord(log, { targetName = "Игрок1", spellId = 75483, kind = "FIRST_TWILIGHT_ENTRY", type = "INFO" })
     end)
 
     it('resets damage meters on first heroism aura applied', function()
@@ -230,12 +219,8 @@ describe('HalionTracker', function()
             :SpellDamage(75879, "Метеорит", 1000):Build())
         dispatch(HalionTracker, Builder:New():ToPlayer("Игрок1"):Death():Build())
 
-        assert.spy(log).was_called_with(string.format("%s |cFFFFFFFF%s|r зашел во тьму первый",
-            date("%H:%M:%S", GetTime()), "Игрок1"))
-        assert.spy(log).was_called_with(string.format(
-            "%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t от метеорита |T%s:24:24:0:0|t",
-            date("%H:%M:%S", deathTimestamp), "Игрок1", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8",
-            "Interface\\Icons\\spell_fire_meteorstorm"))
+        assertRecord(log, { targetName = "Игрок1", spellId = 75483, kind = "FIRST_TWILIGHT_ENTRY", type = "INFO" })
+        assertRecord(log, { targetName = "Игрок1", spellId = 75879, kind = "MECHANIC_DEATH", type = "TACTIC_VIOLATION" })
     end)
 
     it('resets damage meters only once per fight', function()
@@ -473,8 +458,7 @@ describe('HalionTracker', function()
             :SpellDamage(67890, "Второй удар", 888):Build() }, nil, npcGuid(39863))
 
         assert.spy(log).was_called(1)
-        assert.spy(log).was_called_with(string.format(
-            "%s |cFFFFFFFF%s|r первый ударил Халиона в свету", date("%H:%M:%S", GetTime()), "Игрок1"))
+        assertRecord(log, { sourceName = "Игрок1", spellId = 12345, kind = "FIRST_LIGHT_DAMAGE", type = "INFO" })
     end)
 
     it('stops tracking first light Halion damage when light Halion reaches full physical materiality', function()
@@ -499,8 +483,7 @@ describe('HalionTracker', function()
             :SpellDamage(12345, "Праведная месть", 777):Build() }, nil, npcGuid(39863))
 
         assert.spy(log).was_called(1)
-        assert.spy(log).was_called_with(string.format(
-            "%s окно первого урона по Халиону в свету закрыто: %s", date("%H:%M:%S", GetTime()), "Героизм"))
+        assertRecord(log, { spellId = 32182, kind = "LIGHT_DAMAGE_WINDOW_CLOSED", type = "INFO" })
     end)
 
     describe('phase two entry countdown', function()

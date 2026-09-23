@@ -69,7 +69,7 @@ describe('Structured journal', function()
         addon:StopCombatTicker()
         addon.inCombat = false
         addon.currentInstanceId = 631
-        addon.db = { profile = { journalV2 = true }, char = { combatHistory = { { messages = { 'old' } } } } }
+        addon.db = { profile = {}, char = { combatHistory = { { messages = { 'old' } } } } }
         addon:InitializeJournal()
         lines = {}
         addon.mainFrame = { logText = {
@@ -97,16 +97,41 @@ describe('Structured journal', function()
         _G.CreateFrame, _G.GameTooltip = oldFrame, oldTooltip
         _G.GetSpellInfo = oldSpellInfo
         addon.IterateModules, addon.SendMessage = oldIterate, oldSend
-        addon.journalV2Enabled = false
         addon:StopCombatTicker()
         mocks.raidSize = 0
     end)
 
     it('starts V2 empty without reading or converting legacy records', function()
         assert.are.equal(0, #addon.combatHistory)
-        assert.are.same({ { messages = { 'old' } } }, addon.db.char.combatHistory)
+        assert.is_nil(addon.db.char.combatHistory)
         assert.is_nil(addon.currentCombat.messages)
         assert.are.equal(2, addon.db.char.combatHistoryV2.schemaVersion)
+    end)
+
+    it('always uses structured records and removes obsolete history across characters without losing V2 or settings', function()
+        local store = { schemaVersion = 2, nextCombatId = 2, combats = {
+            { id = 1, events = { Journal.Create('FIRST_DAMAGE', event('SWING_DAMAGE')) } }
+        } }
+        local current = { combatHistory = { { messages = { 'old' } } }, combatHistoryV2 = Journal.Copy(store) }
+        local other = { combatHistory = { { messages = { 'other old' } } },
+            combatHistoryV2 = Journal.Copy(store), unrelatedSetting = 42 }
+        addon.db = { profile = { journalV2 = false }, char = current,
+            sv = { char = { current = current, other = other }, profiles = { other = { journalV2 = false } } } }
+        for _ = 1, 2 do
+            addon:InitializeJournal()
+            assert.is_nil(addon.db.profile.journalV2)
+            assert.is_nil(current.combatHistory)
+            assert.is_nil(other.combatHistory)
+            assert.is_nil(addon.db.sv.profiles.other.journalV2)
+            assert.are.same(store, current.combatHistoryV2)
+            assert.are.same(store, other.combatHistoryV2)
+            assert.are.same(store.combats, addon.combatHistory)
+            assert.are.equal(42, other.unrelatedSetting)
+        end
+        local saved = assert(loadstring('return ' .. serialize(addon.db.sv)))()
+        assert.is_nil(saved.char.current.combatHistory)
+        assert.is_nil(saved.char.other.combatHistory)
+        assert.are.same(store, saved.char.other.combatHistoryV2)
     end)
 
     it('preserves timestamp, actors, classes and both spells through save/reload', function()
@@ -131,29 +156,9 @@ describe('Structured journal', function()
         _G.UnitClass = nil
         addon:InitializeJournal()
         assert.are.same(expected, addon.combatHistory[1])
-        assert.are.equal('old', addon.db.char.combatHistory[1].messages[1])
+        assert.is_nil(addon.db.char.combatHistory)
     end)
 
-    it('switches only on reload and V1 writes do not change V2', function()
-        addon.currentCombat.startTime = 1000
-        addon:OnCombatLogEvent(Journal.Create('FIRST_DAMAGE', event('SWING_DAMAGE')))
-        addon:HandleSlashCommand('journal v1')
-        assert.is_true(addon.journalV2Enabled)
-        addon:FinishCombat('test')
-        local v2 = Journal.Copy(addon.db.char.combatHistoryV2)
-        addon:InitializeJournal()
-        assert.is_false(addon.journalV2Enabled)
-        assert.are.equal('old', addon.combatHistory[1].messages[1])
-        addon:ResetCombatState()
-        addon:OnCombatLogEvent('new legacy')
-        addon.currentCombat.startTime = 1001
-        addon:FinishCombat('test')
-        assert.are.same(v2, addon.db.char.combatHistoryV2)
-        assert.are.equal('new legacy', addon.db.char.combatHistory[1].messages[1])
-        addon:HandleSlashCommand('journal v2')
-        addon:InitializeJournal()
-        assert.are.same(v2.combats, addon.combatHistory)
-    end)
 
     it('does not duplicate a saved combat, shares no mutable record references and retains 30 fights', function()
         for i = 1, 31 do
@@ -175,7 +180,7 @@ describe('Structured journal', function()
         addon:ClearCombatHistory()
         assert.are.equal(0, #addon.db.char.combatHistoryV2.combats)
         assert.are.equal(2, addon.db.char.combatHistoryV2.nextCombatId)
-        assert.are.equal('old', addon.db.char.combatHistory[1].messages[1])
+        assert.is_nil(addon.db.char.combatHistory)
     end)
 
     it('records distinct events at the same timestamp in insertion order', function()
@@ -314,7 +319,7 @@ describe('Structured journal', function()
         assert.is_truthy(entries[2].text:find('Player(2)', 1, true))
     end)
 
-    it('renders first damage and healing like V1 without using their spell icons', function()
+    it('renders first damage and healing with the established filters without using their spell icons', function()
         _G.GetSpellInfo = function() return 'Spell', nil, 'SpellTexture' end
         spells:handleEvent(event('SPELL_DAMAGE', 53209, 'Hunter', 'Boss', 1001, 100))
         spells:handleEvent(event('SPELL_HEAL', 48782, 'Healer', 'Валитрия Сноходица', 1002, 200))
@@ -374,7 +379,7 @@ describe('Structured journal', function()
             '|r |cFFC79C6EDps|r |TDistractingShotTexture:24:24:0:-2|t |cFFFF0000boss|r', lines[1])
     end)
 
-    it('filters hunter damage like V1 while retaining all damage in totals and saved target details', function()
+    it('filters hunter damage with the established filters while retaining all damage in totals and saved target details', function()
         addon.inCombat = true
         addon.currentCombat.startTime = 1000
         addon:SetJournalView('MISDIRECTION')

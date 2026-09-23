@@ -14,7 +14,6 @@ local POWERFUL_VORTEX_SPELLS = {
     [72816] = true,
     [72817] = true,
 }
-local vortexIcon = "Interface\\Icons\\Spell_Shadow_Teleport"
 
 local HEALER_CLASSES = {
     PRIEST = true,
@@ -28,7 +27,6 @@ function BloodPrincesTracker:OnInitialize()
     self.log = function(...)
         RLHelper:OnCombatLogEvent(...)
     end
-    self:RegisterMessage("RLHelper_Demo", "demo")
 end
 
 function BloodPrincesTracker:OnEnable()
@@ -51,11 +49,6 @@ local function isGroupFiveHealer(playerName)
     return false
 end
 
-local function formatVortexHealerHit(ts, sourceName, destName)
-    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t |cFFFFFFFF%s|r",
-        date("%H:%M:%S", ts), sourceName, vortexIcon, destName)
-end
-
 function BloodPrincesTracker:handleEvent(event)
     if (event.event ~= "SPELL_DAMAGE" and event.event ~= "SPELL_MISSED") or not POWERFUL_VORTEX_SPELLS[event.spellId] then
         return
@@ -65,13 +58,8 @@ function BloodPrincesTracker:handleEvent(event)
         return
     end
 
-    RLHelperJournal.Log(RLHelper, self.log, event.event == "SPELL_MISSED" and "VORTEX_MISSED" or "VORTEX_HIT", event,
-        formatVortexHealerHit(event.timestamp, event.sourceName or "Unknown", event.destName),
+    RLHelperJournal.Log(self.log, event.event == "SPELL_MISSED" and "VORTEX_MISSED" or "VORTEX_HIT", event,
         event.event == "SPELL_DAMAGE" and "TACTIC_VIOLATION" or "INFO")
-end
-
-function BloodPrincesTracker:demo()
-    self.log(formatVortexHealerHit(time(), "DemoSource", "DemoHealer"))
 end
 
 return BloodPrincesTracker

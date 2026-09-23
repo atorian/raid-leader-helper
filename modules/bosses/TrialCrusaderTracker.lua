@@ -37,7 +37,6 @@ local ICEHOWL_TRAMPLE = 66734
 local FACTION_CHAMPION_AUTOMARK_SECONDS = 180
 local FACTION_CHAMPION_AUTOMARK_INTERVAL = 0.2
 local FACTION_CHAMPION_AUTOMARK_UNITS = { "target", "mouseover" }
-local trampleIcon = "Interface\\Icons\\Ability_Druid_DemoralizingRoar"
 
 local RAID_MARKERS = {
     STAR = 1,
@@ -108,7 +107,6 @@ function TrialCrusaderTracker:OnInitialize()
     end
     self:reset()
     self:RegisterMessage("RLHelper_CombatEnded", "reset")
-    self:RegisterMessage("RLHelper_Demo", "demo")
     self:RegisterEvent("CHAT_MSG_MONSTER_YELL")
     self:RegisterEvent("CHAT_MSG_RAID_BOSS_EMOTE")
 end
@@ -123,11 +121,6 @@ function TrialCrusaderTracker:reset()
     self.markedRoles = {}
     self.diamondRole = nil
     self.allChampionMarksDone = false
-end
-
-local function formatIcehowlTrample(ts, playerName)
-    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t размазало об стену", date("%H:%M:%S", ts), playerName,
-        trampleIcon)
 end
 
 local function formatBossMessageDebug(eventName, message, sender)
@@ -381,14 +374,9 @@ function TrialCrusaderTracker:CHAT_MSG_RAID_BOSS_EMOTE(eventName, message, sende
     return self:handleBossMessage(eventName, message, sender, false)
 end
 
-function TrialCrusaderTracker:demo()
-    self.log(formatIcehowlTrample(time(), "DemoPlayer"))
-end
-
 function TrialCrusaderTracker:handleEvent(event)
     if event.event == "SPELL_DAMAGE" and event.spellId == ICEHOWL_TRAMPLE and event.destName then
-        RLHelperJournal.Log(RLHelper, self.log, "TRAMPLE_HIT", event,
-            formatIcehowlTrample(event.timestamp, event.destName), "TACTIC_VIOLATION")
+        RLHelperJournal.Log(self.log, "TRAMPLE_HIT", event, "TACTIC_VIOLATION")
     end
 
     if self:AreChampionMarksDone() then

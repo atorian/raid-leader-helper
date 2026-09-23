@@ -1,3 +1,4 @@
+local function record(text) return RLHelperJournal.Create('TEST', { timestamp = 1000 }, 'INFO', { text = text }) end
 local M = require('tests.mocks')
 require('../lib/blizzardEvent')
 require('../lib/CombatFilters')
@@ -44,10 +45,12 @@ describe("Боевая система", function()
         RLHelper.combatEndRequiresRegen = false
         RLHelper.currentCombat = {
             startTime = nil,
-            messages = {},
+            events = {},
             firstEnemy = nil,
             isBoss = false
         }
+        RLHelper.journalView = "ALL"
+        RLHelper.followNextCombat = false
         RLHelper.displayedCombat = RLHelper.currentCombat
         RLHelper.combatHistory = {}
         RLHelper.DisplayCombat = function()
@@ -73,7 +76,7 @@ describe("Боевая система", function()
                 bossOnlyHistory = false
             },
             char = {
-                combatHistory = {}
+                combatHistoryV2 = { schemaVersion = 2, nextCombatId = 1, combats = {} }
             }
         }
 
@@ -109,23 +112,18 @@ describe("Боевая система", function()
     end)
 
     it("позволяет добавить сообщение до начала боя", function()
-        RLHelper:OnCombatLogEvent("test message")
+        RLHelper:OnCombatLogEvent(record("test message"))
 
         assert.is_false(RLHelper.inCombat)
         assert.is_nil(RLHelper.currentCombat.startTime)
-        assert.are.same({ "test message" }, RLHelper.currentCombat.messages)
+        assert.are.equal("test message", RLHelper.currentCombat.events[1].text)
     end)
 
-    it("shows 24px icons with vertical offset without changing stored combat messages", function()
-        RLHelper.inCombat = true
-        local message = "16:21:44 DemoPlayer |TInterface\\Icons\\Ability_Druid_DemoralizingRoar:24:24:0:0|t размазало"
-
-        RLHelper:OnCombatLogEvent(message)
-
-        assert.are.same({ message }, RLHelper.currentCombat.messages)
-        assert.are.same({
-            "16:21:44 DemoPlayer |TInterface\\Icons\\Ability_Druid_DemoralizingRoar:24:24:0:-2|t размазало"
-        }, displayedMessages)
+    it("renders structured records without changing their stored text", function()
+        local entry = record("Tracked mechanic")
+        RLHelper:OnCombatLogEvent(entry)
+        assert.are.equal("Tracked mechanic", RLHelper.currentCombat.events[1].text)
+        assert.are.same({ RLHelperJournal.Format(entry) }, displayedMessages)
     end)
 
     it("переименовывает бой в имя босса по известному npc id без boss1", function()
@@ -309,8 +307,11 @@ describe("Боевая система", function()
         end)
 
         assert.is_false(RLHelper.inCombat)
-        assert.are.same({ string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", GetTime()),
-            "Дк", "Interface\\Icons\\Spell_DeathKnight_BladedArmor", "Рога") }, RLHelper.currentCombat.messages)
+        local entry = RLHelper.currentCombat.events[1]
+        assert.are.equal('SPELL_USE', entry.kind)
+        assert.are.equal(49016, entry.spellId)
+        assert.are.equal('Дк', entry.source.name)
+        assert.are.equal('Рога', entry.target.name)
     end)
 
     it("logs the first Twilight Shroud target through the Core dispatcher", function()
@@ -326,10 +327,10 @@ describe("Боевая система", function()
                 :SpellDamage(75483, "Пелена Тени", 1000):Build())
         end)
 
-        local message = string.format("%s |cFFFFFFFF%s|r зашел во тьму первый",
-            date("%H:%M:%S", GetTime()), "Игрок1")
-        assert.are.same({ message }, RLHelper.currentCombat.messages)
-        assert.are.same({ message }, displayedMessages)
+        local entry = RLHelper.currentCombat.events[1]
+        assert.are.equal('FIRST_TWILIGHT_ENTRY', entry.kind)
+        assert.are.equal('Игрок1', entry.target.name)
+        assert.are.same({ RLHelperJournal.Format(entry) }, displayedMessages)
     end)
 
     it("не завершает бой сразу по PLAYER_REGEN_ENABLED", function()
@@ -342,7 +343,7 @@ describe("Боевая система", function()
     it("завершает бой по PLAYER_REGEN_ENABLED если живых врагов нет", function()
         RLHelper:PLAYER_REGEN_DISABLED()
         RLHelper.currentCombat.firstEnemy = "Враг1"
-        RLHelper:OnCombatLogEvent("test message")
+        RLHelper:OnCombatLogEvent(record("test message"))
 
         M.UnitAffectingCombat1 = false
         RLHelper:PLAYER_REGEN_ENABLED()
@@ -360,7 +361,7 @@ describe("Боевая система", function()
         end
 
         RLHelper:PLAYER_REGEN_DISABLED()
-        RLHelper.currentCombat.messages = { "player buff" }
+        RLHelper.currentCombat.events = { record("player buff") }
 
         M.UnitAffectingCombat1 = false
         RLHelper:PLAYER_REGEN_ENABLED()
@@ -372,7 +373,7 @@ describe("Боевая система", function()
 
     it("не завершает бой по PLAYER_REGEN_ENABLED если группа еще в бою", function()
         RLHelper:PLAYER_REGEN_DISABLED()
-        RLHelper:OnCombatLogEvent("test message")
+        RLHelper:OnCombatLogEvent(record("test message"))
 
         M.partySize = 1
         M.UnitAffectingCombat1 = false
@@ -385,7 +386,7 @@ describe("Боевая система", function()
 
     it("не завершает бой пока группа еще в бою", function()
         RLHelper:PLAYER_REGEN_DISABLED()
-        RLHelper:OnCombatLogEvent("test message")
+        RLHelper:OnCombatLogEvent(record("test message"))
 
         M.partySize = 1
         M.UnitAffectingCombat1 = false
@@ -400,7 +401,7 @@ describe("Боевая система", function()
 
     it("завершает бой после тихого периода вне боя", function()
         RLHelper:PLAYER_REGEN_DISABLED()
-        RLHelper:OnCombatLogEvent("test message")
+        RLHelper:OnCombatLogEvent(record("test message"))
 
         M.UnitAffectingCombat1 = false
         RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
@@ -453,7 +454,7 @@ describe("Боевая система", function()
         M.UnitAffectingCombat1 = false
 
         RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Саурфанг"):ToPlayer("Игрок1"):Damage(100):Build())
-        RLHelper:OnCombatLogEvent("test message")
+        RLHelper:OnCombatLogEvent(record("test message"))
         RLHelper.combatEndRequestedAt = RLHelper:GetCombatNow() - 5
         RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 5
 
@@ -530,7 +531,7 @@ describe("Боевая система", function()
     it("не сохраняет обычный бой когда включена история только боссов", function()
         RLHelper.db.profile.bossOnlyHistory = true
         RLHelper:PLAYER_REGEN_DISABLED()
-        RLHelper:OnCombatLogEvent("test message")
+        RLHelper:OnCombatLogEvent(record("test message"))
 
         M.UnitAffectingCombat1 = false
         RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
@@ -543,7 +544,7 @@ describe("Боевая система", function()
 
     it("сохраняет историю боев в хранилище текущего персонажа", function()
         RLHelper:PLAYER_REGEN_DISABLED()
-        RLHelper:OnCombatLogEvent("test message")
+        RLHelper:OnCombatLogEvent(record("test message"))
 
         M.UnitAffectingCombat1 = false
         RLHelper.lastCombatActivityAt = RLHelper:GetCombatNow() - 10
@@ -551,8 +552,8 @@ describe("Боевая система", function()
 
         assert.is_true(RLHelper:EvaluateCombatEnd("test"))
         assert.are.equal(1, #RLHelper.combatHistory)
-        assert.are.equal(1, #RLHelper.db.char.combatHistory)
-        assert.are.equal("test message", RLHelper.db.char.combatHistory[1].messages[1])
+        assert.are.equal(1, #RLHelper.db.char.combatHistoryV2.combats)
+        assert.are.equal("test message", RLHelper.db.char.combatHistoryV2.combats[1].events[1].text)
         assert.are.equal(0, #RLHelper.db.profile.combatHistory)
     end)
 
@@ -561,14 +562,14 @@ describe("Боевая система", function()
             RLHelper:SaveCombatToProfile({
                 startTime = i,
                 endTime = i + 1,
-                messages = { "combat " .. i },
+                events = { record("combat " .. i) },
                 firstEnemy = "Enemy " .. i,
                 isBoss = false
             }, RLHelper.db.profile)
         end
 
         assert.are.equal(30, #RLHelper.combatHistory)
-        assert.are.equal(30, #RLHelper.db.char.combatHistory)
+        assert.are.equal(30, #RLHelper.db.char.combatHistoryV2.combats)
         assert.are.equal("Enemy 31", RLHelper.combatHistory[1].firstEnemy)
         assert.are.equal("Enemy 2", RLHelper.combatHistory[30].firstEnemy)
     end)
@@ -578,17 +579,17 @@ describe("Боевая система", function()
             {
                 startTime = 1,
                 endTime = 2,
-                messages = { "combat" },
+                events = { record("combat") },
                 firstEnemy = "Enemy",
                 isBoss = false
             }
         }
-        RLHelper.db.char.combatHistory = RLHelper.combatHistory
+        RLHelper.db.char.combatHistoryV2.combats = RLHelper.combatHistory
         RLHelper.db.profile.combatHistory = {
             {
                 startTime = 10,
                 endTime = 11,
-                messages = { "old shared combat" },
+                events = { record("old shared combat") },
                 firstEnemy = "Old Enemy",
                 isBoss = false
             }
@@ -597,7 +598,7 @@ describe("Боевая система", function()
         RLHelper:ClearCombatHistory()
 
         assert.are.equal(0, #RLHelper.combatHistory)
-        assert.are.equal(0, #RLHelper.db.char.combatHistory)
+        assert.are.equal(0, #RLHelper.db.char.combatHistoryV2.combats)
         assert.are.equal(1, #RLHelper.db.profile.combatHistory)
     end)
 
@@ -623,7 +624,7 @@ describe("Боевая система", function()
         bossEvent[4] = npcGuid(37970)
 
         RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(bossEvent))
-        RLHelper:OnCombatLogEvent("test message")
+        RLHelper:OnCombatLogEvent(record("test message"))
 
         for guid in pairs(RLHelper.activeEnemies) do
             RLHelper.activeEnemies[guid] = RLHelper:GetCombatNow() - 10
@@ -635,7 +636,7 @@ describe("Боевая система", function()
         assert.are.equal(1, #RLHelper.combatHistory)
         assert.is_true(RLHelper.combatHistory[1].isBoss)
         assert.are.equal("Кровавый совет", RLHelper.combatHistory[1].firstEnemy)
-        assert.are.equal("Кровавый совет", RLHelper.db.char.combatHistory[1].firstEnemy)
+        assert.are.equal("Кровавый совет", RLHelper.db.char.combatHistoryV2.combats[1].firstEnemy)
     end)
 
     it("сохраняет boss-only бой с боссом из общего реестра", function()
@@ -648,7 +649,7 @@ describe("Боевая система", function()
         bossEvent[4] = npcGuid(33288)
 
         RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(bossEvent))
-        RLHelper:OnCombatLogEvent("test message")
+        RLHelper:OnCombatLogEvent(record("test message"))
 
         for guid in pairs(RLHelper.activeEnemies) do
             RLHelper.activeEnemies[guid] = RLHelper:GetCombatNow() - 10
@@ -763,13 +764,10 @@ describe("Боевая система", function()
             local lich = require('../modules/bosses/LichKingTracker')
             local oldQueenLog, oldLichLog = queen.log, lich.log
             local oldTimestamp = lich.lastShadowTrapTimestamp
-            local oldV2 = RLHelper.journalV2Enabled
             finally(function()
                 queen.log, lich.log = oldQueenLog, oldLichLog
                 lich.lastShadowTrapTimestamp = oldTimestamp
-                RLHelper.journalV2Enabled = oldV2
             end)
-            RLHelper.journalV2Enabled = false
             queen.log = function(message) RLHelper:OnCombatLogEvent(message) end
             lich.log = queen.log
             lich:reset()
@@ -780,30 +778,27 @@ describe("Боевая система", function()
             RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 101, "SPELL_DAMAGE",
                 "trap", "Ловушка", 0xa18, raider, "Storm", 0x548,
                 73529, "Темная ловушка", 0x20, 1000, 0, 1, 0, 0, 0)
-            assert.are.equal(2, #RLHelper.currentCombat.messages)
+            assert.are.equal(2, #RLHelper.currentCombat.events)
         end)
 
         it("uses the roster for first damage without treating controlled group members as enemies", function()
             local oldLog = SpellTracker.log
-            local oldV2 = RLHelper.journalV2Enabled
             finally(function()
                 SpellTracker.log = oldLog
                 SpellTracker:reset()
-                RLHelper.journalV2Enabled = oldV2
             end)
-            RLHelper.journalV2Enabled = false
             SpellTracker:reset()
             SpellTracker.log = function(message) RLHelper:OnCombatLogEvent(message) end
             setBossModules({ SpellTracker })
             RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 100, "SWING_DAMAGE",
                 observer, "Бочок", 0x1218, raider, "Storm", 0x548,
                 100, 0, 1, 0, 0, 0)
-            assert.are.equal(0, #RLHelper.currentCombat.messages)
+            assert.are.equal(0, #RLHelper.currentCombat.events)
             RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 101, "SWING_DAMAGE",
                 raider, "Storm", 0x548, lady, "Леди Смертный Шепот", 0xa18,
                 100, 0, 1, 0, 0, 0)
-            assert.are.equal(1, #RLHelper.currentCombat.messages)
-            assert.is_truthy(RLHelper.currentCombat.messages[1]:find("Первый урон"))
+            assert.are.equal(1, #RLHelper.currentCombat.events)
+            assert.are.equal("FIRST_DAMAGE", RLHelper.currentCombat.events[1].kind)
         end)
 
         it("identifies a controlled raid player's death as a player rather than a pet", function()
@@ -818,19 +813,15 @@ describe("Боевая система", function()
             assert.are.equal(normal, controlled)
         end)
 
-        for _, journalV2 in ipairs({ false, true }) do
-            it("records the real spirit hit during observer control (journalV2=" .. tostring(journalV2) .. ")", function()
+        do
+            it("records the real spirit hit during observer control", function()
                 local tracker = require('../modules/bosses/DeathwhisperTracker')
                 local oldLog, oldSpirits, oldReport = tracker.log, tracker.currentSpirits, tracker.report
-                local oldV2 = RLHelper.journalV2Enabled
                 finally(function()
                     tracker.log, tracker.currentSpirits, tracker.report = oldLog, oldSpirits, oldReport
-                    RLHelper.journalV2Enabled = oldV2
                 end)
                 tracker.currentSpirits, tracker.report = {}, {}
                 tracker.log = function(message) RLHelper:OnCombatLogEvent(message) end
-                RLHelper.journalV2Enabled = journalV2
-                if journalV2 then RLHelper.currentCombat.events = {} end
                 setBossModules({ tracker })
 
                 -- WoWCombatLog3.txt: 20:34:32.185 summon, 20:34:36.022 hit under observer control.
@@ -843,13 +834,9 @@ describe("Боевая система", function()
 
                 assert.are.equal(1, tracker.report.Storm)
                 assert.is_nil(tracker.currentSpirits[spirit])
-                if journalV2 then
-                    assert.are.equal(1, #RLHelper.currentCombat.events)
-                    assert.are.equal("SPIRIT_HIT", RLHelper.currentCombat.events[1].kind)
-                else
-                    assert.are.equal(1, #RLHelper.currentCombat.messages)
-                    assert.is_truthy(RLHelper.currentCombat.messages[1]:find("Storm"))
-                end
+                assert.are.equal(1, #RLHelper.currentCombat.events)
+                assert.are.equal("SPIRIT_HIT", RLHelper.currentCombat.events[1].kind)
+
             end)
         end
     end)

@@ -41,17 +41,15 @@ function SppellTracker:GetSpellClassification(event)
     return "INFO", fields
 end
 
-function SppellTracker:logSpell(event, legacyMessage, kind)
+function SppellTracker:logSpell(event, kind)
     kind = kind or (TAUNTS[event.spellId] and "TAUNT" or "SPELL_USE")
-    local severity, fields = "INFO", nil
-    if RLHelper.journalV2Enabled then
-        if event.journalType then
-            severity, fields = event.journalType, event.journalFields
-        else
-            severity, fields = self:GetSpellClassification(event)
-        end
+    local severity, fields
+    if event.journalType then
+        severity, fields = event.journalType, event.journalFields
+    else
+        severity, fields = self:GetSpellClassification(event)
     end
-    RLHelperJournal.Log(RLHelper, self.log, kind, event, legacyMessage, severity, fields)
+    RLHelperJournal.Log(self.log, kind, event, severity, fields)
 end
 function SppellTracker:OnEnable()
     RLHelper:Debug("RL Быдло: TauntTracker включен")
@@ -61,27 +59,27 @@ end
 
 -- Список отслеживаемых способностей
 local TRACKED_SPELLS = {
-    [355] = "Interface\\Icons\\spell_nature_reincarnation", -- Warrior: Taunt
-    [694] = "Interface\\Icons\\ability_warrior_punishingblow", -- Warrior: Mocking Blow
-    [1161] = "Interface\\Icons\\ability_bullrush", -- Warrior: Challenging Shout
-    [49560] = "Interface\\Icons\\Spell_DeathKnight_Strangulate", -- Death Knight: Death Grip
-    [51399] = "Interface\\Icons\\Spell_DeathKnight_Strangulate", -- Death Knight: Death Grip Taunt Effect
-    [56222] = "Interface\\Icons\\Spell_Nature_ShamanRage", -- Death Knight: Dark Command
-    [62124] = "Interface\\Icons\\Spell_Holy_UnyieldingFaith", -- Paladin: Hand of Reckoning
-    [31789] = "Interface\\Icons\\inv_shoulder_37",
-    [5209] = "Interface\\Icons\\Ability_Druid_ChallangingRoar", -- Druid: Growl
-    [20736] = "Interface\\Icons\\spell_arcane_blink", -- Hunter: Distracting Shot
+    [355] = true, -- Warrior: Taunt
+    [694] = true, -- Warrior: Mocking Blow
+    [1161] = true, -- Warrior: Challenging Shout
+    [49560] = true, -- Death Knight: Death Grip
+    [51399] = true, -- Death Knight: Death Grip Taunt Effect
+    [56222] = true, -- Death Knight: Dark Command
+    [62124] = true, -- Paladin: Hand of Reckoning
+    [31789] = true,
+    [5209] = true, -- Druid: Growl
+    [20736] = true, -- Hunter: Distracting Shot
 
-    [10278] = "Interface\\Icons\\Spell_Holy_SealOfProtection", -- Paladin: Корона
-    [1044] = "Interface\\Icons\\Spell_Holy_SealOfValor", -- Paladin: Длань свободы
-    [19752] = "Interface\\Icons\\Spell_Nature_TimeStop", -- Paladin: Диван
-    [6940] = "Interface\\Icons\\Spell_Holy_SealOfSacrifice", -- Paladin: Длань жертвенности
-    [31821] = "Interface\\Icons\\Spell_Holy_AuraMastery", -- Paladin: Мастер аур
-    [48817] = "Interface\\Icons\\Spell_Holy_Excorcism", -- Paladin: Гнев небес
-    [49016] = "Interface\\Icons\\Spell_DeathKnight_BladedArmor", -- Death Knight: Hysteria
+    [10278] = true, -- Paladin: Корона
+    [1044] = true, -- Paladin: Длань свободы
+    [19752] = true, -- Paladin: Диван
+    [6940] = true, -- Paladin: Длань жертвенности
+    [31821] = true, -- Paladin: Мастер аур
+    [48817] = true, -- Paladin: Гнев небес
+    [49016] = true, -- Death Knight: Hysteria
     
-    [26994] = "Interface\\Icons\\spell_nature_reincarnation", -- Друид БР
-    [48477] = "Interface\\Icons\\spell_nature_reincarnation" -- Друид БР
+    [26994] = true, -- Друид БР
+    [48477] = true -- Друид БР
 }
 
 local TRACKED_CAST_SUCCESS_SPELLS = {
@@ -100,25 +98,24 @@ local IGNORED_AURA_APPLIED_SPELLS = {
 }
 
 local TRACKED_DISPEL_SPELLS = {
-    [475] = "Interface\\Icons\\Spell_Nature_RemoveCurse", -- Mage: Remove Curse
-    [526] = "Interface\\Icons\\Spell_Nature_NullifyPoison", -- Shaman: Cure Toxins
-    [527] = "Interface\\Icons\\Spell_Holy_DispelMagic", -- Priest: Dispel Magic
-    [528] = "Interface\\Icons\\Spell_Holy_NullifyDisease", -- Priest: Cure Disease
-    [552] = "Interface\\Icons\\Spell_Nature_NullifyDisease", -- Priest: Abolish Disease
-    [988] = "Interface\\Icons\\Spell_Holy_DispelMagic", -- Priest: Dispel Magic
-    [1152] = "Interface\\Icons\\Spell_Holy_Purify", -- Paladin: Purify
-    [2782] = "Interface\\Icons\\Spell_Nature_RemoveCurse", -- Druid: Remove Curse
-    [4987] = "Interface\\Icons\\Spell_Holy_Renew", -- Paladin: Cleanse
-    [10872] = "Interface\\Icons\\Spell_Nature_NullifyDisease", -- Priest: Abolish Disease Effect
-    [32375] = "Interface\\Icons\\Spell_Arcane_MassDispel", -- Priest: Mass Dispel
-    [32592] = "Interface\\Icons\\Spell_Arcane_MassDispel", -- Priest: Mass Dispel triggered
-    [51886] = "Interface\\Icons\\Ability_Shaman_CleanseSpirit" -- Shaman: Cleanse Spirit
+    [475] = true, -- Mage: Remove Curse
+    [526] = true, -- Shaman: Cure Toxins
+    [527] = true, -- Priest: Dispel Magic
+    [528] = true, -- Priest: Cure Disease
+    [552] = true, -- Priest: Abolish Disease
+    [988] = true, -- Priest: Dispel Magic
+    [1152] = true, -- Paladin: Purify
+    [2782] = true, -- Druid: Remove Curse
+    [4987] = true, -- Paladin: Cleanse
+    [10872] = true, -- Priest: Abolish Disease Effect
+    [32375] = true, -- Priest: Mass Dispel
+    [32592] = true, -- Priest: Mass Dispel triggered
+    [51886] = true -- Shaman: Cleanse Spirit
 }
 
 function SppellTracker:OnInitialize()
     self:RegisterEvent("UNIT_TARGET")
     self:RegisterMessage("RLHelper_CombatEnded", "reset")
-    self:RegisterMessage("RLHelper_Demo", "demo")
     self.pendingHandOfReckonings = {}
     self.log = function(...)
         RLHelper:OnCombatLogEvent(...)
@@ -137,23 +134,8 @@ local function isEnemy(flags, guid)
     return not RLHelper:IsGroupMember(guid, flags) and bit.band(flags or 0, ENEMY_FLAGS) > 0
 end
 
-local function formatFirstHit(ts, source, dest)
-    return string.format("%s |cFFFFFFFF%s|r Первый урон по |cFFFFFFFF%s|r", date("%H:%M:%S", ts), source,
-        dest)
-end
 
-local function formatFirstHeal(ts, source, dest)
-    return string.format("%s |cFFFFFFFF%s|r Первый хил по |cFFFFFFFF%s|r", date("%H:%M:%S", ts), source,
-        dest)
-end
 
-local function formatSpellCast(ts, source, spellIcon, dest)
-    if not dest then
-        return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t", date("%H:%M:%S", ts), source, spellIcon)
-    end
-
-    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t %s", date("%H:%M:%S", ts), source, spellIcon, dest)
-end
 
 local function isLichKingCombat()
     return RLHelper.currentInstanceId == ICECROWN_CITADEL and RLHelper.currentCombat and
@@ -177,13 +159,9 @@ function SppellTracker:clearPendingHandOfReckoningBySource(sourceGUID)
 end
 
 function SppellTracker:trackHandOfReckoningTarget(eventData)
-    local severity, fields
-    if RLHelper.journalV2Enabled then
-        severity, fields = self:GetSpellClassification(eventData)
-    end
+    local severity, fields = self:GetSpellClassification(eventData)
     self.pendingHandOfReckonings[eventData.destGUID] = {
         timestamp = eventData.timestamp,
-        spellIcon = TRACKED_SPELLS[eventData.spellId],
         sourceGUID = eventData.sourceGUID,
         sourceName = eventData.sourceName,
         destName = eventData.destName,
@@ -207,7 +185,7 @@ function SppellTracker:tryLogHandOfReckoningTarget(unitId)
     local targetUnit = unitId .. "target"
     if UnitExists(targetUnit) and UnitGUID(targetUnit) == pending.sourceGUID then
         self:clearPendingHandOfReckoning(UnitGUID(unitId))
-        self:logSpell(pending, formatSpellCast(pending.timestamp, pending.sourceName, pending.spellIcon, pending.destName))
+        self:logSpell(pending)
         return true
     end
 
@@ -224,8 +202,7 @@ function SppellTracker:handleEvent(eventData)
             isEnemy(eventData.destFlags, eventData.destGUID) then
             if not CombatFilters or not CombatFilters:IsIgnoredCombatEnemy(eventData.destName) then
                 firstDamageDone = true
-                RLHelperJournal.Log(RLHelper, self.log, "FIRST_DAMAGE", eventData,
-                    formatFirstHit(eventData.timestamp, eventData.sourceName, eventData.destName))
+                RLHelperJournal.Log(self.log, "FIRST_DAMAGE", eventData)
             end
         end
     end
@@ -234,8 +211,7 @@ function SppellTracker:handleEvent(eventData)
         if RLHelper:IsGroupMember(eventData.sourceGUID, eventData.sourceFlags) and
             eventData.destName == VALITHRIA_DREAMWALKER and (eventData.amount or 0) > 0 then
             firstValithriaHealDone = true
-            RLHelperJournal.Log(RLHelper, self.log, "FIRST_HEAL", eventData,
-                formatFirstHeal(eventData.timestamp, eventData.sourceName, eventData.destName))
+            RLHelperJournal.Log(self.log, "FIRST_HEAL", eventData)
         end
     end
 
@@ -244,27 +220,23 @@ function SppellTracker:handleEvent(eventData)
     end
 
     if eventData.event == "SPELL_DISPEL" and TRACKED_DISPEL_SPELLS[eventData.spellId] then
-        self:logSpell(eventData, formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_DISPEL_SPELLS[eventData.spellId],
-            eventData.destName), "DISPEL")
+        self:logSpell(eventData, "DISPEL")
         return
     end
 
     if eventData.event == "SPELL_RESURRECT" and TRACKED_SPELLS[eventData.spellId] then
-        self:logSpell(eventData, formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
-            eventData.destName), "RESURRECT")
+        self:logSpell(eventData, "RESURRECT")
         return
     end
 
     if eventData.event == "SPELL_CAST_SUCCESS" and TRACKED_CAST_SUCCESS_SPELLS[eventData.spellId] and
         TRACKED_SPELLS[eventData.spellId] then
-        self:logSpell(eventData, formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
-            eventData.destName))
+        self:logSpell(eventData)
         return
     end
 
     if eventData.event == "SPELL_DAMAGE" and eventData.spellId == HOLY_WRATH and isLichKingCombat() then
-        self:logSpell(eventData, formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
-            eventData.destName))
+        self:logSpell(eventData)
         return
     end
 
@@ -273,8 +245,7 @@ function SppellTracker:handleEvent(eventData)
         if eventData.spellId == HAND_OF_RECKONING then
             self:trackHandOfReckoningTarget(eventData)
         else
-            self:logSpell(eventData, formatSpellCast(eventData.timestamp, eventData.sourceName, TRACKED_SPELLS[eventData.spellId],
-                eventData.destName))
+            self:logSpell(eventData)
         end
         return
     end
@@ -287,23 +258,5 @@ function SppellTracker:handleEvent(eventData)
     end
 end
 
-function SppellTracker:demo()
-    self.log(formatFirstHit(time(), "CrazyDkPet", "Halion"))
-    self.log(formatFirstHeal(time(), "Healer", VALITHRIA_DREAMWALKER))
-
-    for _, v in pairs({355, 694, 1161, 49560, 51399, 56222, 62124, 5209, 31789, 20736}) do
-        self.log(formatSpellCast(time(), "NotTank", TRACKED_SPELLS[v], "Halion"))
-    end
-
-    for _, v in pairs({10278, 1044, 19752, 6940}) do
-        self.log(formatSpellCast(time(), "Paladin", TRACKED_SPELLS[v], "OtherPlayer"))
-    end
-    self.log(formatSpellCast(time(), "DeathKnight", TRACKED_SPELLS[49016], "OtherPlayer"))
-
-    self.log(formatSpellCast(time(), "Paladin", TRACKED_SPELLS[31821]))
-    self.log(formatSpellCast(time(), "Paladin", TRACKED_SPELLS[48817], "Нерубский землеглот"))
-    self.log(formatSpellCast(time(), "Druid", TRACKED_SPELLS[48477], "DeadPlayer"))
-    self.log(formatSpellCast(time(), "Priest", TRACKED_DISPEL_SPELLS[988], "OtherPlayer"))
-end
 
 return SppellTracker

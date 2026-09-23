@@ -13,9 +13,6 @@ local LADY_DEATHWHISPER_DOMINATE_MIND = 71289
 local CYCLONE = 33786
 local LADY_DEATHWHISPER = "Леди Смертный Шепот"
 
-local icon = "Interface\\Icons\\spell_shadow_deathsembrace"
-local cycloneIcon = "Interface\\Icons\\Spell_Nature_EarthBind"
-
 function DeathwhisperTracker:OnInitialize()
     RLHelper:Debug("DeathwhisperTracker: Инициализация")
     self.currentSpirits = {}
@@ -25,25 +22,10 @@ function DeathwhisperTracker:OnInitialize()
     end
     self:RegisterMessage("RLHelper_CombatEnding", "summarizeCombat")
     self:RegisterMessage("RLHelper_CombatEnded", "reset")
-    self:RegisterMessage("RLHelper_Demo", "demo")
 end
 
 function DeathwhisperTracker:OnEnable()
     RLHelper:Debug("DeathwhisperTracker: Включен")
-end
-
-local function formatShieldBroken(ts)
-    return string.format("%s Леди: Щит разбит", date("%H:%M:%S", ts))
-end
-
-local function formatMindControl(ts, dest)
-    return string.format("%s |cFFFFFFFF%s|r получил контроль разума", date("%H:%M:%S", ts), dest)
-end
-
-local function formatCyclone(ts, source, dest, missType)
-    local suffix = missType and string.format(": %s", missType) or ""
-    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t |cFFFFFFFF%s|r%s", date("%H:%M:%S", ts),
-        source, cycloneIcon, dest, suffix)
 end
 
 local function isLadyDeathwhisperCombat()
@@ -82,10 +64,6 @@ local function buildSpiritHitSummary(report)
     }
 end
 
-local function formatSpiritHitSummary(ts, total, details)
-    return string.format("%s Духов взорвали: всего %s %s", date("%H:%M:%S", ts), total, details)
-end
-
 -- function DeathwhisperTracker:ZONE_CHANGED_NEW_AREA()
 -- local 
 -- if 
@@ -107,9 +85,9 @@ function DeathwhisperTracker:summarizeCombat()
         return
     end
 
-    RLHelperJournal.Log(RLHelper, self.log, "SPIRIT_SUMMARY", nil,
-        formatSpiritHitSummary(time(), summary.total, summary.details), "INFO",
-        { text = string.format("Духов взорвали: всего %s %s", summary.total, summary.details) })
+    RLHelperJournal.Log(self.log, "SPIRIT_SUMMARY", nil, "INFO", {
+        text = string.format("Духов взорвали: всего %s %s", summary.total, summary.details)
+    })
 end
 
 function DeathwhisperTracker:sendSummaryToRaid()
@@ -119,14 +97,6 @@ function DeathwhisperTracker:sendSummaryToRaid()
     end
 
     SendChatMessage(string.format("Духов взорвали: всего %s %s", summary.total, summary.details), "RAID")
-end
-
-local function formatSpiritHit(ts, dest)
-    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t взорвал духа", date("%H:%M:%S", ts), dest, icon)
-end
-
-local function formatSpiritMiss(ts, dest)
-    return string.format("%s Дух автоатачил |cFFFFFFFF%s|r", date("%H:%M:%S", ts), dest)
 end
 
 local function consumeTrackedSpirit(self, guid)
@@ -142,26 +112,24 @@ end
 function DeathwhisperTracker:handleEvent(eventData)
     if eventData.event == "SPELL_CAST_SUCCESS" and eventData.spellId == LADY_DEATHWHISPER_DOMINATE_MIND and
         eventData.destName then
-        RLHelperJournal.Log(RLHelper, self.log, "MIND_CONTROL", eventData, formatMindControl(eventData.timestamp, eventData.destName))
+        RLHelperJournal.Log(self.log, "MIND_CONTROL", eventData)
         return
     end
 
     if isLadyDeathwhisperCombat() and eventData.spellId == CYCLONE and eventData.sourceName and eventData.destName then
         if eventData.event == "SPELL_AURA_APPLIED" then
-            RLHelperJournal.Log(RLHelper, self.log, "CYCLONE_APPLIED", eventData,
-                formatCyclone(eventData.timestamp, eventData.sourceName, eventData.destName))
+            RLHelperJournal.Log(self.log, "CYCLONE_APPLIED", eventData)
             return
         end
 
         if eventData.event == "SPELL_MISSED" or eventData.event == "DAMAGE_SHIELD_MISSED" then
-            RLHelperJournal.Log(RLHelper, self.log, "CYCLONE_MISSED", eventData,
-                formatCyclone(eventData.timestamp, eventData.sourceName, eventData.destName, eventData.missType))
+            RLHelperJournal.Log(self.log, "CYCLONE_MISSED", eventData)
             return
         end
     end
 
     if eventData.event == "SPELL_AURA_REMOVED" and eventData.spellId == LADY_DEATHWHISPER_MANA_BARRIER then
-        RLHelperJournal.Log(RLHelper, self.log, "MANA_BARRIER_REMOVED", eventData, formatShieldBroken(eventData.timestamp))
+        RLHelperJournal.Log(self.log, "MANA_BARRIER_REMOVED", eventData)
         return
     end
 
@@ -182,8 +150,7 @@ function DeathwhisperTracker:handleEvent(eventData)
         self.report[eventData.destName] = self.report[eventData.destName] or 0
         self.report[eventData.destName] = self.report[eventData.destName] + 1
 
-        RLHelperJournal.Log(RLHelper, self.log, "SPIRIT_HIT", eventData,
-            formatSpiritHit(eventData.timestamp, eventData.destName), "TACTIC_VIOLATION")
+        RLHelperJournal.Log(self.log, "SPIRIT_HIT", eventData, "TACTIC_VIOLATION")
         return
     end
 
@@ -193,23 +160,9 @@ function DeathwhisperTracker:handleEvent(eventData)
             return
         end
 
-        RLHelperJournal.Log(RLHelper, self.log, "SPIRIT_MISSED", eventData, formatSpiritMiss(eventData.timestamp, eventData.destName))
+        RLHelperJournal.Log(self.log, "SPIRIT_MISSED", eventData)
         return
     end
-end
-
-function DeathwhisperTracker:demo()
-    self.log(formatShieldBroken(time()))
-    self.log(formatMindControl(time(), "DemoPlayer"))
-    self.log(formatCyclone(time(), "DemoDruid", "DemoTarget"))
-    self.log(formatCyclone(time(), "DemoDruid", "ImmuneTarget", "IMMUNE"))
-    self.log(formatSpiritHit(time(), "Player"))
-    self.log(formatSpiritMiss(time(), "Lucky"))
-    self.report = {
-        ["Player"] = 2
-    }
-    self:summarizeCombat()
-    self.report = {}
 end
 
 return DeathwhisperTracker

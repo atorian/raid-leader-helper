@@ -56,16 +56,12 @@ local DARKNESS_MATERIALITY_DROPS = {
     [74835] = true
 }
 
-local meteor_icon = "Interface\\Icons\\spell_fire_meteorstorm"
-local meteor_burn_icon = "Interface\\Icons\\spell_fire_fire"
-local lezvia_icon = "Interface\\Icons\\Spell_Shadow_ShadowMend"
-
 local spells = {
-    [METEORIT] = string.format(" от метеорита |T%s:24:24:0:0|t", meteor_icon),
-    [LUZHA] = string.format(" в луже |T%s:24:24:0:0|t", meteor_burn_icon),
-    [LEZVIA10HM] = string.format(" в лезвиях |T%s:24:24:0:0|t", lezvia_icon),
-    [LEZVIA25HM] = string.format(" в лезвиях |T%s:24:24:0:0|t", lezvia_icon),
-    [LEZVIA25OB] = string.format(" в лезвиях |T%s:24:24:0:0|t", lezvia_icon)
+    [METEORIT] = true,
+    [LUZHA] = true,
+    [LEZVIA10HM] = true,
+    [LEZVIA25HM] = true,
+    [LEZVIA25OB] = true
 }
 
 local HEROISM_SPELLS = {
@@ -165,7 +161,6 @@ end
 
 function HalionTracker:OnEnable()
     self:RegisterMessage("RLHelper_CombatEnded", "reset")
-    self:RegisterMessage("RLHelper_Demo", "demo")
     self:RegisterEvent("CHAT_MSG_MONSTER_YELL")
 end
 
@@ -319,14 +314,6 @@ function HalionTracker:tryStartPullOnMaterialityDrop(event)
     RLHelper:StartDBMPullCommand(15)
 end
 
-local function formatFirstLightHalionDamage(ts, name)
-    return string.format("%s |cFFFFFFFF%s|r первый ударил Халиона в свету", date("%H:%M:%S", ts), name)
-end
-
-local function formatFirstLightDamageWindowClosed(ts, spellName)
-    return string.format("%s окно первого урона по Халиону в свету закрыто: %s", date("%H:%M:%S", ts), spellName)
-end
-
 function HalionTracker:trackFirstLightHalionDamage(event, log)
     if event.event == "SPELL_AURA_APPLIED" and event.spellId == 74835 and creatureIdFromGuid(event.destGUID) == DARK_HALION_ID then
         self.firstLightDamageWindowOpen = true
@@ -345,16 +332,14 @@ function HalionTracker:trackFirstLightHalionDamage(event, log)
 
     if event.event == "SPELL_AURA_APPLIED" and HEROISM_SPELLS[event.spellId] then
         self.firstLightDamageWindowOpen = false
-        RLHelperJournal.Log(RLHelper, log, "LIGHT_DAMAGE_WINDOW_CLOSED", event,
-            formatFirstLightDamageWindowClosed(event.timestamp, event.spellName))
+        RLHelperJournal.Log(log, "LIGHT_DAMAGE_WINDOW_CLOSED", event)
         return
     end
 
     if not self.firstLightDamageLogged and DAMAGE_EVENTS[event.event] and
         RLHelper:IsGroupMember(event.sourceGUID, event.sourceFlags) and creatureIdFromGuid(event.destGUID) == LIGHT_HALION_ID then
         self.firstLightDamageLogged = true
-        RLHelperJournal.Log(RLHelper, log, "FIRST_LIGHT_DAMAGE", event,
-            formatFirstLightHalionDamage(event.timestamp, event.sourceName))
+        RLHelperJournal.Log(log, "FIRST_LIGHT_DAMAGE", event)
     end
 end
 
@@ -406,14 +391,10 @@ function HalionTracker:logHeal(playerName, event)
     self.healEvents[playerName] = event
 end
 
-local function formatFirstInTwilight(ts, name)
-    return string.format("%s |cFFFFFFFF%s|r зашел во тьму первый", date("%H:%M:%S", ts), name)
-end
-
 function HalionTracker:isFirstInDarkness(event, log)
     if not self.firstEntered and event.spellId >= pelena10 and event.spellId <= pelena25hm then
         self.firstEntered = true
-        RLHelperJournal.Log(RLHelper, log, "FIRST_TWILIGHT_ENTRY", event, formatFirstInTwilight(event.timestamp, event.destName))
+        RLHelperJournal.Log(log, "FIRST_TWILIGHT_ENTRY", event)
     end
 end
 
@@ -458,37 +439,24 @@ function HalionTracker:handleEvent(event)
     end
 end
 
-local function formatDiedFrom(ts, name)
-    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t", date("%H:%M:%S", ts), name,
-        "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8")
-end
-
 function HalionTracker:ProcessPlayerDeath(log, playerName, timestamp, playerGUID)
-    local msg = formatDiedFrom(timestamp, playerName)
     local damageEvents = self.dmgEvents[playerName]
 
     if damageEvents then
         for i = #damageEvents, 1, -1 do
             local lastDamage = damageEvents[i]
             if spells[lastDamage.spellId] then
-                RLHelperJournal.Log(RLHelper, log, "MECHANIC_DEATH", {
+                RLHelperJournal.Log(log, "MECHANIC_DEATH", {
                     timestamp = timestamp, destGUID = playerGUID, destName = playerName,
                     sourceGUID = lastDamage.sourceGUID, sourceName = lastDamage.source,
                     spellId = lastDamage.spellId
-                }, msg .. spells[lastDamage.spellId], "TACTIC_VIOLATION")
+                }, "TACTIC_VIOLATION")
                 break
             end
         end
     end
 
     self.dmgEvents[playerName] = nil
-end
-
-function HalionTracker:demo()
-    self.log(formatFirstInTwilight(time(), "PlayerName"))
-    self.log(formatDiedFrom(time(), "PlayerName") .. spells[METEORIT])
-    self.log(formatDiedFrom(time(), "PlayerName") .. spells[LUZHA])
-    self.log(formatDiedFrom(time(), "PlayerName") .. spells[LEZVIA25HM])
 end
 
 return HalionTracker

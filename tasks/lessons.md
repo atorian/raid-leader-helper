@@ -1,8 +1,8 @@
 # Lessons
 
-- When changing journal V2, keep V1 behavior unchanged unless explicitly requested. Rogue pull display in V2 uses the existing spell whitelist and one row per hit, with the damaged target's name; do not extend that change to V1's grouped report.
+- The structured journal is the only supported journal. Do not restore version commands, switches, string-history rendering, or per-module demos. On initialization, remove obsolete history and version settings across saved characters/profiles while preserving structured history and unrelated settings.
 
-- Journal V2 must preserve V1 presentation and visible spell filters unless a change is requested. First-damage/heal entries use the V1 wording with the common source/icon prefix. Hunter misdirection totals include all damage, but visible rows use the existing tracked-spell list and exclusions from `master`; verify both live and saved views.
+- Preserve journal presentation and visible spell filters unless a change is requested. First-damage/heal entries use the common source/icon prefix. Hunter misdirection totals include all damage, but visible rows use the existing tracked-spell list and exclusions from `master`; verify both live and saved views.
 - Journal V2 pull-damage rows use one format for hunters and rogues: time, source name, damage-spell icon, target, and amount; verify both live and saved views.
 - All Journal V2 rows use the same prefix order: time, source name when available, spell icon when available, then the message; omit absent fields without leaving empty placeholders.
 - Misdirection summary rows use the message `Напул окончен <amount>` after the source and pull icon; do not include the pull target in the summary row.
@@ -14,7 +14,7 @@
 + Prefer `sourceClass`/`destClass` from the event, then resolve and persist a missing class at event creation; never resolve class while rendering saved history.
 - In plain formatted text, render `TACTIC_VIOLATION` messages red with white time and class-colored player. In the V2 All view, highlight every entry that appears in Errors (including mechanic deaths and vortex hits, but excluding summaries) with a dark red row background; in Errors-only, omit that background and render violation messages white, preserving class-colored player names. Keep the message legible and do not add a violation label.
 
-- When an update adds addon files or changes the TOC, tell the user to fully restart WoW 3.3.5a before testing; `/reload` is only sufficient for switching journal versions after those files are loaded. For `mainFrame == nil` during OnEnable, inspect the earlier OnInitialize error first: an unloaded Journal dependency can prevent frame creation.
+- When an update adds addon files or changes the TOC, tell the user to fully restart WoW 3.3.5a before testing; `/reload` is sufficient for updates to already loaded addon files. For `mainFrame == nil` during OnEnable, inspect the earlier OnInitialize error first: an unloaded Journal dependency can prevent frame creation.
 
 - In bug reports, preserve the user's uncertainty and specific observed result. For Lady's spirit explosions, record that only one of two explosions appeared in the addon; simultaneous timing is suspected, not confirmed.
 
@@ -36,7 +36,7 @@
 - `/rlh demo` for V2 must use fixed fictional players but mirror real tracker event shapes: a harmful spell may have the boss or no source and the player as target, while a combat summary has no invented source. Show the relevant player in class color when available, keep the demo independent of the current character, and make all three filters explorable from any selected combat.
 - A journal overlay that receives mouse input must forward window dragging from both filled rows and empty scroll space. Verify scrolling and tooltips still work.
 - Do not use unsupported Unicode glyphs or fabricated target suffixes in WoW 3.3.5a journal messages. Compare demo examples against tracker output and targeted real combat-log samples before presenting them.
-- V2 uses 20px icons after the user requested a small increase from 18px; keep a compact 21px minimum row, a 1px measured-height allowance, and allow wrapping. Keep V1 icon formatting unchanged.
+- V2 uses 20px icons after the user requested a small increase from 18px; keep a compact 21px minimum row, a 1px measured-height allowance, and allow wrapping.
 - The V2 demo should include two Lady Deathwhisper spirit hits with a summary and two Halion blade deaths, using the real source/target shapes (`Мстительный дух` SWING_DAMAGE and `Темный шар` SPELL_DAMAGE followed by player UNIT_DIED). Match each demo entry's fields, text, and icon to what the tracker actually emits; do not add demo-only annotations. Compare the demo entries to records produced by the handlers in tests.
 
 - V2 summaries are informational totals, not tactical errors: exclude spirit/goo/gas summaries from Errors and red backgrounds. Tracked Halion mechanic deaths and vortex hits on healers are violations; vortex misses remain informational. Keep demo severity and filters consistent with real tracker output.

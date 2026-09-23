@@ -66,12 +66,8 @@ local function resolveEventClass(guid, name, classToken)
     end
 end
 
-function Journal.Log(addon, log, kind, event, legacyMessage, severity, fields)
-    if addon.journalV2Enabled then
-        log(Journal.Create(kind, event, severity, fields))
-    else
-        log(legacyMessage)
-    end
+function Journal.Log(log, kind, event, severity, fields)
+    log(Journal.Create(kind, event, severity, fields))
 end
 
 function Journal.Copy(value)

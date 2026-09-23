@@ -11,23 +11,16 @@ local BLOODBOLT_SPLASH_SPELLS = {
     [71481] = true,
     [71447] = true
 }
-local splashIcon = "Interface\\Icons\\Spell_Shadow_BloodBoil"
 
 function BloodQueenTracker:OnInitialize()
     RLHelper:Debug("BloodQueenTracker: Инициализация")
     self.log = function(...)
         RLHelper:OnCombatLogEvent(...)
     end
-    self:RegisterMessage("RLHelper_Demo", "demo")
 end
 
 function BloodQueenTracker:OnEnable()
     RLHelper:Debug("BloodQueenTracker: Включен")
-end
-
-local function formatSplashHit(ts, sourceName, destName)
-    return string.format("%s |cFFFFFFFF%s|r |T%s:24:24:0:0|t |cFFFFFFFF%s|r",
-        date("%H:%M:%S", ts), sourceName, splashIcon, destName)
 end
 
 function BloodQueenTracker:handleEvent(event)
@@ -39,12 +32,7 @@ function BloodQueenTracker:handleEvent(event)
         return
     end
 
-    RLHelperJournal.Log(RLHelper, self.log, "BLOODBOLT_SPLASH", event,
-        formatSplashHit(event.timestamp, event.sourceName or "Unknown", event.destName or "Unknown"), "TACTIC_VIOLATION")
-end
-
-function BloodQueenTracker:demo()
-    self.log(formatSplashHit(time(), "DemoSource", "DemoTarget"))
+    RLHelperJournal.Log(self.log, "BLOODBOLT_SPLASH", event, "TACTIC_VIOLATION")
 end
 
 return BloodQueenTracker

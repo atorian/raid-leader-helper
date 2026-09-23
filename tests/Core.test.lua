@@ -1,3 +1,4 @@
+local function record(text) return RLHelperJournal.Create('TEST', { timestamp = 1000 }, 'INFO', { text = text }) end
 local M = require('tests.mocks')
 local blizzardEvent = require('../lib/blizzardEvent')
 local RLHelper = require("Core")
@@ -740,7 +741,11 @@ describe("RLHelper settings helpers", function()
         _G.UnitIsGroupAssistant = originalUnitIsGroupAssistant
     end)
 
-    it("initializes account-wide GP award defaults", function()
+    it("initializes account-wide GP award defaults and initializes the structured journal", function()
+        local originalJournal = {}
+        for _, key in ipairs({ 'currentCombat', 'displayedCombat', 'combatHistory' }) do
+            originalJournal[key] = RLHelper[key]
+        end
         local originalCreateMainFrame = RLHelper.CreateMainFrame
         local originalCreateOptionsPanel = RLHelper.CreateOptionsPanel
         local originalRegisterChatCommand = RLHelper.RegisterChatCommand
@@ -760,12 +765,19 @@ describe("RLHelper settings helpers", function()
         RLHelper:OnInitialize()
         local gpAwardButtonsEnabled = RLHelper.db.profile.gpAwardButtonsEnabled
         local gpAwardReasons = RLHelper.db.profile.gpAwardReasons
+        local journalV2 = RLHelper.db.profile.journalV2
+        local journalStore = RLHelper.db.char.combatHistoryV2
+        for _, key in ipairs({ 'currentCombat', 'displayedCombat', 'combatHistory' }) do
+            RLHelper[key] = originalJournal[key]
+        end
 
         RLHelper.CreateMainFrame = originalCreateMainFrame
         RLHelper.CreateOptionsPanel = originalCreateOptionsPanel
         RLHelper.RegisterChatCommand = originalRegisterChatCommand
         RLHelper.mainFrame = originalMainFrame
 
+        assert.is_nil(journalV2)
+        assert.are.equal(2, journalStore.schemaVersion)
         assert.is_false(gpAwardButtonsEnabled)
         assert.are.same({
             [100] = "Каспер",
@@ -1364,37 +1376,49 @@ describe("RLHelper settings helpers", function()
         assert.is_nil(table.concat(printed, "\n"):find("/rlh fill", 1, true))
     end)
 
-    it("starts demo combat before sending demo messages", function()
-        local startReason
-        local sentWhileInCombat = false
-        RLHelper.inCombat = false
-        RLHelper.StartCombat = function(_, reason)
-            startReason = reason
-            RLHelper.inCombat = true
-        end
-        RLHelper.SendMessage = function(_, message)
-            if message == "RLHelper_Demo" then
-                sentWhileInCombat = RLHelper.inCombat
-            end
-        end
-
-        RLHelper:HandleSlashCommand("demo")
-
-        assert.are.equal("demo", startReason)
-        assert.is_true(sentWhileInCombat)
-    end)
-
-    it("requests demo combat end after sending demo messages", function()
+    it("starts demo combat before populating journal events", function()
+        local oldDemo, oldShow, oldVisible = RLHelper.DemoJournal, RLHelper.ShowCurrentCombat, RLHelper.SetMainFrameVisible
+        finally(function()
+            RLHelper.DemoJournal, RLHelper.ShowCurrentCombat, RLHelper.SetMainFrameVisible = oldDemo, oldShow, oldVisible
+        end)
+        local populated = false
         RLHelper.inCombat = false
         RLHelper.combatEndRequestedAt = nil
-        RLHelper.StartCombat = function()
+        RLHelper.StartCombat = function(_, reason)
+            assert.are.equal("demo", reason)
             RLHelper.inCombat = true
         end
-        RLHelper.SendMessage = function()
+        RLHelper.ShowCurrentCombat = function() end
+        RLHelper.SetMainFrameVisible = function() end
+        RLHelper.DemoJournal = function()
+            assert.is_true(RLHelper.inCombat)
+            populated = true
         end
-
         RLHelper:HandleSlashCommand("demo")
+        assert.is_true(populated)
+        assert.is_not_nil(RLHelper.combatEndRequestedAt)
+    end)
 
+    it("requests demo combat end after populating journal events", function()
+        local oldDemo, oldShow, oldVisible = RLHelper.DemoJournal, RLHelper.ShowCurrentCombat, RLHelper.SetMainFrameVisible
+        finally(function()
+            RLHelper.DemoJournal, RLHelper.ShowCurrentCombat, RLHelper.SetMainFrameVisible = oldDemo, oldShow, oldVisible
+        end)
+        local populated = false
+        RLHelper.inCombat = false
+        RLHelper.combatEndRequestedAt = nil
+        RLHelper.StartCombat = function(_, reason)
+            assert.are.equal("demo", reason)
+            RLHelper.inCombat = true
+        end
+        RLHelper.ShowCurrentCombat = function() end
+        RLHelper.SetMainFrameVisible = function() end
+        RLHelper.DemoJournal = function()
+            assert.is_true(RLHelper.inCombat)
+            populated = true
+        end
+        RLHelper:HandleSlashCommand("demo")
+        assert.is_true(populated)
         assert.is_not_nil(RLHelper.combatEndRequestedAt)
     end)
 
@@ -1692,6 +1716,21 @@ describe("RLHelper main frame raid check button", function()
             self.scrolledDown = true
         end
 
+        function frame:SetScrollChild(child) self.scrollChild = child end
+        function frame:GetVerticalScroll() return self.offset or 0 end
+        function frame:SetVerticalScroll(value) self.offset = value end
+        function frame:GetVerticalScrollRange() return 0 end
+        function frame:GetHeight() return self.height or 400 end
+        function frame:GetWidth() return self.width or 400 end
+        function frame:SetWidth(value) self.width = value end
+        function frame:GetFont() return unpack(self.font or { 'Fonts\\FRIZQT__.TTF', 12, 'OUTLINE' }) end
+        function frame:GetStringHeight() return 20 end
+        function frame:GetSpacing() return 0 end
+        function frame:CreateTexture() return newFrame('Texture', nil, self) end
+        function frame:SetTexture() end
+        function frame:Disable() end
+        function frame:Enable() end
+        function frame:AddMessage() end
         table.insert(frames, frame)
         return frame
     end
@@ -1964,7 +2003,7 @@ describe("RLHelper main frame raid check button", function()
         originalLayoutMainFrame(RLHelper)
 
         assert.are.same({ "TOPLEFT", frame.buttonContainer, "BOTTOMLEFT", 0, -8 }, logText.points[1])
-        assert.are.same({ "BOTTOMRIGHT", frame, "BOTTOMRIGHT", -48, 8 }, logText.points[2])
+        assert.are.same({ "BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 8 }, logText.points[2])
     end)
 
     it("insets the log text from the bottom panel when present", function()
@@ -1979,7 +2018,7 @@ describe("RLHelper main frame raid check button", function()
 
         originalLayoutMainFrame(RLHelper)
 
-        assert.are.same({ "BOTTOMRIGHT", bottomPanel, "TOPRIGHT", -48, 4 }, logText.points[2])
+        assert.are.same({ "BOTTOMRIGHT", bottomPanel, "TOPRIGHT", 0, 4 }, logText.points[2])
     end)
 
     it("shows filters only when five icon rows fit and reclaims their space when hidden", function()
@@ -2119,7 +2158,7 @@ describe("RLHelper combat display selection", function()
         }
         RLHelper.currentCombat = {
             startTime = nil,
-            messages = { "current before" }
+            events = { record("current before") }
         }
         RLHelper.combatHistory = {}
         RLHelper.selectedCombatKind = nil
@@ -2147,20 +2186,21 @@ describe("RLHelper combat display selection", function()
 
     it("stores current log events without changing a displayed history combat", function()
         local historyCombat = {
-            messages = { "history row" }
+            events = { record("history row") }
         }
 
         RLHelper:DisplayCombat(historyCombat)
-        RLHelper:OnCombatLogEvent("current row")
+        RLHelper:OnCombatLogEvent(record("current row"))
 
-        assert.are.same({ "current before", "current row" }, RLHelper.currentCombat.messages)
-        assert.are.same({ "history row" }, RLHelper.mainFrame.logText.messages)
+        assert.are.equal("current before", RLHelper.currentCombat.events[1].text)
+        assert.are.equal("current row", RLHelper.currentCombat.events[2].text)
+        assert.are.same({ RLHelperJournal.Format(record("history row")) }, RLHelper.mainFrame.logText.messages)
         assert.are.same(historyCombat, RLHelper.displayedCombat)
     end)
 
     it("does not switch from displayed history combat when current combat starts", function()
         local historyCombat = {
-            messages = { "history row" }
+            events = { record("history row") }
         }
         RLHelper.combatHistory = { historyCombat }
 
@@ -2170,12 +2210,12 @@ describe("RLHelper combat display selection", function()
         assert.are.equal("history", RLHelper.selectedCombatKind)
         assert.are.equal(1, RLHelper.selectedCombatIndex)
         assert.are.same(historyCombat, RLHelper.displayedCombat)
-        assert.are.same({ "history row" }, RLHelper.mainFrame.logText.messages)
+        assert.are.same({ RLHelperJournal.Format(record("history row")) }, RLHelper.mainFrame.logText.messages)
     end)
 
     it("switches to current combat when a pull countdown starts", function()
         local historyCombat = {
-            messages = { "history row" }
+            events = { record("history row") }
         }
         RLHelper.combatHistory = { historyCombat }
         RLHelper.BeginPullCountdown = function()

@@ -48,6 +48,21 @@ describe('UI themes', function()
         function frame:GetBlendMode() return self.blendMode or 'BLEND' end
         function frame:SetBackdrop(backdrop) self.backdrop = backdrop end
         function frame:SetScript(event, fn) self.scripts[event] = fn end
+        function frame:GetScript(event) return self.scripts[event] end
+        function frame:SetAttribute(key, value)
+            assert.is_false(self.combatLocked or false, 'protected attribute mutation in combat')
+            self.attributes = self.attributes or {}
+            self.attributes[key] = value
+        end
+        function frame:RegisterForClicks(...) self.clicks = { ... } end
+        function frame:GetEffectiveScale() return 1 end
+        function frame:GetTop() return 400 end
+        function frame:GetBottom() return 0 end
+        function frame:GetLeft() return 10 end
+        function frame:GetFrameLevel() return 3 end
+        function frame:GetFrameStrata() return 'MEDIUM' end
+        function frame:SetFrameLevel(level) self.level = level end
+        function frame:IsVisible() return self.visible end
         function frame:Show() self.visible = true end
         function frame:Hide() self.visible = false end
         function frame:IsShown() return self.visible end
@@ -114,7 +129,7 @@ describe('UI themes', function()
     before_each(function()
         namedFrames, dropdownItems, originalGlobals, originalAddon, createdFrames = {}, {}, {}, {}, {}
         for _, key in ipairs({ 'CreateFrame', 'UIParent', 'InterfaceOptions_AddCategory',
-            'UIDropDownMenu_AddButton' }) do
+            'UIDropDownMenu_AddButton', 'UnitAffectingCombat', 'UnitIsPlayer', 'TargetUnit', 'RegisterStateDriver' }) do
             originalGlobals[key] = _G[key] or false
         end
         for _, key in ipairs({ 'db', 'mainFrame', 'themeButtons', 'journalView',
@@ -342,6 +357,81 @@ describe('UI themes', function()
             region.scripts.OnDragStop(region)
             assert.is_false(frame.moving)
         end
+    end)
+
+    it('uses an independent secure target button and never calls TargetUnit directly', function()
+        local Journal = require('lib.Journal')
+        local inCombat = false
+        _G.UnitAffectingCombat = function() return inCombat end
+        _G.UnitIsPlayer = function(name) return name == 'Hunter' or name == 'Mage' end
+        _G.TargetUnit = function() error('direct targeting is forbidden even outside combat') end
+        _G.RegisterStateDriver = function(button, state, condition)
+            button.driver = { state, condition }
+        end
+        addon:CreateMainFrame()
+        local frame, row = addon.mainFrame, addon.mainFrame.v2Rows[1]
+        local function show(kind, source, target)
+            addon:DisplayCombat({ events = { Journal.Create(kind, {
+                sourceName = source, destName = target,
+                destClass = target == 'Mage' and 'MAGE' or nil,
+            }) } })
+            row.scripts.OnEnter(row)
+        end
+        inCombat = true
+        show('SPELL_USE', 'Hunter', 'Boss')
+        assert.is_nil(frame.v2TargetButton)
+        inCombat = false
+        row.scripts.OnEnter(row)
+        local button = frame.v2TargetButton
+        assert.are.equal('SecureActionButtonTemplate', button.template)
+        assert.are.equal(UIParent, button.parent)
+        assert.are.equal(UIParent, button.points[1][2])
+        assert.are.same({ 'LeftButtonUp' }, button.clicks)
+        assert.are.same({ 'visibility', '[combat] hide' }, button.driver)
+        assert.are.equal('macro', button.attributes.type1)
+        assert.are.equal('/targetexact [nocombat] Hunter', button.attributes.macrotext1)
+        assert.is_nil(button.scripts.OnClick) -- Preserve Blizzard's inherited secure handler.
+        assert.is_nil(row.scripts.OnMouseUp)
+        assert.is_true(button.visible)
+        button.scripts.OnDragStart(button)
+        assert.is_nil(button.attributes.macrotext1)
+        assert.is_true(frame.moving)
+        button.scripts.OnDragStop(button)
+        assert.is_false(frame.moving)
+        assert.is_false(button.visible)
+        show('SHADOW_TRAP', 'Boss', 'Mage')
+        assert.are.equal('/targetexact [nocombat] Mage', button.attributes.macrotext1)
+        button.scripts.OnMouseWheel(button, 1)
+        assert.is_false(button.visible)
+        row.scripts.OnEnter(row)
+        button.combatLocked, inCombat = true, true
+        local oldHide, oldShow = button.Hide, button.Show
+        button.Hide = function() error('insecure hide in combat') end
+        button.Show = function() error('insecure show in combat') end
+        assert.has_no.errors(function()
+            row.scripts.OnEnter(row)
+            button.scripts.OnEnter(button)
+            button.scripts.OnLeave(button)
+            button.scripts.OnUpdate(button)
+            button.scripts.OnDragStart(button)
+            button.scripts.OnDragStop(button)
+            addon:RefreshJournalRows(addon.displayedCombat)
+            show('SPELL_USE', 'Hunter', nil)
+        end)
+        assert.are.equal('/targetexact [nocombat] Mage', button.attributes.macrotext1)
+        button.combatLocked, inCombat = false, false
+        button.Hide, button.Show = oldHide, oldShow
+        for _, name in ipairs({ 'Boss', 'AbsentPlayer' }) do
+            show('SPELL_USE', name, nil)
+            assert.is_false(button.visible)
+        end
+        show('SPIRIT_SUMMARY', nil, nil)
+        assert.is_false(button.visible)
+        show('SPELL_USE', 'Hunter', nil)
+        assert.is_true(button.visible)
+        frame:Hide()
+        button.scripts.OnUpdate(button)
+        assert.is_false(button.visible)
     end)
 
     it('aligns controls and V2 text to the same side margins in both themes', function()

@@ -52,3 +52,5 @@
 - Mechanic deaths use a skull prefix and a specific cause followed by the mechanic icon. Spell-less Lady spirit melee events need a fixed spirit icon. Demo starts in All so informational druid Cyclone control is visible even after Errors was selected.
 
 - Release notes must compare the final version with the previous published tag and its release description. Omit fixes for regressions introduced and resolved only during unreleased development, temporary switches, reverts, test counts, and unchanged capabilities. Describe user-visible differences.
+
+- In WoW 3.3.5a, a hardware click plus InCombatLockdown guard does not authorize direct TargetUnit calls: the client blocked this outside combat. Use SecureActionButtonTemplate with a nocombat action and secure combat hiding. Keep protected controls independent of the updating journal hierarchy; mocks must reject direct targeting, and client validation is still required. The user confirmed on 2026-09-24 that the independent secure button fixed targeting in the client.

@@ -170,6 +170,10 @@ function Journal.Visible(entry, view)
     return entry.kind ~= "MISDIRECTION_DAMAGE"
 end
 
+function Journal.Actor(entry)
+    return playerTargetKinds[entry.kind] and entry.target and entry.target.class and entry.target or entry.source
+end
+
 function Journal.Format(entry, neutralMessage)
     local spellIcon = ""
     if entry.kind == "FIRST_DAMAGE" then
@@ -185,7 +189,7 @@ function Journal.Format(entry, neutralMessage)
         if texture then spellIcon = "|T" .. texture .. ":24:24:0:-2|t" end
     end
 
-    local actor = playerTargetKinds[entry.kind] and entry.target and entry.target.class and entry.target or entry.source
+    local actor = Journal.Actor(entry)
     local message
     if entry.kind == "MECHANIC_DEATH" then
         message = deathReasons[entry.spellId] or entry.text or descriptions.MECHANIC_DEATH

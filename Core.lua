@@ -1526,6 +1526,7 @@ function RLHelper:RenderJournalRows()
     local frame = self.mainFrame
     local scroll = frame and frame.v2Scroll
     if not scroll then return end
+    if frame.v2TargetButton and not InCombatLockdown() then frame.v2TargetButton:Hide() end
     local offset = scroll:GetVerticalScroll()
     local bottom = offset + scroll:GetHeight()
     local visible = 0
@@ -1618,6 +1619,61 @@ function RLHelper:CreateJournalRows(frame)
     measure:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
     frame.v2Measure = measure
 
+    local function showTargetButton(row)
+        if InCombatLockdown() then return end
+        local actor = row.entry and Journal.Actor(row.entry)
+        if not actor or not actor.name or not UnitIsPlayer(actor.name) then return end
+        local button = frame.v2TargetButton
+        if not button then
+            -- Never parent or anchor a protected button to the live journal: doing
+            -- so would also protect the window and prevent combat updates/dragging.
+            button = CreateFrame("Button", nil, UIParent, "SecureActionButtonTemplate")
+            frame.v2TargetButton = button
+            button:Hide()
+            button:RegisterForClicks("LeftButtonUp")
+            button:SetAttribute("type1", "macro")
+            -- No out-of-combat 'show' state: an old target must not reappear.
+            RegisterStateDriver(button, "visibility", "[combat] hide")
+            button:SetScript("OnLeave", function(self)
+                if not InCombatLockdown() then self:Hide() end
+                if GameTooltip then GameTooltip:Hide() end
+            end)
+            button:SetScript("OnEnter", function(self)
+                if self.row then self.row:GetScript("OnEnter")(self.row) end
+            end)
+            button:SetScript("OnUpdate", function(self)
+                if not InCombatLockdown() and (not frame:IsShown() or not self.row:IsVisible()
+                    or self.row.entry ~= self.entry) then self:Hide() end
+            end)
+            button:EnableMouseWheel(true)
+            button:SetScript("OnMouseWheel", function(_, delta)
+                scroll:GetScript("OnMouseWheel")(scroll, delta)
+            end)
+            button:RegisterForDrag("LeftButton")
+            button:SetScript("OnDragStart", function(self)
+                if InCombatLockdown() then return end
+                self:SetAttribute("macrotext1", nil)
+                frame:StartMoving()
+            end)
+            button:SetScript("OnDragStop", function(self)
+                frame:StopMovingOrSizing()
+                if not InCombatLockdown() then self:Hide() end
+            end)
+        end
+        local scale = row:GetEffectiveScale() / UIParent:GetEffectiveScale()
+        local top = math.min(row:GetTop(), scroll:GetTop())
+        local bottom = math.max(row:GetBottom(), scroll:GetBottom())
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", row:GetLeft() * scale, top * scale)
+        button:SetSize(row:GetWidth() * scale, math.max(1, top - bottom) * scale)
+        button:SetFrameStrata(frame:GetFrameStrata())
+        button:SetFrameLevel(row:GetFrameLevel() + 10)
+        button.row, button.entry = row, row.entry
+        -- The macro condition also covers combat starting before the state driver runs.
+        button:SetAttribute("macrotext1", "/targetexact [nocombat] " .. actor.name)
+        button:Show()
+    end
+
     for i = 1, 40 do
         local row = CreateFrame("Frame", nil, content)
         row:EnableMouse(true)
@@ -1635,6 +1691,7 @@ function RLHelper:CreateJournalRows(frame)
         label:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, -1)
         row.text = label
         row:SetScript("OnEnter", function(self)
+            showTargetButton(self)
             local entry = self.entry
             if not entry or entry.kind ~= "MISDIRECTION_SUMMARY" or not entry.pullId or not GameTooltip then return end
             GameTooltip:SetOwner(self, "ANCHOR_CURSOR")

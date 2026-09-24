@@ -2436,6 +2436,7 @@ function RLHelper:DemoJournal()
     for _, spellId in ipairs({ 1044, 19752, 6940, 48817 }) do
         add("SPELL_USE", players[5], spellId == 48817 and lich or players[1], spellId)
     end
+    add("SPELL_USE", players[2], nil, 34600, "TACTIC_VIOLATION")
     add("SPELL_USE", deathKnight, players[1], 49016)
     for _, spellId in ipairs({ 26994, 48477 }) do
         add("RESURRECT", druid, players[4], spellId)

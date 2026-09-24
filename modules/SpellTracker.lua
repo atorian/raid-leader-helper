@@ -10,6 +10,7 @@ local HAND_OF_RECKONING = 62124
 local HOLY_WRATH = 48817
 local HAND_OF_PROTECTION = 10278
 local RIGHTEOUS_DEFENSE = 31789
+local SNAKE_TRAP = 34600
 local ICECROWN_CITADEL = 631
 local VALITHRIA_DREAMWALKER = "Валитрия Сноходица"
 local LICH_KING = "Король-лич"
@@ -19,6 +20,8 @@ local TAUNTS = {
 }
 
 function SppellTracker:GetSpellClassification(event)
+    if event.spellId == SNAKE_TRAP then return "TACTIC_VIOLATION" end
+
     if not TAUNTS[event.spellId] and event.spellId ~= HAND_OF_PROTECTION then
         return "INFO"
     end
@@ -69,6 +72,7 @@ local TRACKED_SPELLS = {
     [31789] = true,
     [5209] = true, -- Druid: Growl
     [20736] = true, -- Hunter: Distracting Shot
+    [SNAKE_TRAP] = true, -- Hunter: Змеиная ловушка
 
     [10278] = true, -- Paladin: Корона
     [1044] = true, -- Paladin: Длань свободы
@@ -83,6 +87,7 @@ local TRACKED_SPELLS = {
 }
 
 local TRACKED_CAST_SUCCESS_SPELLS = {
+    [SNAKE_TRAP] = true, -- Змеиная ловушка
     [1044] = true, -- Длань свободы
     [19752] = true, -- Божественное вмешательство
     [31789] = true, -- Праведная защита
@@ -91,6 +96,7 @@ local TRACKED_CAST_SUCCESS_SPELLS = {
 }
 
 local IGNORED_AURA_APPLIED_SPELLS = {
+    [SNAKE_TRAP] = true, -- Змеиная ловушка: логируем только установку
     [1044] = true, -- Длань свободы
     [31821] = true, -- Мастер аур
     [48817] = true, -- Гнев небес

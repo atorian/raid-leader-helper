@@ -360,6 +360,26 @@ describe('Structured journal', function()
         assert.is_nil(Journal.Format(Journal.Create('SPELL_USE', event('SPELL_CAST_SUCCESS'))):find('|cFFFF0000', 1, true))
     end)
 
+    it('logs snake trap placement without a target once as a raid error', function()
+        addon.inCombat = true
+        local trap = event('SPELL_CAST_SUCCESS', 34600, 'hunter')
+        trap.destGUID, trap.destName = '0x0000000000000000', nil
+        spells:handleEvent(trap)
+        for _, subevent in ipairs({ 'SPELL_AURA_APPLIED', 'SPELL_SUMMON', 'SPELL_CREATE', 'SPELL_CAST_FAILED' }) do
+            spells:handleEvent(event(subevent, 34600, 'hunter'))
+        end
+
+        assert.are.equal(1, #addon.currentCombat.events)
+        local entry = addon.currentCombat.events[1]
+        assert.are.equal('SPELL_USE', entry.kind)
+        assert.are.equal(34600, entry.spellId)
+        assert.are.equal('hunter', entry.source.guid)
+        assert.is_nil(entry.target.name)
+        assert.are.equal('TACTIC_VIOLATION', entry.type)
+        assert.is_true(Journal.Visible(entry, 'ALL'))
+        assert.is_true(Journal.Visible(entry, 'ERRORS'))
+    end)
+
     it('classifies distracting shot as a tactic violation and colors only its message red', function()
         setAssignedRaid()
         addon.inCombat = true
@@ -598,7 +618,7 @@ describe('Structured journal', function()
 
     it('writes fixed demo records shaped like the tracked encounters', function()
         addon:DemoJournal()
-        assert.are.equal(67, #addon.currentCombat.events)
+        assert.are.equal(68, #addon.currentCombat.events)
         local errors, misdirections = 0, 0
         for _, entry in ipairs(addon.currentCombat.events) do
             assert.is_string(entry.kind)
@@ -610,7 +630,7 @@ describe('Structured journal', function()
             if Journal.Visible(entry, 'ERRORS') then errors = errors + 1 end
             if Journal.Visible(entry, 'MISDIRECTION') then misdirections = misdirections + 1 end
         end
-        assert.are.equal(25, errors)
+        assert.are.equal(26, errors)
         assert.are.equal(6, misdirections)
         local first = addon.currentCombat.events[1]
         assert.are.equal('Бочок', first.source.name)
@@ -693,7 +713,7 @@ describe('Structured journal', function()
             assert.is_true(kinds[kind], kind)
         end
         for _, spellId in ipairs({ 355, 694, 1161, 49560, 51399, 56222, 62124, 31789, 5209, 20736,
-            10278, 1044, 19752, 6940, 31821, 48817, 49016, 26994, 48477,
+            34600, 10278, 1044, 19752, 6940, 31821, 48817, 49016, 26994, 48477,
             475, 526, 527, 528, 552, 988, 1152, 2782, 4987, 10872, 32375, 32592, 51886 }) do
             assert.is_true(abilities[spellId], tostring(spellId))
         end
@@ -831,7 +851,7 @@ describe('Structured journal', function()
         assert.are.equal('current', addon.selectedCombatKind)
         assert.are.equal(addon.currentCombat, addon.displayedCombat)
         assert.is_true(shown)
-        assert.are.equal(67, #addon.currentCombat.events)
+        assert.are.equal(68, #addon.currentCombat.events)
         addon:SetJournalView('ERRORS')
         assert.is_true(#lines > 0)
         addon:SetJournalView('MISDIRECTION')

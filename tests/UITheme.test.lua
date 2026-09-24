@@ -477,9 +477,9 @@ describe('UI themes', function()
         for _, item in ipairs(addon.mainFrame.v2Items) do
             if item.highlighted then allErrors = allErrors + 1 end
         end
-        assert.are.equal(25, allErrors)
+        assert.are.equal(26, allErrors)
         addon:SetJournalView('ERRORS')
-        assert.are.equal(25, #addon.mainFrame.v2Items)
+        assert.are.equal(26, #addon.mainFrame.v2Items)
         for _, item in ipairs(addon.mainFrame.v2Items) do
             assert.is_false(item.highlighted)
         end

@@ -145,6 +145,7 @@ function Journal.Create(kind, event, severity, fields)
         amount = event.amount,
         missType = event.missType,
         extraSpellId = event.extraSpellId,
+        extraSpellName = event.extraSpellName,
     }
     for key, value in pairs(fields or {}) do entry[key] = Journal.Copy(value) end
     if not entry.text then
@@ -206,7 +207,15 @@ function Journal.Format(entry, neutralMessage)
         message = entry.target and formatEntityName(entry.target) or ""
     elseif entry.kind == "FIRST_DAMAGE" or entry.kind == "FIRST_HEAL" then
         message = string.format("%s по %s", descriptions[entry.kind], formatEntityName(entry.target, true))
-    elseif entry.kind == "SPELL_USE" or entry.kind == "DISPEL" or entry.kind == "RESURRECT" or
+    elseif entry.kind == "DISPEL" then
+        message = entry.target and formatEntityName(entry.target, true) or ""
+        local effect = entry.extraSpellName
+        if not effect and entry.extraSpellId and type(GetSpellInfo) == "function" then
+            effect = GetSpellInfo(entry.extraSpellId)
+        end
+        if not effect and entry.extraSpellId then effect = tostring(entry.extraSpellId) end
+        if effect then message = message .. (message ~= "" and " — " or "") .. "снято: " .. effect end
+    elseif entry.kind == "SPELL_USE" or entry.kind == "RESURRECT" or
         entry.kind == "MISDIRECTION_START" then
         message = entry.target and formatEntityName(entry.target, true) or ""
     else

@@ -134,12 +134,35 @@ describe('Structured journal', function()
         assert.are.same(store, saved.char.other.combatHistoryV2)
     end)
 
+    it('shows the dispelled effect from the combat log in live and saved records', function()
+        spells:handleEvent(blizzardEvent(1000, 'SPELL_DISPEL', 'priest', 'Жрец', 0x514,
+            'tank', 'Танк', 0x514, 988, 'Рассеивание заклинаний', 2,
+            74792, 'Пожирание души', 32, 'DEBUFF'))
+        local entry = addon.currentCombat.events[1]
+        assert.is_truthy(Journal.Format(entry):find('снято: Пожирание души', 1, true))
+        local saved = assert(loadstring('return ' .. serialize(entry)))()
+        _G.GetSpellInfo = function() return nil end
+        assert.is_truthy(Journal.Format(saved):find('снято: Пожирание души', 1, true))
+    end)
+
+    it('resolves old dispel records by ID and tolerates missing effect data', function()
+        local entry = Journal.Create('DISPEL', event('SPELL_DISPEL', 988, 'priest', 'tank'))
+        entry.extraSpellId = 74792
+        _G.GetSpellInfo = function(id) if id == 74792 then return 'Пожирание души' end end
+        assert.is_truthy(Journal.Format(entry):find('снято: Пожирание души', 1, true))
+        _G.GetSpellInfo = function() return nil end
+        assert.is_truthy(Journal.Format(entry):find('снято: 74792', 1, true))
+        entry.extraSpellId = nil
+        assert.is_nil(Journal.Format(entry):find('снято:', 1, true))
+    end)
+
     it('preserves timestamp, actors, classes and both spells through save/reload', function()
         mocks:SetUnitGUID('player', 'priest')
         _G.UnitClass = function() return 'Жрец', 'PRIEST' end
         local dispel = event('SPELL_DISPEL', 988, 'priest', 'tank')
         dispel.sourceClass = 'PRIEST'
         dispel.extraSpellId = 71289
+        dispel.extraSpellName = "Снятый эффект"
         spells:handleEvent(dispel)
         addon.currentCombat.startTime = 1000
         addon:FinishCombat('test')
@@ -150,6 +173,7 @@ describe('Structured journal', function()
         assert.are.equal(1000.125, saved.events[1].timestamp)
         assert.are.same({ guid = 'priest', name = 'priest', class = 'PRIEST' }, saved.events[1].source)
         assert.are.equal(71289, saved.events[1].extraSpellId)
+        assert.are.equal("Снятый эффект", saved.events[1].extraSpellName)
         assert.is_nil(saved.events[1].event)
         local expected = Journal.Copy(saved)
         addon.db = assert(loadstring('return ' .. serialize(addon.db)))()

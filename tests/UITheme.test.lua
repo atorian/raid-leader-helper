@@ -470,6 +470,24 @@ describe('UI themes', function()
         assert.are.equal(37, frame.v2Items[2].height)
     end)
 
+    it('shows the removed effect in every demo dispel row without spell lookup', function()
+        addon:CreateMainFrame()
+        local oldSpellInfo = GetSpellInfo
+        _G.GetSpellInfo = function() return nil end
+        addon:DemoJournal()
+        _G.GetSpellInfo = oldSpellInfo
+        local count = 0
+        for _, item in ipairs(addon.mainFrame.v2Items) do
+            if item.entry.kind == 'DISPEL' then
+                count = count + 1
+                assert.is_number(item.entry.extraSpellId)
+                assert.is_string(item.entry.extraSpellName)
+                assert.is_truthy(item.text:find('снято: ' .. item.entry.extraSpellName, 1, true))
+            end
+        end
+        assert.are.equal(13, count)
+    end)
+
     it('matches demo error counts to red rows in All and removes backgrounds in Errors', function()
         addon:CreateMainFrame()
         addon:DemoJournal()

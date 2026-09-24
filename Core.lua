@@ -2395,7 +2395,8 @@ function RLHelper:DemoJournal()
             { pullId = pullId, amount = 1000 } },
         { "SPELL_USE", players[5], nil, 31821 },
         { "TAUNT", players[1], boss, 355 },
-        { "DISPEL", players[3], players[1], 988 },
+        { "DISPEL", players[3], players[1], 988, nil,
+            { extraSpellId = 74792, extraSpellName = "Пожирание души" } },
         { "TAUNT", players[2], boss, 20736, "TACTIC_VIOLATION" },
         { "SPELL_USE", players[5], players[1], 10278, "TACTIC_VIOLATION" },
         { "MALLEABLE_GOO", boss, players[4], 70853, "TACTIC_VIOLATION" },
@@ -2445,7 +2446,13 @@ function RLHelper:DemoJournal()
         { 528, players[3] }, { 552, players[3] }, { 1152, players[5] }, { 2782, druid },
         { 4987, players[5] }, { 10872, players[3] }, { 32375, players[3] },
         { 32592, players[3] }, { 51886, shaman } }) do
-        add("DISPEL", spell[2], players[1], spell[1])
+        local effect = { extraSpellId = 74792, extraSpellName = "Пожирание души" }
+        if spell[1] == 475 or spell[1] == 2782 or spell[1] == 51886 then
+            effect = { extraSpellId = 74795, extraSpellName = "Метка пожирания" }
+        elseif spell[1] == 526 or spell[1] == 528 or spell[1] == 552 or spell[1] == 1152 or spell[1] == 10872 then
+            effect = { extraSpellId = 67934, extraSpellName = "Озноб" }
+        end
+        add("DISPEL", spell[2], players[1], spell[1], nil, effect)
     end
     add("FIRST_HEAL", players[3], { guid = "demo-valithria", name = "Валитрия Сноходица" }, 48782, nil, nil, 12000)
 

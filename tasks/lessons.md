@@ -50,3 +50,5 @@
 - A repeatable client crash during theme switching is not covered by Lua frame mocks. Avoid detaching and reusing button-owned Texture objects: change their contents in place, preserve the original texture path/blend, and leave visibility to the button state. Test repeated switches and missing template textures, and require an in-client retest before claiming the native crash is fixed. The user confirmed on 2026-09-23 that updating texture contents in place resolved the repeatable crash.
 
 - Mechanic deaths use a skull prefix and a specific cause followed by the mechanic icon. Spell-less Lady spirit melee events need a fixed spirit icon. Demo starts in All so informational druid Cyclone control is visible even after Errors was selected.
+
+- Release notes must compare the final version with the previous published tag and its release description. Omit fixes for regressions introduced and resolved only during unreleased development, temporary switches, reverts, test counts, and unchanged capabilities. Describe user-visible differences.

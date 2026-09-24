@@ -39,12 +39,14 @@
 - V2 uses 20px icons after the user requested a small increase from 18px; keep a compact 21px minimum row, a 1px measured-height allowance, and allow wrapping.
 - The V2 demo should include two Lady Deathwhisper spirit hits with a summary and two Halion blade deaths, using the real source/target shapes (`Мстительный дух` SWING_DAMAGE and `Темный шар` SPELL_DAMAGE followed by player UNIT_DIED). Match each demo entry's fields, text, and icon to what the tracker actually emits; do not add demo-only annotations. Compare the demo entries to records produced by the handlers in tests.
 
-- V2 summaries are informational totals, not tactical errors: exclude spirit/goo/gas summaries from Errors and red backgrounds. Tracked Halion mechanic deaths and vortex hits on healers are violations; vortex misses remain informational. Keep demo severity and filters consistent with real tracker output.
+- V2 summaries are informational totals, not tactical errors: exclude spirit/goo/gas summaries from Errors and red backgrounds. Tracked Halion mechanic deaths and vortex hits on healers are violations; vortex misses/immunities on healers are violations too. Keep demo severity and filters consistent with real tracker output.
 
-- Distinguish Lady Deathwhisper Cyclone (`CYCLONE_APPLIED`/`CYCLONE_MISSED`, informational) from Blood Princes knockbacks (`VORTEX_HIT`, violation; misses informational). Do not classify by the ambiguous nickname «вихрь».
+- Distinguish Lady Deathwhisper Cyclone (`CYCLONE_APPLIED`/`CYCLONE_MISSED`, informational) from Blood Princes knockbacks (`VORTEX_HIT`, violation; misses/immunities on healers are violations too). Do not classify by the ambiguous nickname «вихрь».
 - V2 demo must cover every journal kind and every tracked SpellTracker ability, including dispels and resurrects, plus hunter and rogue pulls; keep its records consistent with live tracker shapes.
 - Align the top controls and GP footer to the same 2px side margins; V2 row text has no extra horizontal inset.
 
 - V2 journal rows run oldest to newest from top to bottom. Each newly displayed event immediately scrolls to the bottom, even after manual scrolling; opening a combat or filter also shows the latest matching rows. Preserve the newest 1000 matching events when limiting rendered rows.
 
 - A repeatable client crash during theme switching is not covered by Lua frame mocks. Avoid detaching and reusing button-owned Texture objects: change their contents in place, preserve the original texture path/blend, and leave visibility to the button state. Test repeated switches and missing template textures, and require an in-client retest before claiming the native crash is fixed. The user confirmed on 2026-09-23 that updating texture contents in place resolved the repeatable crash.
+
+- Mechanic deaths use a skull prefix and a specific cause followed by the mechanic icon. Spell-less Lady spirit melee events need a fixed spirit icon. Demo starts in All so informational druid Cyclone control is visible even after Errors was selected.

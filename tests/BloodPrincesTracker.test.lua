@@ -122,7 +122,7 @@ describe('BloodPrincesTracker', function()
 
         BloodPrincesTracker:handleEvent(vortexMiss("Источник", "Прист"))
 
-        assertRecord(log, { sourceName = "Источник", targetName = "Прист", spellId = 72817, kind = "VORTEX_MISSED", type = "INFO" })
+        assertRecord(log, { sourceName = "Источник", targetName = "Прист", spellId = 72817, kind = "VORTEX_MISSED", type = "TACTIC_VIOLATION" })
     end)
 
     it('does not filter the source player', function()

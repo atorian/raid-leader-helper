@@ -3,6 +3,15 @@ local Journal = {}
 Journal.MAX_COMBATS = 30
 Journal.MAX_EVENTS = 20000
 local FIRST_DAMAGE_ICON = "Interface\\Icons\\Ability_SteelMelee"
+local DEATH_ICON = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8"
+local SPIRIT_ICON = "Interface\\Icons\\spell_shadow_deathsembrace"
+local deathReasons = {
+    [75879] = "Умер от метеорита",
+    [75949] = "Умер в луже",
+    [77844] = "Умер в лезвиях",
+    [77845] = "Умер в лезвиях",
+    [77846] = "Умер в лезвиях",
+}
 local classByGUID = {}
 local classByName = {}
 local CLASS_COLORS = {
@@ -92,9 +101,9 @@ local descriptions = {
     VORTEX_HIT = "Вихрь по хилеру",
     VORTEX_MISSED = "Вихрь не попал",
     BLOODBOLT_SPLASH = "Сплеш кровавой стрелы",
-    MANA_BARRIER_REMOVED = "Леди: щит разбит",
+    MANA_BARRIER_REMOVED = "щит разбит",
     MIND_CONTROL = "Контроль разума",
-    CYCLONE_APPLIED = "Циклон",
+    CYCLONE_APPLIED = "Контроль циклоном",
     CYCLONE_MISSED = "Циклон не сработал",
     SPIRIT_HIT = "Взорвал духа",
     SPIRIT_MISSED = "Дух промахнулся автоатакой",
@@ -139,7 +148,7 @@ function Journal.Create(kind, event, severity, fields)
     }
     for key, value in pairs(fields or {}) do entry[key] = Journal.Copy(value) end
     if not entry.text then
-        local parts = { descriptions[kind] or kind }
+        local parts = { kind == "MECHANIC_DEATH" and deathReasons[entry.spellId] or descriptions[kind] or kind }
         if kind == "FIRST_DAMAGE" or kind == "FIRST_HEAL" then
             if entry.target then parts[#parts + 1] = "по " .. (entry.target.name or "?") end
         elseif entry.target and not playerTargetKinds[kind] then
@@ -156,7 +165,7 @@ function Journal.Visible(entry, view)
     if view == "MISDIRECTION" then return entry.pullId ~= nil and not entry.hidden end
     if view == "ERRORS" then
         return entry.type == "TACTIC_VIOLATION" or entry.kind == "MECHANIC_DEATH" or
-            entry.kind == "VORTEX_HIT"
+            entry.kind == "VORTEX_HIT" or entry.kind == "VORTEX_MISSED"
     end
     return entry.kind ~= "MISDIRECTION_DAMAGE"
 end
@@ -165,6 +174,10 @@ function Journal.Format(entry, neutralMessage)
     local spellIcon = ""
     if entry.kind == "FIRST_DAMAGE" then
         spellIcon = "|T" .. FIRST_DAMAGE_ICON .. ":24:24:0:-2|t"
+    elseif entry.kind == "MECHANIC_DEATH" then
+        spellIcon = "|T" .. DEATH_ICON .. ":24:24:0:-2|t"
+    elseif entry.kind == "SPIRIT_HIT" or entry.kind == "SPIRIT_MISSED" then
+        spellIcon = "|T" .. SPIRIT_ICON .. ":24:24:0:-2|t"
     elseif entry.icon then
         spellIcon = "|T" .. entry.icon .. ":24:24:0:-2|t"
     elseif entry.spellId and type(GetSpellInfo) == "function" then
@@ -174,7 +187,13 @@ function Journal.Format(entry, neutralMessage)
 
     local actor = playerTargetKinds[entry.kind] and entry.target and entry.target.class and entry.target or entry.source
     local message
-    if entry.kind == "MISDIRECTION_DAMAGE" then
+    if entry.kind == "MECHANIC_DEATH" then
+        message = deathReasons[entry.spellId] or entry.text or descriptions.MECHANIC_DEATH
+        if entry.spellId and type(GetSpellInfo) == "function" then
+            local _, _, texture = GetSpellInfo(entry.spellId)
+            if texture then message = message .. " |T" .. texture .. ":24:24:0:-2|t" end
+        end
+    elseif entry.kind == "MISDIRECTION_DAMAGE" then
         local target = formatEntityName(entry.target)
         message = string.format("%s %s", target, entry.amount or 0)
     elseif entry.kind == "MISDIRECTION_SUMMARY" then

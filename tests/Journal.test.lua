@@ -539,14 +539,14 @@ describe('Structured journal', function()
         addon:SetJournalView('ERRORS')
         local expected = {}
         for _, kind in ipairs({ 'TAUNT', 'SPELL_USE', 'SPIRIT_HIT', 'SHADOW_TRAP',
-            'VORTEX_HIT', 'MECHANIC_DEATH' }) do
-            local severity = (kind == 'MECHANIC_DEATH' or kind == 'VORTEX_HIT') and 'INFO' or 'TACTIC_VIOLATION'
+            'VORTEX_HIT', 'VORTEX_MISSED', 'MECHANIC_DEATH' }) do
+            local severity = (kind == 'MECHANIC_DEATH' or kind == 'VORTEX_HIT' or kind == 'VORTEX_MISSED') and 'INFO' or 'TACTIC_VIOLATION'
             local entry = Journal.Create(kind, event('SPELL_DAMAGE'), severity)
             addon:OnCombatLogEvent(entry)
             expected[#expected + 1] = Journal.Format(entry, true)
         end
         for _, kind in ipairs({ 'FIRST_DAMAGE', 'SPELL_USE', 'TAUNT', 'DISPEL', 'RESURRECT',
-            'MIND_CONTROL', 'CYCLONE_APPLIED', 'VORTEX_MISSED',
+            'MIND_CONTROL', 'CYCLONE_APPLIED',
             'SPIRIT_SUMMARY', 'MALLEABLE_GOO_SUMMARY', 'CHOKING_GAS_SUMMARY' }) do
             addon:OnCombatLogEvent(Journal.Create(kind, event('SPELL_CAST_SUCCESS')))
         end
@@ -610,7 +610,7 @@ describe('Structured journal', function()
             if Journal.Visible(entry, 'ERRORS') then errors = errors + 1 end
             if Journal.Visible(entry, 'MISDIRECTION') then misdirections = misdirections + 1 end
         end
-        assert.are.equal(24, errors)
+        assert.are.equal(25, errors)
         assert.are.equal(6, misdirections)
         local first = addon.currentCombat.events[1]
         assert.are.equal('Бочок', first.source.name)
@@ -646,7 +646,7 @@ describe('Structured journal', function()
             assert.are.equal('TACTIC_VIOLATION', death.type)
             assert.are.equal('Темный шар', death.source.name)
             assert.are.equal(77846, death.spellId)
-            assert.are.equal('Смерть после попадания механики', death.text)
+            assert.are.equal('Умер в лезвиях', death.text)
             assert.is_nil(death.icon)
             assert.is_truthy(Journal.Format(death):find(death.target.name, 1, true))
         end
@@ -755,8 +755,8 @@ describe('Structured journal', function()
             princes:handleEvent(raw)
             local actual = addon.currentCombat.events[#addon.currentCombat.events]
             assert.are.equal(i == 1 and 'VORTEX_HIT' or 'VORTEX_MISSED', actual.kind)
-            assert.are.equal(i == 1 and 'TACTIC_VIOLATION' or 'INFO', actual.type)
-            assert.are.equal(i == 1, Journal.Visible(actual, 'ERRORS'))
+            assert.are.equal('TACTIC_VIOLATION', actual.type)
+            assert.is_true(Journal.Visible(actual, 'ERRORS'))
             for _, field in ipairs({ 'kind', 'type', 'source', 'target', 'spellId', 'amount', 'missType', 'text', 'icon' }) do
                 assert.are.same(demoEntry[field], actual[field])
             end
@@ -777,6 +777,50 @@ describe('Structured journal', function()
             assert.are.equal('TACTIC_VIOLATION', entry.type)
             assert.is_true(Journal.Visible(entry, 'ERRORS'))
         end
+    end)
+
+    it('renders mechanic deaths with a skull followed by the specific cause and spell icon', function()
+        _G.GetSpellInfo = function(id) return 'Spell', nil, 'Cause' .. id end
+        for id, reason in pairs({
+            [75879] = 'Умер от метеорита', [75949] = 'Умер в луже',
+            [77844] = 'Умер в лезвиях', [77845] = 'Умер в лезвиях', [77846] = 'Умер в лезвиях',
+        }) do
+            local entry = Journal.Create('MECHANIC_DEATH', event('UNIT_DIED', id), 'TACTIC_VIOLATION')
+            assert.are.equal(reason, entry.text)
+            entry.text = 'Смерть после попадания механики' -- Previously saved records.
+            for _, record in ipairs({ entry, Journal.Copy(entry) }) do
+                local text = Journal.Format(record, true)
+                local skull = assert(text:find('UI-RaidTargetingIcon_8:24:24:0:-2|t', 1, true))
+                local cause = assert(text:find(reason .. ' |TCause' .. id .. ':24:24:0:-2|t', 1, true))
+                assert.is_true(skull < cause)
+            end
+        end
+    end)
+
+    it('renders a spirit icon for spell-less melee events live and from history', function()
+        for _, kind in ipairs({ 'SPIRIT_HIT', 'SPIRIT_MISSED' }) do
+            local entry = Journal.Create(kind, event('SWING_DAMAGE'))
+            entry.spellId = nil
+            for _, record in ipairs({ entry, Journal.Copy(entry) }) do
+                assert.is_truthy(Journal.Format(record):find('spell_shadow_deathsembrace:24:24:0:-2|t', 1, true))
+            end
+        end
+    end)
+
+    it('opens demo in All so informational druid control is visible after using Errors', function()
+        addon:SetJournalView('ERRORS')
+        addon.mainFrame.Show = function() end
+        addon:HandleSlashCommand('demo')
+        assert.are.equal('ALL', addon.journalView)
+        local found = false
+        for _, text in ipairs(lines) do
+            if text:find('Контроль циклоном', 1, true) then
+                assert.is_truthy(text:find('Лист', 1, true))
+                assert.is_truthy(text:find('Чародей', 1, true))
+                found = true
+            end
+        end
+        assert.is_true(found)
     end)
 
     it('opens the V2 demo from a saved combat so its filters show the new records', function()

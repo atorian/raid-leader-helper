@@ -2271,6 +2271,7 @@ function RLHelper:HandleSlashCommand(input)
 end
 
 function RLHelper:DemoJournal()
+    self:SetJournalView("ALL")
     local players = {
         { guid = "demo-warrior", name = "Бочок", class = "WARRIOR" },
         { guid = "demo-hunter", name = "Стрелок", class = "HUNTER" },
@@ -2312,7 +2313,7 @@ function RLHelper:DemoJournal()
         { "MECHANIC_DEATH", orb, players[4], 77846, "TACTIC_VIOLATION" },
         { "MECHANIC_DEATH", orb, players[2], 77846, "TACTIC_VIOLATION" },
         { "VORTEX_HIT", players[4], players[3], 72817, "TACTIC_VIOLATION", nil, 5000 },
-        { "VORTEX_MISSED", players[4], players[3], 72817, nil, { missType = "IMMUNE" } },
+        { "VORTEX_MISSED", players[4], players[3], 72817, "TACTIC_VIOLATION", { missType = "IMMUNE" } },
     }
     local warrior = { guid = "demo-warrior-dps", name = "Клинок", class = "WARRIOR" }
     local deathKnight = { guid = "demo-dk", name = "Мороз", class = "DEATHKNIGHT" }

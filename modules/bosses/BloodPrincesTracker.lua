@@ -59,7 +59,7 @@ function BloodPrincesTracker:handleEvent(event)
     end
 
     RLHelperJournal.Log(self.log, event.event == "SPELL_MISSED" and "VORTEX_MISSED" or "VORTEX_HIT", event,
-        event.event == "SPELL_DAMAGE" and "TACTIC_VIOLATION" or "INFO")
+        "TACTIC_VIOLATION")
 end
 
 return BloodPrincesTracker

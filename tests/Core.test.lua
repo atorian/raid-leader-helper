@@ -748,6 +748,7 @@ describe("RLHelper settings helpers", function()
         end
         local originalCreateMainFrame = RLHelper.CreateMainFrame
         local originalCreateOptionsPanel = RLHelper.CreateOptionsPanel
+        local originalCreateMinimapButton = RLHelper.CreateMinimapButton
         local originalRegisterChatCommand = RLHelper.RegisterChatCommand
         local originalMainFrame = RLHelper.mainFrame
 
@@ -758,6 +759,8 @@ describe("RLHelper settings helpers", function()
             }
         end
         RLHelper.CreateOptionsPanel = function()
+        end
+        RLHelper.CreateMinimapButton = function()
         end
         RLHelper.RegisterChatCommand = function()
         end
@@ -773,6 +776,7 @@ describe("RLHelper settings helpers", function()
 
         RLHelper.CreateMainFrame = originalCreateMainFrame
         RLHelper.CreateOptionsPanel = originalCreateOptionsPanel
+        RLHelper.CreateMinimapButton = originalCreateMinimapButton
         RLHelper.RegisterChatCommand = originalRegisterChatCommand
         RLHelper.mainFrame = originalMainFrame
 

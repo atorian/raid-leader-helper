@@ -497,6 +497,7 @@ function RLHelper:OnInitialize()
 
     self:CreateMainFrame()
     self:CreateOptionsPanel()
+    self:CreateMinimapButton()
 
     self.mainFrame:Show()
     self:RefreshMainFrameVisibility()
@@ -2020,6 +2021,46 @@ function RLHelper:CreateMainFrame()
     UITheme.Apply(self)
     self:SendMessage("RLHelper_MainFrameCreated", frame)
     frame:Hide()
+end
+
+function RLHelper:CreateMinimapButton()
+    local button = CreateFrame("Button", "RLHelperMinimapButton", Minimap)
+    button:SetSize(31, 31)
+    button:SetFrameStrata("MEDIUM")
+    button:SetFrameLevel(8)
+    button:SetPoint("CENTER", Minimap, "BOTTOMLEFT", 18, 18)
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    button:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+
+    local icon = button:CreateTexture(nil, "BACKGROUND")
+    icon:SetSize(20, 20)
+    icon:SetPoint("TOPLEFT", 7, -5)
+    icon:SetTexture("Interface\\Icons\\spell_magic_polymorphchicken")
+    icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
+
+    local border = button:CreateTexture(nil, "OVERLAY")
+    border:SetSize(53, 53)
+    border:SetPoint("TOPLEFT")
+    border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+
+    button:SetScript("OnClick", function(_, mouseButton)
+        if mouseButton == "LeftButton" then
+            self:SetMainFrameVisible(not self.mainFrame:IsShown())
+        elseif mouseButton == "RightButton" then
+            self:OpenOptionsPanel()
+        end
+    end)
+    button:SetScript("OnEnter", function(frame)
+        GameTooltip:SetOwner(frame, "ANCHOR_LEFT")
+        GameTooltip:AddLine("RLHelper")
+        GameTooltip:AddLine("Левый клик — показать/скрыть окно", 1, 1, 1)
+        GameTooltip:AddLine("Правый клик — настройки", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    self.minimapButton = button
 end
 
 function RLHelper:CreateOptionsPanel()

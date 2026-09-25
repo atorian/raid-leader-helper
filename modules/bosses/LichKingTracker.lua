@@ -39,4 +39,13 @@ function LichKingTracker:handleEvent(event)
     RLHelperJournal.Log(self.log, "SHADOW_TRAP", event, "TACTIC_VIOLATION")
 end
 
+LichKingTracker.demoOrder = 7
+function LichKingTracker:RunDemo(demo)
+    self:reset()
+    local boss = demo:Boss(36597, "Король-лич")
+    demo:Event(self, "SPELL_DAMAGE", boss, demo.players.hunter, SHADOW_TRAP_DAMAGE, { amount = 15000 })
+    demo:Event(self, "SPELL_CAST_SUCCESS", boss, demo.players.tank, RAGING_SPIRIT)
+end
+
+
 return LichKingTracker

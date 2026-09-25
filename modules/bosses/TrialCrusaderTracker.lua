@@ -401,4 +401,12 @@ function TrialCrusaderTracker:handleEvent(event)
     self:AreChampionMarksDone()
 end
 
+TrialCrusaderTracker.demoOrder = 8
+function TrialCrusaderTracker:RunDemo(demo)
+    self:reset()
+    demo:Event(self, "SPELL_DAMAGE", demo:Boss(34797, "Ледяной Рев"), demo.players.mage,
+        ICEHOWL_TRAMPLE, { amount = 30000 })
+end
+
+
 return TrialCrusaderTracker

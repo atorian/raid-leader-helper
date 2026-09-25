@@ -126,7 +126,7 @@ function MisdirectionTracker:handleEvent(event)
         }
         self.nextJournalPullId = self.nextJournalPullId + 1
         self.journalPulls[guid] = pull
-        if RLHelper.inCombat then self:startJournalPull(pull) end
+        if (self.context or RLHelper).inCombat then self:startJournalPull(pull) end
         return
     end
     if event.event == "SPELL_AURA_REMOVED" and
@@ -145,5 +145,16 @@ function MisdirectionTracker:handleEvent(event)
             (pull.entry.spellId == MISDIRECTION_START_SPELL_ID and not isHunterDamageVisible(event.spellId))
     }))
 end
+
+MisdirectionTracker.demoOrder = 2
+function MisdirectionTracker:RunDemo(demo)
+    self:reset()
+    local p = demo.players
+    local boss = demo:Boss(36678, "Профессор Мерзоцид")
+    demo:Event(self, "SPELL_CAST_SUCCESS", p.hunter, p.tank, MISDIRECTION_START_SPELL_ID)
+    demo:Event(self, "SPELL_DAMAGE", p.hunter, boss, 53209, { amount = 1000 })
+    demo:Event(self, "SPELL_AURA_REMOVED", p.hunter, p.hunter, MISDIRECTION_SPELL_ID)
+end
+
 
 return MisdirectionTracker

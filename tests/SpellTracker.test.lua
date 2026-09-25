@@ -24,6 +24,25 @@ describe('SpellTracker', function()
             RLHelper.currentCombat.firstEnemy = nil
         end)
 
+        for _, scenario in ipairs({
+            { 'SPELL_AURA_APPLIED', 'TAUNT', { 355, 694, 1161, 49560, 51399, 56222, 6795, 5209 } },
+            { 'SPELL_CAST_SUCCESS', 'TAUNT', { 31789, 20736 } },
+            { 'SPELL_CAST_SUCCESS', 'SPELL_USE', { 1044, 19752, 31821, 34600 } },
+            { 'SPELL_AURA_APPLIED', 'SPELL_USE', { 10278, 6940, 49016 } },
+            { 'SPELL_RESURRECT', 'RESURRECT', { 26994, 48477 } },
+            { 'SPELL_DISPEL', 'DISPEL', { 475, 526, 527, 528, 552, 988, 1152, 2782, 4987, 10872, 32375, 32592, 51886 } },
+        }) do
+            for _, id in ipairs(scenario[3]) do
+                it('tracks ' .. scenario[1] .. ' for spell ' .. id, function()
+                    dispatch(SpellTracker, 'COMBAT_LOG_EVENT_UNFILTERED', GetTime(), scenario[1],
+                        'source', 'Source', 0x514, 'target', 'Target', 0xa48,
+                        id, 'Spell', 1, 74792, 'Пожирание души', 32, 'DEBUFF')
+                    assert.spy(log).was_called(1)
+                    assertRecord(log, { spellId = id, kind = scenario[2] })
+                end)
+            end
+        end
+
         it('logs first damage to enemy', function()
             dispatch(SpellTracker, Builder:New():FromPlayer("TestPlayer"):ToEnemy("TestTarget")
                 :SpellDamage(12345, "Test Spell", 100):Build())
@@ -73,6 +92,13 @@ describe('SpellTracker', function()
                 :ApplyAura(355, "Taunt"):Build())
 
             assertRecord(log, { spellId = 355, sourceName = "TestWarrior", targetName = "TestTarget", kind = "TAUNT", type = "INFO" })
+        end)
+
+        it('still logs druid Challenging Roar', function()
+            dispatch(SpellTracker, Builder:New():FromPlayer("TestDruid"):ToEnemy("TestTarget")
+                :ApplyAura(5209, "Challenging Roar"):Build())
+
+            assertRecord(log, { spellId = 5209, sourceName = "TestDruid", targetName = "TestTarget", kind = "TAUNT", type = "INFO" })
         end)
 
         it('logs death grip spell cast', function()

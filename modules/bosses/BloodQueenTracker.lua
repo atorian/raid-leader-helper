@@ -35,4 +35,10 @@ function BloodQueenTracker:handleEvent(event)
     RLHelperJournal.Log(self.log, "BLOODBOLT_SPLASH", event, "TACTIC_VIOLATION")
 end
 
+BloodQueenTracker.demoOrder = 6
+function BloodQueenTracker:RunDemo(demo)
+    demo:Event(self, "SPELL_DAMAGE", demo.players.mage, demo.players.priest, 71483, { amount = 9000 })
+end
+
+
 return BloodQueenTracker

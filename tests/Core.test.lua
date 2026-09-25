@@ -1380,50 +1380,22 @@ describe("RLHelper settings helpers", function()
         assert.is_nil(table.concat(printed, "\n"):find("/rlh fill", 1, true))
     end)
 
-    it("starts demo combat before populating journal events", function()
-        local oldDemo, oldShow, oldVisible = RLHelper.DemoJournal, RLHelper.ShowCurrentCombat, RLHelper.SetMainFrameVisible
+    it("opens demo without starting or ending a live combat", function()
+        local oldDemo, oldVisible = RLHelper.DemoJournal, RLHelper.SetMainFrameVisible
         finally(function()
-            RLHelper.DemoJournal, RLHelper.ShowCurrentCombat, RLHelper.SetMainFrameVisible = oldDemo, oldShow, oldVisible
+            RLHelper.DemoJournal, RLHelper.SetMainFrameVisible = oldDemo, oldVisible
         end)
-        local populated = false
+        local populated, shown = false, false
         RLHelper.inCombat = false
         RLHelper.combatEndRequestedAt = nil
-        RLHelper.StartCombat = function(_, reason)
-            assert.are.equal("demo", reason)
-            RLHelper.inCombat = true
-        end
-        RLHelper.ShowCurrentCombat = function() end
-        RLHelper.SetMainFrameVisible = function() end
-        RLHelper.DemoJournal = function()
-            assert.is_true(RLHelper.inCombat)
-            populated = true
-        end
+        RLHelper.StartCombat = function() error("Demo must not start live combat") end
+        RLHelper.SetMainFrameVisible = function() shown = true end
+        RLHelper.DemoJournal = function() populated = true end
         RLHelper:HandleSlashCommand("demo")
         assert.is_true(populated)
-        assert.is_not_nil(RLHelper.combatEndRequestedAt)
-    end)
-
-    it("requests demo combat end after populating journal events", function()
-        local oldDemo, oldShow, oldVisible = RLHelper.DemoJournal, RLHelper.ShowCurrentCombat, RLHelper.SetMainFrameVisible
-        finally(function()
-            RLHelper.DemoJournal, RLHelper.ShowCurrentCombat, RLHelper.SetMainFrameVisible = oldDemo, oldShow, oldVisible
-        end)
-        local populated = false
-        RLHelper.inCombat = false
-        RLHelper.combatEndRequestedAt = nil
-        RLHelper.StartCombat = function(_, reason)
-            assert.are.equal("demo", reason)
-            RLHelper.inCombat = true
-        end
-        RLHelper.ShowCurrentCombat = function() end
-        RLHelper.SetMainFrameVisible = function() end
-        RLHelper.DemoJournal = function()
-            assert.is_true(RLHelper.inCombat)
-            populated = true
-        end
-        RLHelper:HandleSlashCommand("demo")
-        assert.is_true(populated)
-        assert.is_not_nil(RLHelper.combatEndRequestedAt)
+        assert.is_true(shown)
+        assert.is_false(RLHelper.inCombat)
+        assert.is_nil(RLHelper.combatEndRequestedAt)
     end)
 
     it("allows manual show outside a group when displayOnlyInGroup is enabled", function()

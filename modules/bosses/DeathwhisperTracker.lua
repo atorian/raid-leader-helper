@@ -28,7 +28,7 @@ function DeathwhisperTracker:OnEnable()
     RLHelper:Debug("DeathwhisperTracker: Включен")
 end
 
-local function isLadyDeathwhisperCombat()
+local function isLadyDeathwhisperCombat(RLHelper)
     return RLHelper.currentCombat and RLHelper.currentCombat.firstEnemy == LADY_DEATHWHISPER
 end
 
@@ -116,7 +116,7 @@ function DeathwhisperTracker:handleEvent(eventData)
         return
     end
 
-    if isLadyDeathwhisperCombat() and eventData.spellId == CYCLONE and eventData.sourceName and eventData.destName then
+    if isLadyDeathwhisperCombat(self.context or RLHelper) and eventData.spellId == CYCLONE and eventData.sourceName and eventData.destName then
         if eventData.event == "SPELL_AURA_APPLIED" then
             RLHelperJournal.Log(self.log, "CYCLONE_APPLIED", eventData)
             return
@@ -164,5 +164,25 @@ function DeathwhisperTracker:handleEvent(eventData)
         return
     end
 end
+
+DeathwhisperTracker.demoOrder = 4
+function DeathwhisperTracker:RunDemo(demo)
+    self.currentSpirits, self.report = {}, {}
+    local p = demo.players
+    local boss = demo:Boss(36855, LADY_DEATHWHISPER)
+    demo.currentCombat.firstEnemy = LADY_DEATHWHISPER
+    demo:Event(self, "SPELL_AURA_REMOVED", boss, boss, LADY_DEATHWHISPER_MANA_BARRIER)
+    demo:Event(self, "SPELL_CAST_SUCCESS", boss, p.mage, LADY_DEATHWHISPER_DOMINATE_MIND)
+    demo:Event(self, "SPELL_AURA_APPLIED", p.druid, p.mage, CYCLONE)
+    demo:Event(self, "SPELL_MISSED", p.druid, p.mage, CYCLONE, { missType = "IMMUNE" })
+    for i, target in ipairs({ p.mage, p.hunter }) do
+        local spirit = { guid = "demo-spirit-" .. i, name = "Мстительный дух" }
+        demo:Event(self, "SPELL_SUMMON", boss, spirit, 71426)
+        demo:Event(self, i == 2 and "SWING_MISSED" or "SWING_DAMAGE", spirit, target, nil,
+            i == 2 and { missType = "DODGE" } or { amount = 344 })
+    end
+    self:summarizeCombat()
+end
+
 
 return DeathwhisperTracker

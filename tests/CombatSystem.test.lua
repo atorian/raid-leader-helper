@@ -295,6 +295,36 @@ describe("Боевая система", function()
         assert.is_nil(RLHelper.currentCombat.firstEnemy)
     end)
 
+    it("records a party druid Growl once in the journal", function()
+        local oldLog = SpellTracker.log
+        local oldAssignments, oldHasAssignments = RLHelper.groupAssignments, RLHelper.hasTankAssignments
+        finally(function()
+            SpellTracker.log = oldLog
+            SpellTracker:reset()
+            RLHelper.groupAssignments, RLHelper.hasTankAssignments = oldAssignments, oldHasAssignments
+        end)
+        M.partySize = 4
+        M:SetUnitGUID("party1", "druid")
+        RLHelper:RefreshGroupRoster()
+        SpellTracker:reset()
+        SpellTracker.log = function(message) RLHelper:OnCombatLogEvent(message) end
+        setBossModules({ SpellTracker })
+
+        for _, subevent in ipairs({ "SPELL_CAST_SUCCESS", "SPELL_AURA_APPLIED", "SPELL_AURA_REMOVED" }) do
+            RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 100, subevent,
+                "druid", "Медведь", 0x512, "mob", "Противник", 0xa48, 6795, "Рык", 1, "DEBUFF")
+        end
+
+        assert.are.equal(1, #RLHelper.currentCombat.events)
+        local entry = RLHelper.currentCombat.events[1]
+        assert.are.equal("TAUNT", entry.kind)
+        assert.are.equal("INFO", entry.type)
+        assert.are.equal(6795, entry.spellId)
+        assert.are.equal("Медведь", entry.source.name)
+        assert.are.equal("Противник", entry.target.name)
+        assert.are.same({ RLHelperJournal.Format(entry) }, displayedMessages)
+    end)
+
     it("сохраняет отслеживаемые бафы игроков до начала боя", function()
         M.UnitAffectingCombat1 = false
         SpellTracker:OnInitialize()

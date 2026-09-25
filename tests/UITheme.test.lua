@@ -1,5 +1,17 @@
 require('tests.mocks')
-local addon = require('Core')
+local addon = require('../Core')
+require('../lib/blizzardEvent')
+require('../lib/CombatFilters')
+require('../data/BossIds')
+require('../modules/SpellTracker')
+require('../modules/Misdirection')
+require('../modules/bosses/DeathwhisperTracker')
+require('../modules/bosses/PutricideTracker')
+require('../modules/bosses/BloodPrincesTracker')
+require('../modules/bosses/BloodQueenTracker')
+require('../modules/bosses/LichKingTracker')
+require('../modules/bosses/TrialCrusaderTracker')
+require('../modules/bosses/HalionTracker')
 local Theme = addon.UITheme
 
 describe('UI themes', function()
@@ -399,6 +411,8 @@ describe('UI themes', function()
         button.scripts.OnDragStop(button)
         assert.is_false(frame.moving)
         assert.is_false(button.visible)
+        show('TRAMPLE_HIT', 'Boss', 'Hunter')
+        assert.are.equal('/targetexact [nocombat] Hunter', button.attributes.macrotext1)
         show('SHADOW_TRAP', 'Boss', 'Mage')
         assert.are.equal('/targetexact [nocombat] Mage', button.attributes.macrotext1)
         button.scripts.OnMouseWheel(button, 1)
@@ -485,7 +499,7 @@ describe('UI themes', function()
                 assert.is_truthy(item.text:find('снято: ' .. item.entry.extraSpellName, 1, true))
             end
         end
-        assert.are.equal(13, count)
+        assert.are.equal(1, count)
     end)
 
     it('matches demo error counts to red rows in All and removes backgrounds in Errors', function()
@@ -495,9 +509,9 @@ describe('UI themes', function()
         for _, item in ipairs(addon.mainFrame.v2Items) do
             if item.highlighted then allErrors = allErrors + 1 end
         end
-        assert.are.equal(26, allErrors)
+        assert.are.equal(10, allErrors)
         addon:SetJournalView('ERRORS')
-        assert.are.equal(26, #addon.mainFrame.v2Items)
+        assert.are.equal(10, #addon.mainFrame.v2Items)
         for _, item in ipairs(addon.mainFrame.v2Items) do
             assert.is_false(item.highlighted)
         end
@@ -552,6 +566,7 @@ describe('UI themes', function()
         }
         addon:CreateMainFrame()
         addon:DemoJournal()
+        addon:SetJournalView('MISDIRECTION')
         local summary
         for _, row in ipairs(addon.mainFrame.v2Rows) do
             if row.entry and row.entry.kind == 'MISDIRECTION_SUMMARY' then summary = row; break end
@@ -559,7 +574,7 @@ describe('UI themes', function()
         assert.is_not_nil(summary)
         summary.scripts.OnEnter(summary)
         _G.GameTooltip = previousTooltip
-        assert.are.same({ { 'Профессор Мерзоцид', '1500' } }, details)
+        assert.are.same({ { 'Профессор Мерзоцид', '1000' } }, details)
     end)
 
     it('loads a saved theme and themes GP buttons created later, including disabled undo', function()

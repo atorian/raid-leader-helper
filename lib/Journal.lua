@@ -98,9 +98,9 @@ local descriptions = {
     SPELL_USE = "Применение способности",
     DISPEL = "Рассеивание",
     RESURRECT = "Боевое воскрешение",
-    VORTEX_HIT = "Вихрь по хилеру",
-    VORTEX_MISSED = "Вихрь не попал",
-    BLOODBOLT_SPLASH = "Сплеш кровавой стрелы",
+    VORTEX_HIT = "Откунул вихрем хила",
+    VORTEX_MISSED = "Откунул вихрем хила",
+    BLOODBOLT_SPLASH = "Кровавый всплеск",
     MANA_BARRIER_REMOVED = "щит разбит",
     MIND_CONTROL = "Контроль разума",
     CYCLONE_APPLIED = "Контроль циклоном",
@@ -114,7 +114,7 @@ local descriptions = {
     CHOKING_GAS_SUMMARY = "Удушливый газ: итог",
     SHADOW_TRAP = "Взорвал ловушку",
     RAGING_SPIRIT = "Гневный дух",
-    TRAMPLE_HIT = "Размазало об стену",
+    TRAMPLE_HIT = "Не отбежал с пути босса",
     FIRST_TWILIGHT_ENTRY = "Первый вход во тьму",
     FIRST_LIGHT_DAMAGE = "Первый урон по Халиону в свету",
     LIGHT_DAMAGE_WINDOW_CLOSED = "Окно первого урона в свету закрыто",
@@ -125,7 +125,7 @@ local descriptions = {
 }
 
 local playerTargetKinds = {
-    MIND_CONTROL = true, SPIRIT_HIT = true, MALLEABLE_GOO = true,
+    TRAMPLE_HIT = true, MIND_CONTROL = true, SPIRIT_HIT = true, MALLEABLE_GOO = true,
     CHOKING_GAS = true, SHADOW_TRAP = true, MECHANIC_DEATH = true,
 }
 
@@ -148,6 +148,11 @@ function Journal.Create(kind, event, severity, fields)
         extraSpellName = event.extraSpellName,
     }
     for key, value in pairs(fields or {}) do entry[key] = Journal.Copy(value) end
+    if kind == "TRAMPLE_HIT" then entry.source = entry.target or entry.source end
+    if kind == "VORTEX_HIT" or kind == "VORTEX_MISSED" then
+        entry.text = entry.text or (descriptions[kind] ..
+            (entry.target and (": " .. (entry.target.name or "?")) or ""))
+    end
     if not entry.text then
         local parts = { kind == "MECHANIC_DEATH" and deathReasons[entry.spellId] or descriptions[kind] or kind }
         if kind == "FIRST_DAMAGE" or kind == "FIRST_HEAL" then
@@ -155,7 +160,9 @@ function Journal.Create(kind, event, severity, fields)
         elseif entry.target and not playerTargetKinds[kind] then
             parts[#parts + 1] = ": " .. (entry.target.name or "?")
         end
-        if entry.amount then parts[#parts + 1] = tostring(entry.amount) end
+        if entry.amount and (kind == "MISDIRECTION_DAMAGE" or kind == "MISDIRECTION_SUMMARY") then
+            parts[#parts + 1] = tostring(entry.amount)
+        end
         if entry.missType then parts[#parts + 1] = entry.missType end
         entry.text = table.concat(parts, " ")
     end
@@ -172,6 +179,7 @@ function Journal.Visible(entry, view)
 end
 
 function Journal.Actor(entry)
+    if entry.kind == "TRAMPLE_HIT" then return entry.target or entry.source end
     return playerTargetKinds[entry.kind] and entry.target and entry.target.class and entry.target or entry.source
 end
 
@@ -198,6 +206,13 @@ function Journal.Format(entry, neutralMessage)
             local _, _, texture = GetSpellInfo(entry.spellId)
             if texture then message = message .. " |T" .. texture .. ":24:24:0:-2|t" end
         end
+    elseif entry.kind == "TRAMPLE_HIT" then
+        message = descriptions.TRAMPLE_HIT
+    elseif entry.kind == "VORTEX_HIT" or entry.kind == "VORTEX_MISSED" then
+        message = descriptions[entry.kind] ..
+            (entry.target and (": " .. formatEntityName(entry.target)) or "")
+    elseif entry.kind == "LIGHT_DAMAGE_WINDOW_CLOSED" then
+        message = ""
     elseif entry.kind == "MISDIRECTION_DAMAGE" then
         local target = formatEntityName(entry.target)
         message = string.format("%s %s", target, entry.amount or 0)
@@ -220,6 +235,14 @@ function Journal.Format(entry, neutralMessage)
         message = entry.target and formatEntityName(entry.target, true) or ""
     else
         message = entry.text or ""
+        -- Older saved records include the amount in their generated message.
+        if entry.amount then
+            local missSuffix = entry.missType and (" " .. entry.missType) or ""
+            local amountSuffix = " " .. tostring(entry.amount) .. missSuffix
+            if message:sub(-#amountSuffix) == amountSuffix then
+                message = message:sub(1, #message - #amountSuffix) .. missSuffix
+            end
+        end
         local source = entry.source and entry.source.name
         local oldPrefix = source and ((descriptions[entry.kind] or entry.kind) .. " " .. source)
         if oldPrefix and message:sub(1, #oldPrefix) == oldPrefix then

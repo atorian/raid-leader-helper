@@ -3,9 +3,6 @@ local SppellTracker = RLHelper:NewModule("SppellTracker", "AceEvent-3.0")
 SppellTracker.receivesCombatEvents = true
 local CombatFilters = RLHelperCombatFilters
 
--- Флаг для отслеживания первого урона
-local firstDamageDone = false
-local firstValithriaHealDone = false
 local HAND_OF_RECKONING = 62124
 local HOLY_WRATH = 48817
 local HAND_OF_PROTECTION = 10278
@@ -16,10 +13,11 @@ local VALITHRIA_DREAMWALKER = "Валитрия Сноходица"
 local LICH_KING = "Король-лич"
 local TAUNTS = {
     [355] = true, [694] = true, [1161] = true, [49560] = true, [51399] = true,
-    [56222] = true, [62124] = true, [31789] = true, [5209] = true, [20736] = true
+    [56222] = true, [62124] = true, [31789] = true, [6795] = true, [5209] = true, [20736] = true
 }
 
 function SppellTracker:GetSpellClassification(event)
+    local RLHelper = self.context or RLHelper
     if event.spellId == SNAKE_TRAP then return "TACTIC_VIOLATION" end
 
     if not TAUNTS[event.spellId] and event.spellId ~= HAND_OF_PROTECTION then
@@ -56,8 +54,8 @@ function SppellTracker:logSpell(event, kind)
 end
 function SppellTracker:OnEnable()
     RLHelper:Debug("RL Быдло: TauntTracker включен")
-    firstDamageDone = false
-    firstValithriaHealDone = false
+    self.firstDamageDone = false
+    self.firstValithriaHealDone = false
 end
 
 -- Список отслеживаемых способностей
@@ -70,7 +68,8 @@ local TRACKED_SPELLS = {
     [56222] = true, -- Death Knight: Dark Command
     [62124] = true, -- Paladin: Hand of Reckoning
     [31789] = true,
-    [5209] = true, -- Druid: Growl
+    [6795] = true, -- Druid: Growl
+    [5209] = true, -- Druid: Challenging Roar
     [20736] = true, -- Hunter: Distracting Shot
     [SNAKE_TRAP] = true, -- Hunter: Змеиная ловушка
 
@@ -129,8 +128,8 @@ function SppellTracker:OnInitialize()
 end
 
 function SppellTracker:reset()
-    firstDamageDone = false
-    firstValithriaHealDone = false
+    self.firstDamageDone = false
+    self.firstValithriaHealDone = false
     self.pendingHandOfReckonings = {}
 end
 
@@ -143,7 +142,7 @@ end
 
 
 
-local function isLichKingCombat()
+local function isLichKingCombat(RLHelper)
     return RLHelper.currentInstanceId == ICECROWN_CITADEL and RLHelper.currentCombat and
         RLHelper.currentCombat.firstEnemy == LICH_KING
 end
@@ -183,14 +182,16 @@ function SppellTracker:tryLogHandOfReckoningTarget(unitId)
         return false
     end
 
-    local pending = self.pendingHandOfReckonings[UnitGUID(unitId)]
+    local unitGUID = self.unitGUID or UnitGUID
+    local unitExists = self.unitExists or UnitExists
+    local pending = self.pendingHandOfReckonings[unitGUID(unitId)]
     if not pending then
         return false
     end
 
     local targetUnit = unitId .. "target"
-    if UnitExists(targetUnit) and UnitGUID(targetUnit) == pending.sourceGUID then
-        self:clearPendingHandOfReckoning(UnitGUID(unitId))
+    if unitExists(targetUnit) and unitGUID(targetUnit) == pending.sourceGUID then
+        self:clearPendingHandOfReckoning(unitGUID(unitId))
         self:logSpell(pending)
         return true
     end
@@ -203,20 +204,20 @@ function SppellTracker:UNIT_TARGET(_, unitId)
 end
 
 function SppellTracker:handleEvent(eventData)
-    if not firstDamageDone and (eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE") then
+    if not self.firstDamageDone and (eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE") then
         if RLHelper:IsGroupMember(eventData.sourceGUID, eventData.sourceFlags) and
             isEnemy(eventData.destFlags, eventData.destGUID) then
             if not CombatFilters or not CombatFilters:IsIgnoredCombatEnemy(eventData.destName) then
-                firstDamageDone = true
+                self.firstDamageDone = true
                 RLHelperJournal.Log(self.log, "FIRST_DAMAGE", eventData)
             end
         end
     end
 
-    if not firstValithriaHealDone and (eventData.event == "SPELL_HEAL" or eventData.event == "SPELL_PERIODIC_HEAL") then
+    if not self.firstValithriaHealDone and (eventData.event == "SPELL_HEAL" or eventData.event == "SPELL_PERIODIC_HEAL") then
         if RLHelper:IsGroupMember(eventData.sourceGUID, eventData.sourceFlags) and
             eventData.destName == VALITHRIA_DREAMWALKER and (eventData.amount or 0) > 0 then
-            firstValithriaHealDone = true
+            self.firstValithriaHealDone = true
             RLHelperJournal.Log(self.log, "FIRST_HEAL", eventData)
         end
     end
@@ -241,7 +242,7 @@ function SppellTracker:handleEvent(eventData)
         return
     end
 
-    if eventData.event == "SPELL_DAMAGE" and eventData.spellId == HOLY_WRATH and isLichKingCombat() then
+    if eventData.event == "SPELL_DAMAGE" and eventData.spellId == HOLY_WRATH and isLichKingCombat(self.context or RLHelper) then
         self:logSpell(eventData)
         return
     end
@@ -262,6 +263,22 @@ function SppellTracker:handleEvent(eventData)
             self:clearPendingHandOfReckoning(eventData.destGUID)
         end
     end
+end
+
+
+SppellTracker.demoOrder = 1
+function SppellTracker:RunDemo(demo)
+    self:reset()
+    local p = demo.players
+    local boss = demo:Boss(36678, "Профессор Мерзоцид")
+    local function emit(event, source, target, id, fields) demo:Event(self, event, source, target, id, fields) end
+    emit("SWING_DAMAGE", p.tank, boss, nil, { amount = 1000 })
+    emit("SPELL_HEAL", p.priest, { name = VALITHRIA_DREAMWALKER }, 48782, { amount = 12000 })
+    emit("SPELL_AURA_APPLIED", p.tank, boss, 355)
+    emit("SPELL_CAST_SUCCESS", p.hunter, nil, SNAKE_TRAP)
+    emit("SPELL_RESURRECT", p.druid, p.mage, 48477)
+    emit("SPELL_DISPEL", p.priest, p.tank, 988,
+        { extraSpellId = 74792, extraSpellName = "Пожирание души" })
 end
 
 

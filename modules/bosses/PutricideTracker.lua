@@ -107,4 +107,13 @@ function PutricideTracker:handleEvent(event)
     RLHelperJournal.Log(self.log, "MALLEABLE_GOO", event, "TACTIC_VIOLATION")
 end
 
+PutricideTracker.demoOrder = 3
+function PutricideTracker:RunDemo(demo)
+    self:reset()
+    demo:Event(self, "SPELL_AURA_APPLIED", demo:Boss(36678, "Профессор Мерзоцид"), demo.players.mage, 70853)
+    demo:Event(self, "SPELL_AURA_APPLIED", nil, demo.players.hunter, 71278)
+    self:summarizeCombat()
+end
+
+
 return PutricideTracker

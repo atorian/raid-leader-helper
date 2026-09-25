@@ -2360,138 +2360,72 @@ function RLHelper:HandleSlashCommand(input)
     elseif input == "clear" then
         self:ClearCombatHistory()
     elseif input == "demo" then
-        self:StartCombat("demo")
-        self:ShowCurrentCombat()
-        self:SetMainFrameVisible(true)
         self:DemoJournal()
-        self.combatEndRequestedAt = self:GetCombatNow()
+        self:SetMainFrameVisible(true)
     end
 end
 
+-- Demo inputs use isolated tracker instances; only their normal handlers produce journal records.
 function RLHelper:DemoJournal()
-    self:SetJournalView("ALL")
     local players = {
-        { guid = "demo-warrior", name = "Бочок", class = "WARRIOR" },
-        { guid = "demo-hunter", name = "Стрелок", class = "HUNTER" },
-        { guid = "demo-priest", name = "Целитель", class = "PRIEST" },
-        { guid = "demo-mage", name = "Чародей", class = "MAGE" },
-        { guid = "demo-paladin", name = "Светоч", class = "PALADIN" },
+        tank = { guid = "demo-warrior", name = "Бочок", class = "WARRIOR" },
+        hunter = { guid = "demo-hunter", name = "Стрелок", class = "HUNTER" },
+        priest = { guid = "demo-priest", name = "Целитель", class = "PRIEST" },
+        mage = { guid = "demo-mage", name = "Чародей", class = "MAGE" },
+        druid = { guid = "demo-druid", name = "Лист", class = "DRUID" },
+        shaman = { guid = "demo-shaman", name = "Гром", class = "SHAMAN" },
     }
-    local boss = { guid = "demo-putricide", name = "Профессор Мерзоцид" }
-    local spiritOne = { guid = "demo-spirit-1", name = "Мстительный дух" }
-    local spiritTwo = { guid = "demo-spirit-2", name = "Мстительный дух" }
-    local orb = { guid = "demo-orb", name = "Темный шар" }
-    local tracker = self:FindModuleByName("MisdirectionTracker")
-    local pullId = tracker and (tracker.nextJournalPullId or 1) or 1
-    if tracker then tracker.nextJournalPullId = pullId + 2 end
-    -- These are fixed examples of records emitted by the existing trackers.
-    local rows = {
-        { "FIRST_DAMAGE", players[1], boss },
-        { "MISDIRECTION_START", players[2], players[1], 34477, nil,
-            { pullId = pullId } },
-        { "MISDIRECTION_DAMAGE", players[2], boss, 53209, nil,
-            { pullId = pullId, amount = 1000 } },
-        { "MISDIRECTION_SUMMARY", players[2], players[1], 34477, nil,
-            { pullId = pullId, amount = 1000 } },
-        { "SPELL_USE", players[5], nil, 31821 },
-        { "TAUNT", players[1], boss, 355 },
-        { "DISPEL", players[3], players[1], 988, nil,
-            { extraSpellId = 74792, extraSpellName = "Пожирание души" } },
-        { "TAUNT", players[2], boss, 20736, "TACTIC_VIOLATION" },
-        { "SPELL_USE", players[5], players[1], 10278, "TACTIC_VIOLATION" },
-        { "MALLEABLE_GOO", boss, players[4], 70853, "TACTIC_VIOLATION" },
-        { "CHOKING_GAS", nil, players[2], 71278, "TACTIC_VIOLATION" },
-        { "MALLEABLE_GOO_SUMMARY", nil, nil, nil, nil,
-            { text = "Вязкая гадость: всего 1 Чародей(1)" } },
-        { "CHOKING_GAS_SUMMARY", nil, nil, nil, nil,
-            { text = "Удушливый газ: всего 1 Стрелок(1)" } },
-        { "SPIRIT_HIT", spiritOne, players[4], nil, "TACTIC_VIOLATION", nil, 344 },
-        { "SPIRIT_HIT", spiritTwo, players[3], nil, "TACTIC_VIOLATION", nil, 194 },
-        { "SPIRIT_SUMMARY", nil, nil, nil, nil,
-            { text = "Духов взорвали: всего 2 Целитель(1) Чародей(1)" } },
-        { "MECHANIC_DEATH", orb, players[4], 77846, "TACTIC_VIOLATION" },
-        { "MECHANIC_DEATH", orb, players[2], 77846, "TACTIC_VIOLATION" },
-        { "VORTEX_HIT", players[4], players[3], 72817, "TACTIC_VIOLATION", nil, 5000 },
-        { "VORTEX_MISSED", players[4], players[3], 72817, "TACTIC_VIOLATION", { missType = "IMMUNE" } },
-    }
-    local warrior = { guid = "demo-warrior-dps", name = "Клинок", class = "WARRIOR" }
-    local deathKnight = { guid = "demo-dk", name = "Мороз", class = "DEATHKNIGHT" }
-    local druid = { guid = "demo-druid", name = "Лист", class = "DRUID" }
-    local rogue = { guid = "demo-rogue", name = "Тень", class = "ROGUE" }
-    local shaman = { guid = "demo-shaman", name = "Гром", class = "SHAMAN" }
-    local lady = { guid = "demo-lady", name = "Леди Смертный Шепот" }
-    local lich = { guid = "demo-lich", name = "Король-лич" }
-    local halion = { guid = "demo-halion", name = "Халион" }
-    local function add(kind, source, target, spellId, severity, fields, amount)
-        rows[#rows + 1] = { kind, source, target, spellId, severity, fields, amount }
+    local combat = { startTime = time(), events = {}, firstEnemy = "Демонстрация" }
+    local modules = {}
+    for name, module in pairs(self.modules or {}) do
+        if type(module.RunDemo) == "function" then modules[#modules + 1] = { name = name, module = module } end
     end
-
-    -- Complete the SpellTracker ability list, including every tracked dispel.
-    for _, spell in ipairs({ { 694, warrior }, { 1161, warrior },
-        { 49560, deathKnight }, { 51399, deathKnight }, { 56222, deathKnight },
-        { 62124, players[5] }, { 31789, players[5] }, { 5209, druid } }) do
-        local target = spell[1] == 31789 and players[1] or boss
-        add("TAUNT", spell[2], target, spell[1], "TACTIC_VIOLATION",
-            { targetIsBoss = target == boss, targetAssignment = target == players[1] and "MAINTANK" or nil })
-    end
-    for _, spellId in ipairs({ 1044, 19752, 6940, 48817 }) do
-        add("SPELL_USE", players[5], spellId == 48817 and lich or players[1], spellId)
-    end
-    add("SPELL_USE", players[2], nil, 34600, "TACTIC_VIOLATION")
-    add("SPELL_USE", deathKnight, players[1], 49016)
-    for _, spellId in ipairs({ 26994, 48477 }) do
-        add("RESURRECT", druid, players[4], spellId)
-    end
-    for _, spell in ipairs({ { 475, players[4] }, { 526, shaman }, { 527, players[3] },
-        { 528, players[3] }, { 552, players[3] }, { 1152, players[5] }, { 2782, druid },
-        { 4987, players[5] }, { 10872, players[3] }, { 32375, players[3] },
-        { 32592, players[3] }, { 51886, shaman } }) do
-        local effect = { extraSpellId = 74792, extraSpellName = "Пожирание души" }
-        if spell[1] == 475 or spell[1] == 2782 or spell[1] == 51886 then
-            effect = { extraSpellId = 74795, extraSpellName = "Метка пожирания" }
-        elseif spell[1] == 526 or spell[1] == 528 or spell[1] == 552 or spell[1] == 1152 or spell[1] == 10872 then
-            effect = { extraSpellId = 67934, extraSpellName = "Озноб" }
+    table.sort(modules, function(a, b)
+        if a.module.demoOrder ~= b.module.demoOrder then return a.module.demoOrder < b.module.demoOrder end
+        return a.name < b.name
+    end)
+    for _, item in ipairs(modules) do
+        local context = setmetatable({
+            players = players, currentCombat = {}, currentInstanceId = 631, inCombat = true,
+            groupMembers = {}, groupAssignments = { [players.tank.guid] = "MAINTANK" }, hasTankAssignments = true,
+        }, { __index = self })
+        for _, player in pairs(players) do context.groupMembers[player.guid] = player end
+        context.GetNumRaidMembers = function() return 1 end
+        context.GetRaidRosterInfo = function() return players.priest.name, 0, 5, 80, "Жрец", "PRIEST" end
+        function context:Boss(id, name)
+            return { guid = string.format("0xF130%06X000001", id), name = name }
         end
-        add("DISPEL", spell[2], players[1], spell[1], nil, effect)
+        function context:Event(module, subevent, source, target, spellId, fields)
+            local event = {
+                timestamp = combat.startTime + #combat.events,
+                event = subevent, spellId = spellId,
+                sourceGUID = source and source.guid, sourceName = source and source.name,
+                sourceClass = source and source.class, sourceFlags = source and source.class and 0x514 or 0xa48,
+                destGUID = target and target.guid, destName = target and target.name,
+                destClass = target and target.class, destFlags = target and target.class and 0x514 or 0xa48,
+            }
+            for key, value in pairs(fields or {}) do event[key] = value end
+            module:handleEvent(event)
+        end
+        local instance = setmetatable({ context = context }, { __index = function(_, key)
+            -- Inherit behavior only, never live state (tables, timers or pending casts).
+            if type(item.module[key]) == "function" then return item.module[key] end
+        end })
+        instance.log = function(entry)
+            local record = Journal.Copy(entry)
+            record.timestamp = combat.startTime + #combat.events
+            record.seq = #combat.events + 1
+            combat.events[#combat.events + 1] = record
+        end
+        instance:RunDemo(context)
     end
-    add("FIRST_HEAL", players[3], { guid = "demo-valithria", name = "Валитрия Сноходица" }, 48782, nil, nil, 12000)
-
-    add("MANA_BARRIER_REMOVED", lady, lady, 70842)
-    add("MIND_CONTROL", lady, players[4], 71289)
-    add("CYCLONE_APPLIED", druid, players[4], 33786)
-    add("CYCLONE_MISSED", druid, players[4], 33786, nil, { missType = "IMMUNE" })
-    add("SPIRIT_MISSED", { guid = "demo-spirit-3", name = "Мстительный дух" }, players[2], nil, nil,
-        { missType = "DODGE" })
-    add("BLOODBOLT_SPLASH", players[4], players[3], 71483, "TACTIC_VIOLATION", nil, 9000)
-    add("SHADOW_TRAP", lich, players[2], 73529, "TACTIC_VIOLATION", nil, 15000)
-    add("RAGING_SPIRIT", lich, players[1], 69200)
-    add("TRAMPLE_HIT", { guid = "demo-icehowl", name = "Ледяной Рев" }, players[4], 66734,
-        "TACTIC_VIOLATION", nil, 30000)
-    add("FIRST_TWILIGHT_ENTRY", halion, players[1], 75483)
-    add("FIRST_LIGHT_DAMAGE", players[2], halion, 53209, nil, nil, 10000)
-    add("LIGHT_DAMAGE_WINDOW_CLOSED", shaman, players[1], 32182)
-    for _, spellId in ipairs({ 75879, 75949, 77844, 77845 }) do
-        add("MECHANIC_DEATH", spellId >= 77844 and orb or halion, players[4], spellId, "TACTIC_VIOLATION")
-    end
-    add("MISDIRECTION_START", rogue, players[1], 57934, nil, { pullId = pullId + 1 })
-    add("MISDIRECTION_DAMAGE", rogue, boss, 48638, nil, { pullId = pullId + 1, amount = 1500 })
-    add("MISDIRECTION_SUMMARY", rogue, players[1], 57934, nil, { pullId = pullId + 1, amount = 1500 })
-
-    local timestamp = time() - #rows
-    for i, row in ipairs(rows) do
-        local kind, source, target = row[1], row[2], row[3]
-        local spellId, severity, fields = row[4], row[5], row[6]
-        local event = {
-            timestamp = timestamp + i,
-            sourceGUID = source and source.guid, sourceName = source and source.name,
-            sourceClass = source and source.class,
-            destGUID = target and target.guid, destName = target and target.name,
-            destClass = target and target.class,
-            spellId = spellId,
-            amount = row[7],
-        }
-        self:OnCombatLogEvent(Journal.Create(kind, event, severity or "INFO", fields))
-    end
+    combat.endTime = time()
+    combat.startTime = combat.endTime - #combat.events
+    for i, entry in ipairs(combat.events) do entry.timestamp = combat.startTime + i end
+    self.selectedCombatKind, self.selectedCombatIndex = "demo", nil
+    self:DisplayCombat(combat)
+    self:SetJournalView("ALL")
+    return combat
 end
 
 return RLHelper

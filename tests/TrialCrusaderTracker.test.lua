@@ -79,7 +79,7 @@ describe('TrialCrusaderTracker', function()
         dispatch(TrialCrusaderTracker, Builder:New():FromEnemy("Ледяной Рев"):ToPlayer("Игрок1")
             :SpellDamage(66734, "Trample", 50000):Build())
 
-        assertRecord(log, { targetName = "Игрок1", spellId = 66734, kind = "TRAMPLE_HIT", type = "TACTIC_VIOLATION" })
+        assertRecord(log, { sourceName = "Игрок1", targetName = "Игрок1", spellId = 66734, kind = "TRAMPLE_HIT", type = "TACTIC_VIOLATION", text = "Не отбежал с пути босса" })
     end)
 
 

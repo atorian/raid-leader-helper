@@ -333,9 +333,14 @@ function M:NewAddon(name)
 
     module.IsGroupInCombat = isGroupInCombat
     module.C_Timer = C_Timer
+    module.modules = {}
     function module:NewModule(moduleName, mixins)
-        return M:NewModule(moduleName, mixins)
+        local child = M:NewModule(moduleName, mixins)
+        self.modules[moduleName] = child
+        return child
     end
+    function module:GetModule(moduleName) return self.modules[moduleName] end
+    function module:IterateModules() return pairs(self.modules) end
     addons[name] = module
 
     return module

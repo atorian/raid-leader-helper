@@ -116,6 +116,179 @@ describe('HalionTracker', function()
         assert.spy(log).was_not_called()
     end)
 
+    describe('roster death fallback', function()
+        local originals, timers, now, members, guid
+
+        local function hit(spellId)
+            local args = { Builder:New():FromEnemy("Халион"):ToPlayer("Игрок1")
+                :SpellDamage(spellId or 77846, "Механика", 1000):Build() }
+            guid = args[7]
+            members[1] = members[1] or { guid = guid, online = true }
+            dispatch(HalionTracker, unpack(args))
+        end
+
+        local function tick(at)
+            now = at
+            for _, timer in ipairs(timers) do
+                if not timer.cancelled then timer.callback() end
+            end
+        end
+
+        before_each(function()
+            originals = { timer = RLHelper.C_Timer, time = GetTime,
+                count = GetNumRaidMembers, guid = UnitGUID, roster = GetRaidRosterInfo }
+            timers, members, now = {}, {}, 0
+            _G.GetTime = function() return now end
+            _G.GetNumRaidMembers = function() return #members end
+            _G.UnitGUID = function(unit)
+                local index = tonumber(unit:match('^raid(%d+)$'))
+                return index and members[index] and members[index].guid or originals.guid(unit)
+            end
+            _G.GetRaidRosterInfo = function(index)
+                local member = members[index]
+                return "Игрок1", nil, nil, nil, nil, nil, nil, member.online, member.dead
+            end
+            RLHelper.C_Timer = { NewTicker = function(interval, callback)
+                assert.are.equal(0.2, interval)
+                local timer = { callback = callback }
+                function timer:Cancel() self.cancelled = true end
+                timers[#timers + 1] = timer
+                return timer
+            end }
+        end)
+
+        after_each(function()
+            HalionTracker:reset()
+            RLHelper.C_Timer, _G.GetTime = originals.timer, originals.time
+            _G.GetNumRaidMembers, _G.UnitGUID, _G.GetRaidRosterInfo = originals.count, originals.guid, originals.roster
+        end)
+
+        it('confirms every tracked mechanic without UNIT_DIED', function()
+            for _, id in ipairs({ 75879, 75949, 77844, 77845, 77846 }) do
+                HalionTracker:reset()
+                log:clear()
+                hit(id)
+                members[1].dead = true
+                tick(now + 0.2)
+                assertRecord(log, { targetName = "Игрок1", spellId = id,
+                    kind = "MECHANIC_DEATH", type = "TACTIC_VIOLATION" })
+                assert.is_true(timers[#timers].cancelled)
+                assert.is_nil(next(HalionTracker.deathChecks))
+            end
+        end)
+
+        it('waits for delayed death after aura and other damage', function()
+            hit()
+            dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToPlayer("Игрок1")
+                :SpellDamage(75486, "Пелена", 1000):Build())
+            dispatch(HalionTracker, Builder:New():FromEnemy("Халион"):ToPlayer("Игрок1")
+                :Damage(1000):Build())
+            log:clear() -- First twilight entry is unrelated to the death.
+            tick(0.2)
+            assert.spy(log).was_not_called()
+            members[1].dead = true
+            tick(2.8)
+            assertRecord(log, { spellId = 77846, kind = "MECHANIC_DEATH" })
+        end)
+
+        it('cancels after three seconds alive and ignores later roster death', function()
+            hit()
+            tick(2.8)
+            assert.is_nil(timers[1].cancelled)
+            tick(3)
+            assert.is_true(timers[1].cancelled)
+            assert.is_nil(next(HalionTracker.deathChecks))
+            members[1].dead = true
+            tick(3.2)
+            assert.spy(log).was_not_called()
+        end)
+
+        it('does not accept death after the deadline when a frame is delayed', function()
+            hit()
+            members[1].dead = true
+            tick(3.1)
+            assert.spy(log).was_not_called()
+            assert.is_true(timers[1].cancelled)
+        end)
+
+        it('refreshes the three second window on another mechanic hit', function()
+            hit()
+            tick(2)
+            hit(75949)
+            assert.is_true(timers[1].cancelled)
+            tick(3)
+            assert.is_nil(timers[2].cancelled)
+            members[1].dead = true
+            tick(4)
+            assertRecord(log, { spellId = 75949, kind = "MECHANIC_DEATH" })
+        end)
+
+        it('does not duplicate a roster death when UNIT_DIED follows', function()
+            hit()
+            members[1].dead = true
+            tick(0.2)
+            dispatch(HalionTracker, Builder:New():ToPlayer("Игрок1"):Death():Build())
+            assert.spy(log).was_called(1)
+        end)
+
+        it('cancels the check when UNIT_DIED arrives first', function()
+            hit()
+            dispatch(HalionTracker, Builder:New():ToPlayer("Игрок1"):Death():Build())
+            members[1].dead = true
+            tick(0.2)
+            assert.is_true(timers[1].cancelled)
+            assert.spy(log).was_called(1)
+        end)
+
+        it('follows GUID when raid slots change', function()
+            hit()
+            members[2] = members[1]
+            members[1] = { guid = 'other-player', online = true, dead = true }
+            tick(0.2)
+            assert.spy(log).was_not_called()
+            members[2].dead = true
+            tick(0.4)
+            assertRecord(log, { targetName = "Игрок1", spellId = 77846 })
+        end)
+
+        it('does not count an offline player as a confirmed death', function()
+            hit()
+            members[1].online, members[1].dead = nil, true
+            tick(0.2)
+            assert.spy(log).was_not_called()
+            tick(3)
+            assert.is_true(timers[1].cancelled)
+        end)
+
+        it('cancels if the player leaves the raid', function()
+            hit()
+            members = {}
+            tick(0.2)
+            assert.is_true(timers[1].cancelled)
+            assert.spy(log).was_not_called()
+        end)
+
+        it('cancels checks on combat reset and module disable', function()
+            for _, method in ipairs({ 'reset', 'OnDisable' }) do
+                hit()
+                local timer = timers[#timers]
+                HalionTracker[method](HalionTracker)
+                assert.is_true(timer.cancelled)
+                timer.callback() -- A stale callback must not write into the next fight.
+                assert.is_nil(next(HalionTracker.deathChecks))
+            end
+            assert.spy(log).was_not_called()
+        end)
+
+        it('does not start checks for unrelated damage or demo instances', function()
+            hit(12345)
+            assert.are.equal(0, #timers)
+            local demo = setmetatable({ context = {}, dmgEvents = {}, log = log }, { __index = HalionTracker })
+            demo:StartDeathCheck({ spellId = 77846, destGUID = 'demo-player' })
+            assert.are.equal(0, #timers)
+        end)
+    end)
+
     it('logs first damage from Shadow Trap only once', function()
         dispatch(HalionTracker, Builder:New():FromEnemy("Босс"):ToPlayer("Игрок1")
             :SpellDamage(75483, "Пелена Тени", 1000):Build())

@@ -1540,6 +1540,7 @@ function RLHelper:RenderJournalRows()
             row:SetPoint("TOPLEFT", frame.v2Content, "TOPLEFT", 0, -item.top)
             row:SetPoint("TOPRIGHT", frame.v2Content, "TOPRIGHT", 0, -item.top)
             row:SetHeight(item.height)
+            row.text:SetWidth(frame.v2Content:GetWidth())
             row.text:SetText(item.text)
             row.entry = item.entry
             if item.highlighted then row.background:Show()
@@ -1575,7 +1576,7 @@ function RLHelper:RefreshJournalRows(combat, preservePosition)
             if not cached or cached.width ~= width or cached.text ~= text then
                 frame.v2Measure:SetText(text)
                 cached = { width = width, text = text,
-                    height = math.max(21, frame.v2Measure:GetStringHeight() + 1) }
+                    height = math.max(21, frame.v2Measure:GetHeight() + 1) }
                 frame.v2Heights[entry] = cached
             end
             items[#items + 1] = { entry = entry, text = text, top = top, height = cached.height,
@@ -1586,7 +1587,7 @@ function RLHelper:RefreshJournalRows(combat, preservePosition)
     if combat and combat.droppedEvents then
         local warning = "|cFFFF5555Лимит истории: пропущено событий " .. combat.droppedEvents .. "|r"
         frame.v2Measure:SetText(warning)
-        local height = math.max(21, frame.v2Measure:GetStringHeight() + 1)
+        local height = math.max(21, frame.v2Measure:GetHeight() + 1)
         frame.v2WarningEntry = frame.v2WarningEntry or { type = "INFO" }
         items[#items + 1] = { entry = frame.v2WarningEntry, text = warning, top = top, height = height }
         top = top + height
@@ -1618,6 +1619,8 @@ function RLHelper:CreateJournalRows(frame)
     frame.v2Heights = setmetatable({}, { __mode = "k" })
     local measure = content:CreateFontString(nil, "ARTWORK")
     measure:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    measure:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
+    measure:SetAlpha(0)
     frame.v2Measure = measure
 
     local function showTargetButton(row)
@@ -1689,7 +1692,6 @@ function RLHelper:CreateJournalRows(frame)
         label:SetJustifyH("LEFT")
         label:SetJustifyV("TOP")
         label:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -1)
-        label:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, -1)
         row.text = label
         row:SetScript("OnEnter", function(self)
             showTargetButton(self)

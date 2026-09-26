@@ -80,3 +80,5 @@
 - On 2026-09-26, the user confirmed explicit text insets made GP reason text visible but 8 px on the left looked too wide. Keep a small left inset near the input border, and verify the client appearance after spacing changes.
 
 - Sindragosa Backlash explosions above two Instability stacks are tactical errors; one or two stacks remain informational. Apply the threshold to confirmed explosions only, including demo records, and test the 2/3 boundary. Meter switching must cover both Skada NewSegment and Recount ResetFightData, as in Halion.
+
+- For missing journal auto-wrap, check the visible V2 FontString itself: measuring taller rows does not make text wrap. Give each displayed FontString an explicit width and automatic height so WoW 3.3.5a performs its native word wrapping; avoid manual line splitting and confirm appearance in the client.

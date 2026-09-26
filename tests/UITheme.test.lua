@@ -18,7 +18,7 @@ describe('UI themes', function()
     local originalGlobals, originalAddon, namedFrames, dropdownItems, createdFrames
     local function newFrame(kind, name, parent, template)
         local frame = {
-            name = name, parent = parent, template = template, points = {}, scripts = {},
+            kind = kind, name = name, parent = parent, template = template, points = {}, scripts = {},
             textures = {}, fonts = {}, enabled = true, visible = true,
             font = { 'Fonts\\FRIZQT__.TTF', 12, 'OUTLINE' }, color = { 1, 0.82, 0, 1 }
         }
@@ -35,7 +35,10 @@ describe('UI themes', function()
         function frame:SetSize(w, h) self.width, self.height = w, h end
         function frame:SetHeight(h) self.height = h end
         function frame:SetWidth(w) self.width = w end
-        function frame:GetHeight() return self.height or 400 end
+        function frame:GetHeight()
+            if self.kind == 'FontString' then return self.height or self:GetStringHeight() end
+            return self.height or 400
+        end
         function frame:GetWidth() return self.width or 400 end
         function frame:GetStringHeight()
             return self.text and self.text:find(':20:20:0:-1|t', 1, true) and 20 or 14
@@ -54,6 +57,7 @@ describe('UI themes', function()
         function frame:SetFont(...) self.font = { ... } end
         function frame:GetFont() return unpack(self.font) end
         function frame:GetSpacing() return 0 end
+        function frame:SetAlpha(alpha) self.alpha = alpha end
         function frame:SetTextColor(...) self.color = { ... } end
         function frame:GetTextColor() return unpack(self.color) end
         function frame:SetTexture(...) self.texture = { ... } end
@@ -462,7 +466,7 @@ describe('UI themes', function()
             assert.are.same({ 'TOPLEFT', frame, 'TOPLEFT', 2, -2 }, frame.buttonContainer.points[1])
             assert.are.same({ 'TOPRIGHT', frame, 'TOPRIGHT', -2, -2 }, minimize.points[1])
             assert.are.equal(0, frame.v2Rows[1].text.points[1][4])
-            assert.are.equal(0, frame.v2Rows[1].text.points[2][4])
+            assert.are.equal(1, #frame.v2Rows[1].text.points)
             assert.are.equal(-2, frame.logText.points[2][4])
         end
         addon.db.profile.gpAwardButtonsEnabled = true
@@ -480,7 +484,8 @@ describe('UI themes', function()
         addon:OnCombatLogEvent(Journal.Create('FIRST_DAMAGE', { timestamp = 1000,
             sourceName = 'Бочок', destName = 'Профессор Мерзоцид' }))
         assert.are.equal(21, frame.v2Items[1].height)
-        frame.v2Measure.GetStringHeight = function() return 36 end
+        assert.are.equal(frame.v2Scroll:GetWidth(), frame.v2Rows[1].text.width)
+        frame.v2Measure.GetHeight = function() return 36 end
         addon:OnCombatLogEvent(Journal.Create('SPIRIT_SUMMARY', { timestamp = 1001 }, 'INFO',
             { text = 'Духов взорвали: всего 2 Целитель(1) Чародей(1)' }))
         assert.are.equal(37, frame.v2Items[2].height)

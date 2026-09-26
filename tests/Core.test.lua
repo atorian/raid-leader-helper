@@ -1725,7 +1725,10 @@ describe("RLHelper main frame raid check button", function()
         function frame:GetVerticalScroll() return self.offset or 0 end
         function frame:SetVerticalScroll(value) self.offset = value end
         function frame:GetVerticalScrollRange() return 0 end
-        function frame:GetHeight() return self.height or 400 end
+        function frame:GetHeight()
+            if self.frameType == 'FontString' then return self.height or self:GetStringHeight() end
+            return self.height or 400
+        end
         function frame:GetWidth() return self.width or 400 end
         function frame:SetWidth(value) self.width = value end
         function frame:GetFont() return unpack(self.font or { 'Fonts\\FRIZQT__.TTF', 12, 'OUTLINE' }) end
@@ -1733,6 +1736,7 @@ describe("RLHelper main frame raid check button", function()
         function frame:GetSpacing() return 0 end
         function frame:CreateTexture() return newFrame('Texture', nil, self) end
         function frame:SetTexture() end
+        function frame:SetAlpha() end
         function frame:Disable() end
         function frame:Enable() end
         function frame:AddMessage() end

@@ -33,3 +33,4 @@ modules\bosses\PutricideTracker.lua
 modules\bosses\TrialCrusaderTracker.lua
 modules\bosses\LichKingTracker.lua
 modules\bosses\HalionTracker.lua
+modules\bosses\SindragosaTracker.lua

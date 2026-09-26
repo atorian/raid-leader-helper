@@ -967,6 +967,12 @@ describe("RLHelper settings helpers", function()
             function frame:SetAutoFocus()
             end
 
+            function frame:SetTextInsets()
+            end
+
+            function frame:SetCursorPosition()
+            end
+
             function frame:SetScript(event, callback)
                 self.scripts[event] = callback
             end
@@ -1019,10 +1025,15 @@ describe("RLHelper settings helpers", function()
             "Начисление GP",
             "Отображать кнопки начисления GP",
             "100 GP",
+            "Каспер",
             "200 GP",
+            "Вомбат",
             "250 GP",
+            "Бэтмен",
             "500 GP",
-            "1000 GP"
+            "Капибара",
+            "1000 GP",
+            "Banana"
         }, texts)
     end)
 
@@ -1075,6 +1086,12 @@ describe("RLHelper settings helpers", function()
             end
 
             function frame:SetAutoFocus()
+            end
+
+            function frame:SetTextInsets()
+            end
+
+            function frame:SetCursorPosition()
             end
 
             function frame:SetScript(event, callback)
@@ -1180,6 +1197,12 @@ describe("RLHelper settings helpers", function()
             function frame:SetAutoFocus()
             end
 
+            function frame:SetTextInsets()
+            end
+
+            function frame:SetCursorPosition()
+            end
+
             function frame:SetScript(event, callback)
                 self.scripts[event] = callback
             end
@@ -1276,6 +1299,12 @@ describe("RLHelper settings helpers", function()
             end
 
             function frame:SetAutoFocus()
+            end
+
+            function frame:SetTextInsets()
+            end
+
+            function frame:SetCursorPosition()
             end
 
             function frame:SetScript(event, callback)

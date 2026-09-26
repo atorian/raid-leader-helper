@@ -2210,6 +2210,15 @@ function RLHelper:CreateOptionsPanel()
         RLHelper:RefreshGPAwardButtons()
     end)
 
+    local function getGPReason(amount)
+        local reasons = RLHelper.db.profile.gpAwardReasons
+        local reason = reasons and reasons[amount]
+        if type(reason) == "string" and reason:find("%S") then
+            return reason
+        end
+        return DEFAULT_GP_AWARD_REASONS[amount]
+    end
+
     local gpReasonEditBoxes = {}
     local gpReasonAnchor = gpAwardButtonsEnabled
     local isFirstGpReason = true
@@ -2228,17 +2237,23 @@ function RLHelper:CreateOptionsPanel()
         end
         editBox:SetPoint("LEFT", label, "LEFT", 78, 0)
         editBox:SetAutoFocus(false)
-        editBox:SetScript("OnEnterPressed", function(self)
+        editBox:SetTextInsets(2, 8, 0, 0)
+        editBox:SetText(getGPReason(amount))
+        editBox:SetCursorPosition(0)
+        local function saveReason(self)
             RLHelper.db.profile.gpAwardReasons = RLHelper.db.profile.gpAwardReasons or {}
             RLHelper.db.profile.gpAwardReasons[amount] = self:GetText()
+            local reason = getGPReason(amount)
+            RLHelper.db.profile.gpAwardReasons[amount] = reason
+            self:SetText(reason)
+            self:SetCursorPosition(0)
             RLHelper:RefreshGPAwardButtons()
+        end
+        editBox:SetScript("OnEnterPressed", function(self)
+            saveReason(self)
             self:ClearFocus()
         end)
-        editBox:SetScript("OnEditFocusLost", function(self)
-            RLHelper.db.profile.gpAwardReasons = RLHelper.db.profile.gpAwardReasons or {}
-            RLHelper.db.profile.gpAwardReasons[amount] = self:GetText()
-            RLHelper:RefreshGPAwardButtons()
-        end)
+        editBox:SetScript("OnEditFocusLost", saveReason)
 
         gpReasonEditBoxes[amount] = editBox
         gpReasonAnchor = label
@@ -2258,7 +2273,8 @@ function RLHelper:CreateOptionsPanel()
         gpAwardButtonsEnabled:SetChecked(RLHelper.db.profile.gpAwardButtonsEnabled)
         RLHelper.db.profile.gpAwardReasons = RLHelper.db.profile.gpAwardReasons or {}
         for amount, editBox in pairs(gpReasonEditBoxes) do
-            editBox:SetText(RLHelper.db.profile.gpAwardReasons[amount] or DEFAULT_GP_AWARD_REASONS[amount] or "")
+            editBox:SetText(getGPReason(amount))
+            editBox:SetCursorPosition(0)
         end
     end)
 

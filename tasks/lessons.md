@@ -72,3 +72,9 @@
 - Halion mechanic deaths attribute the underlying lethal mistake, not only the final damage event. The user explicitly counts cutter hits, meteor impact, and meteor fire followed by death from the aura or another hit as mechanic deaths. Do not label intervening damage a false positive or require a mechanic killing blow; assess whether the relevant hit is retained until UNIT_DIED.
 
 - Name Blood Queen BLOODBOLT_SPLASH «Кровавый всплеск» in the journal; do not use «Сплеш» or «Сплэш».
+
+- GP reason settings must show the existing defaults immediately after field creation and on reopening. Empty or whitespace-only saved input must resolve to the same default used by GP buttons; preserve custom reasons. Test initial fields without manually invoking OnShow.
+
+- Empty-looking settings are not proof of empty SavedVariables. Inspect the relevant saved keys and distinguish persisted state from the running client before claiming a root cause. A passing field-initialization test does not confirm an in-client display fix; establish whether the screenshot follows /reload. On 2026-09-26 the user confirmed the GP fields remained blank after /reload with the initialization fix; inspect live GetText/font/color before attempting another visual fix. The 2026-09-26 client returned `Каспер`, a valid font and white text while the GP field looked blank; treat this as a rendering/layout problem and require a client retest for any layout fix.
+
+- On 2026-09-26, the user confirmed explicit text insets made GP reason text visible but 8 px on the left looked too wide. Keep a small left inset near the input border, and verify the client appearance after spacing changes.

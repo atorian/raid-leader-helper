@@ -49,6 +49,8 @@ describe('UI themes', function()
         function frame:GetName() return self.name end
         function frame:SetText(text) self.text = text end
         function frame:GetText() return self.text or '' end
+        function frame:SetTextInsets(...) self.textInsets = { ... } end
+        function frame:SetCursorPosition(position) self.cursorPosition = position end
         function frame:SetFont(...) self.font = { ... } end
         function frame:GetFont() return unpack(self.font) end
         function frame:GetSpacing() return 0 end
@@ -599,6 +601,31 @@ describe('UI themes', function()
         assert.is_true(gp.footerFrame.visible)
         assert.are.equal('GameFontHighlight', gp.buttons[1].fonts.Normal)
         assert.is_false(gp.undoButton.enabled)
+    end)
+
+    it('fills GP reasons on creation and refresh, preserving custom values', function()
+        addon.db.profile.gpAwardReasons = { [100] = '', [200] = '   ', [250] = 'Своя причина' }
+        addon:CreateOptionsPanel()
+        local expected = { [100] = 'Каспер', [200] = 'Вомбат', [250] = 'Своя причина',
+            [500] = 'Капибара', [1000] = 'Banana' }
+        for amount, reason in pairs(expected) do
+            local editBox = namedFrames['RLHelperGPAwardReason' .. amount .. 'EditBox']
+            assert.are.equal(reason, editBox:GetText())
+            assert.are.same({ 2, 8, 0, 0 }, editBox.textInsets)
+            assert.are.equal(0, editBox.cursorPosition)
+        end
+        addon.optionsPanel.scripts.OnShow()
+        for amount, reason in pairs(expected) do
+            assert.are.equal(reason, namedFrames['RLHelperGPAwardReason' .. amount .. 'EditBox']:GetText())
+        end
+        local box = namedFrames.RLHelperGPAwardReason100EditBox
+        box:SetText('   ')
+        box.scripts.OnEditFocusLost(box)
+        assert.are.equal('Каспер', box:GetText())
+        assert.are.equal('Каспер', addon.db.profile.gpAwardReasons[100])
+        box:SetText('Другая причина')
+        box.scripts.OnEnterPressed(box)
+        assert.are.equal('Другая причина', addon.db.profile.gpAwardReasons[100])
     end)
 
     it('offers two settings, applies and persists the choice, and restores it when reopening settings', function()

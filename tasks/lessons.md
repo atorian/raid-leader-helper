@@ -82,3 +82,5 @@
 - Sindragosa Backlash explosions above two Instability stacks are tactical errors; one or two stacks remain informational. Apply the threshold to confirmed explosions only, including demo records, and test the 2/3 boundary. Meter switching must cover both Skada NewSegment and Recount ResetFightData, as in Halion.
 
 - For missing journal auto-wrap, check the visible V2 FontString itself: measuring taller rows does not make text wrap. Give each displayed FontString an explicit width and automatic height so WoW 3.3.5a performs its native word wrapping; avoid manual line splitting and confirm appearance in the client.
+
+- For release requests, use the user's stated bump type and the latest published tag to compute the exact next version before any release action. The user corrected a minor bump after v0.5.1 to a patch bump: release v0.5.2, not v0.6.0.

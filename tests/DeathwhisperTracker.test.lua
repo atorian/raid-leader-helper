@@ -22,6 +22,7 @@ describe('DeathwhisperTracker', function()
     before_each(function()
         sendChatMessageSpy:clear()
         DeathwhisperTracker.currentSpirits = {}
+        DeathwhisperTracker.explosions = {}
         DeathwhisperTracker.report = {}
     end)
 
@@ -132,7 +133,7 @@ describe('DeathwhisperTracker', function()
             assert.spy(log).was_not_called()
         end)
 
-        it('logs explode on SWING_DAMAGE', function()
+        it('waits for a blast after SWING_DAMAGE', function()
             local summonEvent = {
                 event = "SPELL_SUMMON",
                 spellId = 71426,
@@ -154,7 +155,9 @@ describe('DeathwhisperTracker', function()
             DeathwhisperTracker:handleEvent(summonEvent)
             DeathwhisperTracker:handleEvent(swingEvent)
 
-            assertRecord(log, { targetName = "TestTarget", kind = "SPIRIT_HIT", type = "TACTIC_VIOLATION" })
+            assert.spy(log).was_not_called()
+            assert.is_nil(DeathwhisperTracker.report["TestTarget"])
+            assert.is_not_nil(DeathwhisperTracker.currentSpirits["Spirit-123"])
         end)
 
         it('logs miss on SWING_MISSED', function()
@@ -183,7 +186,7 @@ describe('DeathwhisperTracker', function()
         end)
 
         for _, missType in ipairs({ "ABSORB", "BLOCK", "MISS", "PARRY", "DODGE" }) do
-            it('keeps tracking a spirit after ' .. missType .. ' until its damaging hit', function()
+            it('keeps tracking a spirit after ' .. missType .. ' until its confirmed blast', function()
                 DeathwhisperTracker:handleEvent({
                     event = "SPELL_SUMMON", spellId = 71426,
                     timestamp = time(), destGUID = "Spirit-123"
@@ -206,6 +209,12 @@ describe('DeathwhisperTracker', function()
                     sourceGUID = "Spirit-123", destName = "HitPlayer"
                 }
                 DeathwhisperTracker:handleEvent(hitEvent)
+                assert.spy(log).was_not_called()
+                assert.is_nil(DeathwhisperTracker.report["HitPlayer"])
+                DeathwhisperTracker:handleEvent({
+                    event = "SPELL_DAMAGE", timestamp = time(), spellId = 72012,
+                    sourceGUID = "Spirit-123", destName = "Bystander"
+                })
                 DeathwhisperTracker:handleEvent(hitEvent)
 
                 assert.spy(log).was_called(1)
@@ -248,6 +257,85 @@ describe('DeathwhisperTracker', function()
 
             assert.spy(log).was_called(1)
             assertRecord(log, { targetName = "TestTarget", kind = "SPIRIT_HIT", type = "TACTIC_VIOLATION" })
+        end)
+
+        for _, spellId in ipairs({ 71544, 72010, 72011, 72012 }) do
+            for _, blastType in ipairs({ "SPELL_DAMAGE", "ABSORB", "IMMUNE" }) do
+                it('credits the saved attack target for blast ' .. spellId .. '/' .. blastType, function()
+                    DeathwhisperTracker:handleEvent({
+                        event = "SPELL_SUMMON", spellId = 71426,
+                        timestamp = 100, destGUID = "Spirit-123"
+                    })
+                    local attack = {
+                        event = "SWING_MISSED", timestamp = 101, missType = "ABSORB",
+                        sourceGUID = "Spirit-123", sourceName = "Spirit",
+                        destGUID = "Player-123", destName = "Target", destClass = "MAGE"
+                    }
+                    DeathwhisperTracker:handleEvent(attack)
+                    attack.destName = "ChangedInput"
+                    log:clear()
+                    local blast = {
+                        event = blastType == "SPELL_DAMAGE" and "SPELL_DAMAGE" or "SPELL_MISSED",
+                        missType = blastType ~= "SPELL_DAMAGE" and blastType or nil,
+                        timestamp = 102, spellId = spellId, sourceGUID = "Spirit-123",
+                        destGUID = "Player-456", destName = "Bystander", destClass = "PRIEST"
+                    }
+                    DeathwhisperTracker:handleEvent(blast)
+                    blast.destName = "AnotherBystander"
+                    DeathwhisperTracker:handleEvent(blast)
+
+                    assert.spy(log).was_called(1)
+                    assertRecord(log, { targetName = "Target", timestamp = 102,
+                        kind = "SPIRIT_HIT", type = "TACTIC_VIOLATION" })
+                    local entry = log.calls[1].vals[1]
+                    assert.are.equal("Player-123", entry.target.guid)
+                    assert.are.equal("MAGE", entry.target.class)
+                    assert.is_nil(entry.missType)
+                    assert.are.same({ Target = 1 }, DeathwhisperTracker.report)
+                    assert.is_nil(DeathwhisperTracker.currentSpirits["Spirit-123"])
+                end)
+            end
+        end
+
+        it('does not attribute a blast without an observed attack to its splash victim', function()
+            DeathwhisperTracker:handleEvent({
+                event = "SPELL_SUMMON", spellId = 71426,
+                timestamp = time(), destGUID = "Spirit-123"
+            })
+            for _, guid in ipairs({ "Spirit-123", "UnknownSpirit" }) do
+                DeathwhisperTracker:handleEvent({
+                    event = "SPELL_DAMAGE", spellId = 72012, timestamp = time(),
+                    sourceGUID = guid, destName = "Bystander"
+                })
+            end
+            assert.spy(log).was_not_called()
+            assert.are.same({}, DeathwhisperTracker.report)
+        end)
+
+        it('keeps simultaneous spirits and their targets separate and ignores unrelated spells', function()
+            for i = 1, 2 do
+                DeathwhisperTracker:handleEvent({
+                    event = "SPELL_SUMMON", spellId = 71426,
+                    timestamp = time(), destGUID = "Spirit-" .. i
+                })
+                DeathwhisperTracker:handleEvent({
+                    event = "SWING_DAMAGE", timestamp = time(),
+                    sourceGUID = "Spirit-" .. i, destName = "Target" .. i
+                })
+                DeathwhisperTracker:handleEvent({
+                    event = "SPELL_DAMAGE", spellId = 1, timestamp = time(),
+                    sourceGUID = "Spirit-" .. i, destName = "Bystander"
+                })
+            end
+            assert.spy(log).was_not_called()
+            for i = 2, 1, -1 do
+                DeathwhisperTracker:handleEvent({
+                    event = "SPELL_DAMAGE", spellId = 72012, timestamp = time(),
+                    sourceGUID = "Spirit-" .. i, destName = "Bystander"
+                })
+            end
+            assert.spy(log).was_called(2)
+            assert.are.same({ Target1 = 1, Target2 = 1 }, DeathwhisperTracker.report)
         end)
 
         it('does not add misses to spirit explosion report', function()
@@ -305,12 +393,14 @@ describe('DeathwhisperTracker', function()
 
     describe("reset", function()
         it("should send raid message with spirit explosion report", function()
+            DeathwhisperTracker.explosions = { spirit = { raidDamage = 27000 } }
             DeathwhisperTracker.report = {
                 ["Player1"] = 2,
                 ["Player2"] = 1
             }
 
             DeathwhisperTracker:reset()
+            assert.are.same({}, DeathwhisperTracker.explosions)
 
             assert.spy(sendChatMessageSpy).was
                 .called_with("Духов взорвали: всего 3 Player1(2) Player2(1)", "RAID")
@@ -320,6 +410,7 @@ describe('DeathwhisperTracker', function()
             DeathwhisperTracker.report = {}
 
             DeathwhisperTracker:reset()
+            assert.are.same({}, DeathwhisperTracker.explosions)
 
             assert.spy(sendChatMessageSpy).was_not.called()
         end)

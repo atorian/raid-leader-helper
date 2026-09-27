@@ -86,6 +86,21 @@ function Journal.Copy(value)
     return copy
 end
 
+-- Replace a growing record without adding a row or changing its position.
+function Journal.Update(events, message)
+    if not message.updateKey then return false end
+    for i = #events, 1, -1 do
+        local previous = events[i]
+        if previous.updateKey == message.updateKey and previous.kind == message.kind then
+            local entry = Journal.Copy(message)
+            entry.seq, entry.timestamp = previous.seq, previous.timestamp
+            events[i] = entry
+            return true
+        end
+    end
+    return false
+end
+
 function Journal.Entity(guid, name, classToken)
     if not guid and not name then return nil end
     return { guid = guid, name = name, class = resolveEventClass(guid, name, classToken) }
@@ -206,6 +221,8 @@ function Journal.Format(entry, neutralMessage)
             local _, _, texture = GetSpellInfo(entry.spellId)
             if texture then message = message .. " |T" .. texture .. ":24:24:0:-2|t" end
         end
+    elseif entry.kind == "SPIRIT_HIT" and entry.raidDamage ~= nil then
+        message = string.format("Взорвал духа: урон по рейду %s", entry.raidDamage)
     elseif entry.kind == "TRAMPLE_HIT" then
         message = descriptions.TRAMPLE_HIT
     elseif entry.kind == "VORTEX_HIT" or entry.kind == "VORTEX_MISSED" then

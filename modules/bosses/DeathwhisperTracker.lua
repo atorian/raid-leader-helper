@@ -10,12 +10,15 @@ local TRACKED_SPELLS = {
 }
 local LADY_DEATHWHISPER_MANA_BARRIER = 70842
 local LADY_DEATHWHISPER_DOMINATE_MIND = 71289
+-- Vengeful Blast difficulty variants, verified against wotlk.ezhead.org.
+local VENGEFUL_BLAST = { [71544] = true, [72010] = true, [72011] = true, [72012] = true }
 local CYCLONE = 33786
 local LADY_DEATHWHISPER = "Леди Смертный Шепот"
 
 function DeathwhisperTracker:OnInitialize()
     RLHelper:Debug("DeathwhisperTracker: Инициализация")
     self.currentSpirits = {}
+    self.explosions = {}
     self.report = {}
     self.log = function(...)
         RLHelper:OnCombatLogEvent(...)
@@ -75,6 +78,7 @@ end
 
 function DeathwhisperTracker:reset()
     self.currentSpirits = {}
+    self.explosions = {}
     self:sendSummaryToRaid()
     self.report = {}
 end
@@ -97,16 +101,6 @@ function DeathwhisperTracker:sendSummaryToRaid()
     end
 
     SendChatMessage(string.format("Духов взорвали: всего %s %s", summary.total, summary.details), "RAID")
-end
-
-local function consumeTrackedSpirit(self, guid)
-    local spiritInfo = self.currentSpirits[guid]
-    if not spiritInfo then
-        return nil
-    end
-
-    self.currentSpirits[guid] = nil
-    return spiritInfo
 end
 
 function DeathwhisperTracker:handleEvent(eventData)
@@ -141,34 +135,59 @@ function DeathwhisperTracker:handleEvent(eventData)
         return
     end
 
-    if eventData.event == "SWING_DAMAGE" then
-        local spiritInfo = consumeTrackedSpirit(self, eventData.sourceGUID)
-        if not spiritInfo then
-            return
+    if VENGEFUL_BLAST[eventData.spellId] and
+        (eventData.event == "SPELL_DAMAGE" or eventData.event == "SPELL_MISSED") then
+        local explosion = self.explosions[eventData.sourceGUID]
+        local isNew = not explosion
+        if isNew then
+            local spirit = self.currentSpirits[eventData.sourceGUID]
+            local attack = spirit and spirit.lastAttack
+            if not attack or not attack.destName then return end
+
+            self.currentSpirits[eventData.sourceGUID] = nil
+            self.report[attack.destName] = (self.report[attack.destName] or 0) + 1
+            attack.timestamp = eventData.timestamp
+            attack.missType = nil
+            explosion = RLHelperJournal.Create("SPIRIT_HIT", attack, "TACTIC_VIOLATION", {
+                updateKey = "spirit:" .. eventData.sourceGUID, raidDamage = 0,
+            })
+            self.explosions[eventData.sourceGUID] = explosion
         end
 
-        self.report[eventData.destName] = self.report[eventData.destName] or 0
-        self.report[eventData.destName] = self.report[eventData.destName] + 1
-
-        RLHelperJournal.Log(self.log, "SPIRIT_HIT", eventData, "TACTIC_VIOLATION")
+        local damage = 0
+        local context = self.context or RLHelper
+        if eventData.event == "SPELL_DAMAGE" and (eventData.amount or 0) > 0 and
+            context:IsGroupMember(eventData.destGUID, eventData.destFlags) then
+            local unit = context.groupMembers[eventData.destGUID]
+            -- Roster identity survives mind control, which can change player type flags.
+            local isPlayer = unit and (type(unit) ~= "string" or not unit:find("pet", 1, true))
+            if not unit then
+                isPlayer = bit.band(eventData.destFlags or 0, 0x400) > 0 or
+                    (eventData.destGUID and eventData.destGUID:sub(1, 5) == "0x000")
+            end
+            if isPlayer then damage = eventData.amount end
+        end
+        if isNew or damage > 0 then
+            explosion.raidDamage = explosion.raidDamage + damage
+            self.log(explosion)
+        end
         return
     end
 
-    if eventData.event == "SWING_MISSED" then
-        -- Absorbed or avoided swings can be followed by another attack from the same spirit.
-        local spiritInfo = self.currentSpirits[eventData.sourceGUID]
-        if not spiritInfo then
-            return
+    local spiritInfo = self.currentSpirits[eventData.sourceGUID]
+    if not spiritInfo then return end
+    if eventData.event == "SWING_DAMAGE" or eventData.event == "SWING_MISSED" then
+        -- Keep the attack target: blast splash victims do not identify who triggered it.
+        spiritInfo.lastAttack = RLHelperJournal.Copy(eventData)
+        if eventData.event == "SWING_MISSED" then
+            RLHelperJournal.Log(self.log, "SPIRIT_MISSED", eventData)
         end
-
-        RLHelperJournal.Log(self.log, "SPIRIT_MISSED", eventData)
-        return
     end
 end
 
 DeathwhisperTracker.demoOrder = 4
 function DeathwhisperTracker:RunDemo(demo)
-    self.currentSpirits, self.report = {}, {}
+    self.currentSpirits, self.explosions, self.report = {}, {}, {}
     local p = demo.players
     local boss = demo:Boss(36855, LADY_DEATHWHISPER)
     demo.currentCombat.firstEnemy = LADY_DEATHWHISPER
@@ -181,6 +200,10 @@ function DeathwhisperTracker:RunDemo(demo)
         demo:Event(self, "SPELL_SUMMON", boss, spirit, 71426)
         demo:Event(self, i == 2 and "SWING_MISSED" or "SWING_DAMAGE", spirit, target, nil,
             i == 2 and { missType = "DODGE" } or { amount = 344 })
+        if i == 1 then
+            demo:Event(self, "SPELL_DAMAGE", spirit, target, 72012, { amount = 17608 })
+            demo:Event(self, "SPELL_DAMAGE", spirit, p.priest, 72012, { amount = 12000 })
+        end
     end
     self:summarizeCombat()
 end

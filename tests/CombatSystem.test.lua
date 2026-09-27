@@ -846,11 +846,11 @@ describe("Боевая система", function()
         do
             it("records the real spirit hit during observer control", function()
                 local tracker = require('../modules/bosses/DeathwhisperTracker')
-                local oldLog, oldSpirits, oldReport = tracker.log, tracker.currentSpirits, tracker.report
+                local oldLog, oldSpirits, oldReport, oldExplosions = tracker.log, tracker.currentSpirits, tracker.report, tracker.explosions
                 finally(function()
-                    tracker.log, tracker.currentSpirits, tracker.report = oldLog, oldSpirits, oldReport
+                    tracker.log, tracker.currentSpirits, tracker.report, tracker.explosions = oldLog, oldSpirits, oldReport, oldExplosions
                 end)
-                tracker.currentSpirits, tracker.report = {}, {}
+                tracker.currentSpirits, tracker.report, tracker.explosions = {}, {}, {}
                 tracker.log = function(message) RLHelper:OnCombatLogEvent(message) end
                 setBossModules({ tracker })
 
@@ -861,6 +861,9 @@ describe("Боевая система", function()
                 RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 104, "SWING_DAMAGE",
                     spirit, "Мстительный дух", 0xa18, raider, "Storm", 0x548,
                     224, 0, 1, 0, 0, 0)
+                RLHelper:COMBAT_LOG_EVENT_UNFILTERED("COMBAT_LOG_EVENT_UNFILTERED", 104, "SPELL_DAMAGE",
+                    spirit, "Мстительный дух", 0xa18, raider, "Storm", 0x548,
+                    72012, "Вспышка мщения", 0x30, 18000, 0, 48, 0, 0, 0)
 
                 assert.are.equal(1, tracker.report.Storm)
                 assert.is_nil(tracker.currentSpirits[spirit])

@@ -81,7 +81,7 @@ describe('Structured journal', function()
         end
         spells:reset()
         pulls:reset()
-        lady.currentSpirits, lady.report = {}, {}
+        lady.currentSpirits, lady.report, lady.explosions = {}, {}, {}
         professor:reset()
         lich:reset()
         halion:reset()
@@ -207,6 +207,93 @@ describe('Structured journal', function()
         assert.is_nil(addon.db.char.combatHistory)
     end)
 
+    it('accumulates raid-player blast damage in one row and preserves it in history', function()
+        addon.currentCombat.startTime = 1000
+        addon.groupMembers = { trigger = 'raid1', controlled = 'raid2', pet = 'raidpet1' }
+        lady:handleEvent(event('SPELL_SUMMON', 71426, 'lady', 'spirit'))
+        lady:handleEvent(event('SWING_DAMAGE', nil, 'spirit', 'trigger', 1000, 344))
+        local function blast(target, flags, amount, timestamp)
+            local hit = event('SPELL_DAMAGE', 72012, 'spirit', target, timestamp, amount)
+            hit.destFlags, hit.absorbed = flags, 9000
+            lady:handleEvent(hit)
+        end
+        blast('trigger', 0x514, 10000, 1001)
+        local first = Journal.Copy(addon.currentCombat.events[1])
+        assert.are.equal(10000, first.raidDamage)
+        blast('controlled', 0x1248, 15000, 1001.24)
+        -- Delayed damage remains part of the same spirit's explosion.
+        blast('another', 0x514, 2000, 1003)
+        blast('pet', 0x1114, 8000, 1003)
+        blast('unlistedPet', 0x1114, 8000, 1003)
+        blast('outsider', 0x548, 8000, 1003)
+        local missed = event('SPELL_MISSED', 72012, 'spirit', 'trigger', 1003, 5000)
+        missed.missType, missed.destFlags = 'ABSORB', 0x514
+        lady:handleEvent(missed)
+
+        local records = addon.currentCombat.events
+        assert.are.equal(1, #records)
+        assert.are.equal(27000, records[1].raidDamage)
+        assert.are.equal('trigger', records[1].target.guid)
+        assert.are.equal(1001, records[1].timestamp)
+        assert.are.equal(1, records[1].seq)
+        assert.are.equal(1, lady.report.trigger)
+        assert.are.equal(1, #lines)
+        assert.is_truthy(lines[1]:find('Взорвал духа: урон по рейду 27000', 1, true))
+        assert.are.equal(10000, first.raidDamage)
+        addon:SetJournalView('ERRORS')
+        assert.are.equal(1, #lines)
+        assert.is_truthy(lines[1]:find('27000', 1, true))
+        addon:SaveCombatToProfile(addon.currentCombat)
+        addon.db = assert(loadstring('return ' .. serialize(addon.db)))()
+        addon:InitializeJournal()
+        addon:DisplayCombat(addon.combatHistory[1])
+        assert.are.equal(27000, addon.combatHistory[1].events[1].raidDamage)
+        assert.is_truthy(lines[1]:find('27000', 1, true))
+    end)
+
+    it('keeps damage totals of simultaneous spirits separate, even at the journal limit', function()
+        local limit = Journal.MAX_EVENTS
+        finally(function() Journal.MAX_EVENTS = limit end)
+        Journal.MAX_EVENTS = 2
+        for i = 1, 2 do
+            lady:handleEvent(event('SPELL_SUMMON', 71426, 'lady', 'spirit' .. i))
+            lady:handleEvent(event('SWING_DAMAGE', nil, 'spirit' .. i, 'target' .. i))
+            local hit = event('SPELL_DAMAGE', 72012, 'spirit' .. i, 'victim', 1001, i * 100)
+            hit.destFlags = 0x514
+            lady:handleEvent(hit)
+        end
+        addon:DisplayCombat({ events = {} })
+        for i = 2, 1, -1 do
+            local hit = event('SPELL_DAMAGE', 72012, 'spirit' .. i, 'victim', 1002, i * 1000)
+            hit.destFlags = 0x514
+            lady:handleEvent(hit)
+        end
+        assert.are.equal(0, #lines) -- Background updates must not replace the selected view.
+        local records = addon.currentCombat.events
+        assert.are.equal(2, #records)
+        assert.are.equal(1100, records[1].raidDamage)
+        assert.are.equal(2200, records[2].raidDamage)
+        assert.are.equal('target1', records[1].target.name)
+        assert.are.equal('target2', records[2].target.name)
+        assert.is_nil(addon.currentCombat.droppedEvents)
+        assert.are.same({ target1 = 1, target2 = 1 }, lady.report)
+    end)
+
+    it('shows zero for an absorbed blast and adds later damage without recounting it', function()
+        lady:handleEvent(event('SPELL_SUMMON', 71426, 'lady', 'spirit'))
+        lady:handleEvent(event('SWING_DAMAGE', nil, 'spirit', 'target'))
+        local blast = event('SPELL_MISSED', 72012, 'spirit', 'target', 1001)
+        blast.missType, blast.destFlags = 'ABSORB', 0x514
+        lady:handleEvent(blast)
+        assert.are.equal(0, addon.currentCombat.events[1].raidDamage)
+        assert.is_truthy(lines[1]:find('урон по рейду 0', 1, true))
+        blast.event, blast.amount = 'SPELL_DAMAGE', 3000
+        lady:handleEvent(blast)
+        assert.are.equal(1, #addon.currentCombat.events)
+        assert.are.equal(3000, addon.currentCombat.events[1].raidDamage)
+        assert.are.equal(1, lady.report.target)
+    end)
+
     it('records distinct events at the same timestamp in insertion order', function()
         local hit = event('SWING_DAMAGE', nil, 'spirit1', 'player')
         lady.currentSpirits.spirit1 = {}
@@ -214,6 +301,8 @@ describe('Structured journal', function()
         lady:handleEvent(hit)
         hit.sourceGUID = 'spirit2'
         lady:handleEvent(hit)
+        lady:handleEvent(event('SPELL_DAMAGE', 72012, 'spirit1', 'bystander'))
+        lady:handleEvent(event('SPELL_DAMAGE', 72012, 'spirit2', 'bystander'))
         local records = addon.currentCombat.events
         assert.are.equal(2, #records)
         assert.are.equal(records[1].timestamp, records[2].timestamp)
@@ -745,6 +834,12 @@ describe('Structured journal', function()
             0xa48, 'demo-spirit-1', 'Мстительный дух', 0xa48, 71426, 'Призыв духа', 1))
         lady:handleEvent(blizzardEvent(2001, 'SWING_DAMAGE', 'demo-spirit-1', 'Мстительный дух',
             0xa48, 'demo-mage', 'Чародей', 0x514, 344, 0, 1, 0, 0, 0))
+        lady:handleEvent(blizzardEvent(2001, 'SPELL_DAMAGE', 'demo-spirit-1', 'Мстительный дух',
+            0xa48, 'demo-mage', 'Чародей', 0x514, 72012, 'Вспышка мщения', 0x30,
+            17608, 0, 48, 7546, 0, 0))
+        lady:handleEvent(blizzardEvent(2001.2, 'SPELL_DAMAGE', 'demo-spirit-1', 'Мстительный дух',
+            0xa48, 'demo-priest', 'Целитель', 0x514, 72012, 'Вспышка мщения', 0x30,
+            12000, 0, 48, 0, 0, 0))
         local actualSpirit = addon.currentCombat.events[#addon.currentCombat.events]
 
         halion:handleEvent(blizzardEvent(2002, 'SPELL_DAMAGE', 'demo-orb', 'Темный шар',
@@ -754,7 +849,7 @@ describe('Structured journal', function()
             'demo-mage', 'Чародей', 0x514))
         local actualDeath = addon.currentCombat.events[#addon.currentCombat.events]
 
-        for _, field in ipairs({ 'kind', 'type', 'source', 'target', 'spellId', 'amount', 'text', 'icon' }) do
+        for _, field in ipairs({ 'kind', 'type', 'source', 'target', 'spellId', 'amount', 'raidDamage', 'text', 'icon' }) do
             assert.are.same(demoSpirit[field], actualSpirit[field])
             assert.are.same(demoDeath[field], actualDeath[field])
         end

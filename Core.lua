@@ -1045,6 +1045,12 @@ function RLHelper:OnCombatLogEvent(message)
     assert(type(message) == "table" and message.kind and message.type, "Journal requires a structured event")
     local combat = self.currentCombat
     combat.events = combat.events or {}
+    if Journal.Update(combat.events, message) then
+        if self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() then
+            self:DisplayCombat(combat)
+        end
+        return
+    end
     if #combat.events >= Journal.MAX_EVENTS then
         combat.droppedEvents = (combat.droppedEvents or 0) + 1
         if combat.droppedEvents == 1 and self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() then
@@ -2456,6 +2462,7 @@ function RLHelper:DemoJournal()
             if type(item.module[key]) == "function" then return item.module[key] end
         end })
         instance.log = function(entry)
+            if Journal.Update(combat.events, entry) then return end
             local record = Journal.Copy(entry)
             record.timestamp = combat.startTime + #combat.events
             record.seq = #combat.events + 1

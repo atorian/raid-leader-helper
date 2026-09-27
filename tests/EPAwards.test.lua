@@ -28,6 +28,7 @@ describe('EP awards', function()
         awards.ShowReminder = function(_, key) table.insert(shown, key) end
         epgp = {
             CanIncEPBy = function() return true end,
+            IsMemberInExtrasList = function(_, name) return name == 'Standby' end,
             RegisterCallback = function(target, event) assert.equals('MassEPAward', event); epgp.target = target end,
             IncMassEPBy = function(_, reason, amount)
                 table.insert(calls, { reason, amount })
@@ -342,6 +343,33 @@ describe('EP awards', function()
             end
         end
         assert.equals(5, count)
+    end)
+
+    it('gives selected standby the full award regardless of EPGP percentage and restores EPGP', function()
+        local originalExtras = epgp.IsMemberInExtrasList
+        for _, percent in ipairs({ 0, 50, 100, 200 }) do
+            addon.db.char.epAwards = nil
+            local amounts = {}
+            epgp.IncMassEPBy = function(self, reason, amount)
+                -- Same amount-selection branch as the installed EPGP mass method.
+                for _, name in ipairs({ 'Main', 'Standby' }) do
+                    amounts[name] = self:IsMemberInExtrasList(name) and math.floor(percent * 0.01 * amount) or amount
+                end
+                self.target:MassEPAward('MassEPAward', { Main = true, Standby = true }, reason, amount)
+            end
+            assert.is_true(awards:Award('attendance'))
+            assert.same({ Main = 1000, Standby = 1000 }, amounts)
+            assert.equals(originalExtras, epgp.IsMemberInExtrasList)
+            assert.is_true(epgp:IsMemberInExtrasList('Standby'))
+        end
+    end)
+
+    it('restores EPGP standby behavior even if the mass award throws', function()
+        local originalExtras = epgp.IsMemberInExtrasList
+        epgp.IncMassEPBy = function() error('partial write') end
+        assert.is_false(awards:Award('attendance'))
+        assert.equals(originalExtras, epgp.IsMemberInExtrasList)
+        assert.equals('uncertain', awards:GetState().awards.attendance.status)
     end)
 
 end)

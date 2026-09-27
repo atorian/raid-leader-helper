@@ -159,7 +159,12 @@ function EPAwards:Award(key)
     local record = { status = "pending", amount = amount, reason = reward.name, at = time() }
     state.awards[key] = record
     self.pending = { record = record, reason = reason, amount = amount }
+    -- Installed EPGP applies its standby percentage inside this synchronous method.
+    -- Keep its award list and main/alt deduplication, but use the full award for everyone.
+    local isExtra = epgp.IsMemberInExtrasList
+    epgp.IsMemberInExtrasList = function() return false end
     local ok = pcall(epgp.IncMassEPBy, epgp, reason, amount)
+    epgp.IsMemberInExtrasList = isExtra
     self.pending = nil
     if not ok then
         -- An exception may follow partial writes. Never offer a blind retry.

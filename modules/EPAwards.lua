@@ -12,6 +12,22 @@ local REWARDS = {
         bosses = { [BossIds.NPCS.ANUBARAK] = true, [BossIds.NPCS.ANUBARAK_ALT_1] = true,
             [BossIds.NPCS.ANUBARAK_ALT_2] = true } }
 }
+-- Spec identifiers used by the installed WoW 3.3.5a Skada LibCompat.
+local SPECS = {
+    {71, "WARRIOR", "Воин: Армс"}, {72, "WARRIOR", "Воин: Фури"}, {73, "WARRIOR", "Воин: Защита"},
+    {250, "DEATHKNIGHT", "ДК: Кровь"}, {251, "DEATHKNIGHT", "ДК: Лёд"}, {252, "DEATHKNIGHT", "ДК: Нечестивость"},
+    {65, "PALADIN", "Паладин: Свет"}, {66, "PALADIN", "Паладин: Защита"}, {70, "PALADIN", "Паладин: Воздаяние"},
+    {253, "HUNTER", "Охотник: Звери"}, {254, "HUNTER", "Охотник: Стрельба"}, {255, "HUNTER", "Охотник: Выживание"},
+    {259, "ROGUE", "Разбойник: Ликвидация"}, {260, "ROGUE", "Разбойник: Бой"}, {261, "ROGUE", "Разбойник: Скрытность"},
+    {256, "PRIEST", "Жрец: Послушание"}, {257, "PRIEST", "Жрец: Свет"}, {258, "PRIEST", "Жрец: Тьма"},
+    {262, "SHAMAN", "Шаман: Стихии"}, {263, "SHAMAN", "Шаман: Совершенств."}, {264, "SHAMAN", "Шаман: Исцеление"},
+    {62, "MAGE", "Маг: Тайная магия"}, {63, "MAGE", "Маг: Огонь"}, {64, "MAGE", "Маг: Лёд"},
+    {265, "WARLOCK", "Чернокнижник: Колд."}, {266, "WARLOCK", "Чернокнижник: Демон."}, {267, "WARLOCK", "Чернокнижник: Разруш."},
+    {102, "DRUID", "Друид: Баланс"}, {103, "DRUID", "Друид: Кошка"}, {104, "DRUID", "Друид: Медведь"}, {105, "DRUID", "Друид: Исцеление"}
+}
+local SPEC_BY_ID = {}
+for _, spec in ipairs(SPECS) do SPEC_BY_ID[spec[1]] = spec end
+
 EPAwards.receivesCombatEvents = true
 
 local function getReward(key)
@@ -23,6 +39,7 @@ end
 function EPAwards:GetSettings()
     local profile = RLHelper.db.profile
     profile.epAwards = profile.epAwards or { rt = "19:00", amounts = {}, reminders = {} }
+    profile.epAwards.saurfangThresholds = profile.epAwards.saurfangThresholds or {}
     return profile.epAwards
 end
 
@@ -46,6 +63,7 @@ end
 function EPAwards:GetAmount(key)
     local amount = self:GetSettings().amounts[key]
     if amount ~= nil then return amount end
+    if key == "saurfang" then return 500 end
     local reward = getReward(key)
     return reward and reward.defaultAmount or 0
 end
@@ -86,6 +104,11 @@ function EPAwards:OnInitialize()
 end
 
 function EPAwards:OnEnable()
+    self:RegisterMessage("COMBAT_BOSS_DEFEATED", "SkadaSetComplete")
+    if Skada and type(Skada.RegisterCallback) == "function" then
+        Skada.RegisterCallback(self, "Skada_SetComplete", "SkadaSetComplete")
+        self.skadaSource = Skada
+    end
     self:AttachButton()
     if self.button then self.button:Show() end
     self.clock = self.clock or CreateFrame("Frame")
@@ -99,6 +122,12 @@ function EPAwards:OnEnable()
 end
 
 function EPAwards:OnDisable()
+    if self.skadaSource then
+        self.skadaSource.UnregisterCallback(self, "Skada_SetComplete")
+        self.skadaSource = nil
+    end
+    self.saurfangKilledSet = nil
+    if self.saurfangWindow then self.saurfangWindow:Hide() end
     if self.clock then self.clock:SetScript("OnUpdate", nil) end
     if self.window then self.window:Hide() end
     for _, popup in pairs(self.popups or {}) do popup:Hide() end
@@ -123,11 +152,94 @@ end
 function EPAwards:handleEvent(event)
     if event.event ~= "UNIT_DIED" or not event.destGUID then return end
     local npc = tonumber(event.destGUID:sub(9, 12), 16)
+    if npc == BossIds.NPCS.DEATHBRINGER_SAURFANG and
+        RLHelper.currentInstanceId == BossIds.INSTANCES.ICECROWN_CITADEL and Skada then
+        self.saurfangKilledSet = Skada.current
+    end
     for _, reward in ipairs(REWARDS) do
         if reward.bosses and reward.instance == RLHelper.currentInstanceId and reward.bosses[npc] then
             self:Suggest(reward.key)
         end
     end
+end
+
+-- Read a completed winning segment, never a live DPS estimate or a wipe.
+function EPAwards:SkadaSetComplete(_, set)
+    if not Skada or not set or not set.endtime or
+        set.gotboss ~= BossIds.NPCS.DEATHBRINGER_SAURFANG or
+        (not set.success and self.saurfangKilledSet ~= set) then return end
+    -- Skada also completes phase segments; awards use the whole fight.
+    if set ~= Skada.current and set ~= Skada.last then return end
+    local saved = RLHelper.db.char.saurfangDPS
+    if saved and saved.starttime == set.starttime and saved.endtime == set.endtime then return end
+    local snapshot = { starttime = set.starttime, endtime = set.endtime, players = {}, unknown = 0 }
+    local thresholds = self:GetSettings().saurfangThresholds
+    for _, player in ipairs(set.players or {}) do
+        local spec = SPEC_BY_ID[player.spec]
+        if not spec or spec[2] ~= player.class or type(player.GetDPS) ~= "function" then
+            snapshot.unknown = snapshot.unknown + 1
+        elseif thresholds[player.spec] and thresholds[player.spec] > 0 then
+            snapshot.players[#snapshot.players + 1] = {
+                name = player.name, class = player.class, spec = player.spec,
+                dps = player:GetDPS(), threshold = thresholds[player.spec]
+            }
+        end
+    end
+    table.sort(snapshot.players, function(a, b) return a.dps > b.dps end)
+    RLHelper.db.char.saurfangDPS = snapshot
+    self.saurfangKilledSet = nil
+    if self.saurfangWindow and self.saurfangWindow:IsShown() then self:ShowSaurfangWindow() end
+end
+
+function EPAwards:IndividualEPAward(_, name, reason, amount)
+    local pending = self.pendingIndividual
+    if pending and pending.name == name and pending.reason == reason and pending.amount == amount then
+        pending.confirmed = true
+    end
+end
+
+function EPAwards:AwardSaurfang(snapshot, selected)
+    if not snapshot or snapshot ~= RLHelper.db.char.saurfangDPS then return false, "Результат боя изменился. Откройте окно заново." end
+    local amount, reason = self:GetAmount("saurfang"), "RLHelper: ДПС Саурфанг"
+    if amount <= 0 then return false, "Укажите сумму ЕП за ДПС Саурфанг в настройках." end
+    local epgp = LibStub("AceAddon-3.0"):GetAddon("EPGP", true)
+    if not epgp or type(epgp.IncEPBy) ~= "function" or type(epgp.GetEPGP) ~= "function" or
+        type(epgp.RegisterCallback) ~= "function" then return false, "EPGP недоступен." end
+    if not epgp:CanIncEPBy(reason, amount) then
+        return false, "EPGP не готов к начислению: проверьте права и загрузку списка гильдии."
+    end
+    local recipients, mains = {}, {}
+    for _, player in ipairs(snapshot.players) do
+        if selected[player.name] and player.dps >= player.threshold - 100 then
+            local ep, _, main = epgp:GetEPGP(player.name)
+            if not ep then return false, "Игрок не найден в EPGP: " .. player.name end
+            main = main or player.name
+            if mains[main] then return false, "Выбраны персонажи одного основного игрока: " .. main end
+            mains[main] = true
+            recipients[#recipients + 1] = player
+        end
+    end
+    if #recipients == 0 then return false, "Выберите игроков для начисления." end
+    if self.individualCallbackSource ~= epgp then
+        epgp.RegisterCallback(self, "EPAward", "IndividualEPAward")
+        self.individualCallbackSource = epgp
+    end
+    local awarded = 0
+    for _, player in ipairs(recipients) do
+        local pending = { name = player.name, reason = reason, amount = amount }
+        self.pendingIndividual = pending
+        local ok = pcall(epgp.IncEPBy, epgp, player.name, reason, amount)
+        self.pendingIndividual = nil
+        if pending.confirmed then
+            player.lastAward = { amount = amount, at = time() }
+            selected[player.name] = nil
+            awarded = awarded + 1
+        end
+        if not ok or not pending.confirmed then
+            return false, "Начислено: " .. awarded .. ". Проверьте журнал EPGP для " .. player.name .. " перед повтором."
+        end
+    end
+    return true, "Начислено по " .. amount .. " ЕП. Игроков: " .. awarded .. "."
 end
 
 function EPAwards:MassEPAward(_, names, reason, amount)
@@ -263,7 +375,7 @@ function EPAwards:RefreshWindow()
         row.button:SetText("Начислить")
         row.button:Enable()
     end
-    self.window:SetHeight(75 + math.max(visible, 1) * 34)
+    self.window:SetHeight(111 + math.max(visible, 1) * 34)
     if visible == 0 then self.window.empty:Show() else self.window.empty:Hide() end
 end
 
@@ -285,9 +397,100 @@ function EPAwards:ToggleWindow()
         frame.empty = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         frame.empty:SetPoint("TOPLEFT", 14, -68)
         frame.empty:SetText("Нет включённых начислений.")
+        frame.saurfangButton = makeButton(frame, "ДПС Саурфанг", 155, function() self:ShowSaurfangWindow() end)
+        frame.saurfangButton:SetPoint("BOTTOMRIGHT", -14, 10)
         self.window = frame
     end
     if self.window:IsShown() then self.window:Hide() else self:RefreshWindow(); self.window:Show() end
+end
+
+function EPAwards:ShowSaurfangWindow()
+    local frame = self.saurfangWindow
+    if not frame then
+        frame = makeWindow("ДПС Саурфанг", 700, 440)
+        frame.info = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        frame.info:SetPoint("TOPLEFT", 14, -40)
+        frame.info:SetWidth(670)
+        frame.info:SetJustifyH("LEFT")
+        for _, column in ipairs({ {14, "Имя игрока"}, {175, "Класс / спек"}, {390, "DPS"}, {480, "Планка"}, {580, "Выбран"} }) do
+            local label = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            label:SetPoint("TOPLEFT", column[1], -84)
+            label:SetText(column[2])
+        end
+        local scroll = CreateFrame("ScrollFrame", "RLHelperSaurfangScroll", frame, "UIPanelScrollFrameTemplate")
+        scroll:SetPoint("TOPLEFT", 14, -108)
+        scroll:SetPoint("BOTTOMRIGHT", -34, 76)
+        local content = CreateFrame("Frame", nil, scroll)
+        content:SetSize(645, 1)
+        scroll:SetScrollChild(content)
+        frame.content, frame.scroll, frame.rows = content, scroll, {}
+        frame.result = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        frame.result:SetPoint("BOTTOMLEFT", 14, 44)
+        frame.result:SetWidth(670)
+        frame.result:SetJustifyH("LEFT")
+        frame.awardButton = makeButton(frame, "Начислить", 140, function()
+            local _, message = self:AwardSaurfang(frame.snapshot, frame.selected)
+            frame.result:SetText(message)
+            for _, row in ipairs(frame.rows) do
+                if row.player then row.check:SetChecked(frame.selected[row.player.name] == true) end
+            end
+        end)
+        frame.awardButton:SetPoint("BOTTOM", 0, 12)
+        self.saurfangWindow = frame
+    end
+    local snapshot = RLHelper.db.char.saurfangDPS
+    frame.snapshot, frame.selected = snapshot, {}
+    frame.result:SetText("")
+    for _, row in ipairs(frame.rows) do row:Hide(); row.player = nil end
+    local count, previouslyAwarded = 0, 0
+    if snapshot then
+        for _, player in ipairs(snapshot.players) do
+            if player.dps >= player.threshold - 100 then
+                count = count + 1
+                if player.lastAward then previouslyAwarded = previouslyAwarded + 1 end
+                local row = frame.rows[count]
+                if not row then
+                    row = CreateFrame("Frame", nil, frame.content)
+                    row:SetSize(645, 26)
+                    row:SetPoint("TOPLEFT", 0, -(count - 1) * 26)
+                    row.cells = {}
+                    for _, x in ipairs({0, 161, 376, 466}) do
+                        local label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                        label:SetPoint("LEFT", x, 0)
+                        label:SetWidth(x == 161 and 205 or x == 0 and 155 or 85)
+                        label:SetJustifyH("LEFT")
+                        row.cells[#row.cells + 1] = label
+                    end
+                    row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+                    row.check:SetSize(24, 24)
+                    row.check:SetPoint("LEFT", 580, 0)
+                    row.check:SetScript("OnClick", function(check)
+                        frame.selected[row.player.name] = check:GetChecked() and true or nil
+                    end)
+                    frame.rows[count] = row
+                end
+                row.player = player
+                row.cells[1]:SetText(player.name)
+                row.cells[2]:SetText(SPEC_BY_ID[player.spec][3])
+                row.cells[3]:SetText(string.format("%.1f", player.dps))
+                row.cells[4]:SetText(tostring(player.threshold))
+                row.check:SetChecked(true)
+                frame.selected[player.name] = true
+                row:Show()
+            end
+        end
+        frame.info:SetText("Убийство: " .. date("%d.%m %H:%M", snapshot.endtime) .. ". По " .. self:GetAmount("saurfang") ..
+            " ЕП. Допуск: 100 DPS ниже планки.\nПодходят: " .. count .. ". Без данных о спеке/DPS: " .. snapshot.unknown .. ".")
+    else
+        frame.info:SetText("Нет сохранённого результата. Нужна Skada и убийство Саурфанга с заданными планками.")
+    end
+    if previouslyAwarded > 0 then
+        frame.result:SetText("Ранее начислено игрокам из этого списка: " .. previouslyAwarded .. ".")
+    end
+    frame.content:SetHeight(math.max(1, count * 26))
+    frame.scroll:SetVerticalScroll(0)
+    if count > 0 then frame.awardButton:Enable() else frame.awardButton:Disable() end
+    frame:Show()
 end
 
 function EPAwards:AttachButton()
@@ -310,7 +513,7 @@ end
 
 function EPAwards:CreateSettings(parent, anchor)
     local panel = CreateFrame("Frame", "RLHelperEPAwardsSettings", parent)
-    panel:SetSize(410, 270)
+    panel:SetSize(410, 350 + #SPECS * 34)
     panel:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -22)
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("TOPLEFT", 0, 0)
@@ -320,7 +523,9 @@ function EPAwards:CreateSettings(parent, anchor)
     help:SetText("Галочка — показывать начисление и напоминание. 0 ЕП — отключить.")
     local fields = {}
     local function input(key, labelText, y, read, save)
-        local label = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        local label = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        label:SetWidth(145)
+        label:SetJustifyH("LEFT")
         label:SetPoint("TOPLEFT", 0, y)
         label:SetText(labelText)
         local edit = CreateFrame("EditBox", "RLHelperEPAward" .. key .. "EditBox", panel, "InputBoxTemplate")
@@ -366,6 +571,31 @@ function EPAwards:CreateSettings(parent, anchor)
         local function refresh() check:SetChecked(self:GetSettings().reminders[key] ~= false) end
         refresh()
         table.insert(fields, refresh)
+    end
+    input("saurfang", "ДПС Саурфанг (ЕП)", -234, function() return self:GetAmount("saurfang") end, function(value)
+        local amount = tonumber(value)
+        if amount and amount >= 0 and amount <= 99999 and amount == math.floor(amount) then
+            self:GetSettings().amounts.saurfang = amount
+        else RLHelper:Print("Сумма ЕП должна быть целым числом от 0 до 99999.") end
+    end)
+    local thresholdsTitle = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    thresholdsTitle:SetPoint("TOPLEFT", 0, -280)
+    thresholdsTitle:SetText("Планки ДПС — Саурфанг (по спекам)")
+    local thresholdsHelp = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    thresholdsHelp:SetPoint("TOPLEFT", 0, -304)
+    thresholdsHelp:SetText("Пусто или 0 — не учитывать. DPS берётся из Skada после победы.")
+    for index, spec in ipairs(SPECS) do
+        local id = spec[1]
+        input("Spec" .. id, spec[3], -338 - (index - 1) * 34,
+            function() return self:GetSettings().saurfangThresholds[id] or "" end,
+            function(value)
+                local threshold = tonumber(value)
+                if not value:find("%S") or threshold == 0 then
+                    self:GetSettings().saurfangThresholds[id] = nil
+                elseif threshold and threshold > 0 and threshold <= 999999 and threshold == math.floor(threshold) then
+                    self:GetSettings().saurfangThresholds[id] = threshold
+                else RLHelper:Print("Планка DPS должна быть целым числом от 0 до 999999.") end
+            end)
     end
     panel:SetScript("OnShow", function() for _, refresh in ipairs(fields) do refresh() end end)
     self.options = panel

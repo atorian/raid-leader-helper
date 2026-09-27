@@ -97,6 +97,10 @@
 
 - Release archives are owned by the CI pipeline. Do not build, upload, replace or delete release archives manually; commit and push source changes and let the existing pipeline handle packaging. The user explicitly corrected manual archive updates on 2026-09-27.
 
+- Saurfang DPS EP thresholds are per specialization, not per class (e.g. Arms/Fury and Frost/Unholy). Save the spec, DPS and applicable threshold from the winning fight; never infer a threshold from class alone.
+
 - Lady spirit SWING_MISSED (including ABSORB/BLOCK) does not consume the tracked spirit: real logs show repeated misses followed by SWING_DAMAGE and Vengeful Blast from the same GUID. Keep tracking through all attacks until Vengeful Blast is confirmed by SPELL_DAMAGE or SPELL_MISSED. Credit the last attack target (GUID/name/class), never a splash victim; count each spirit once. Neither an absorbed nor a damaging autoattack alone confirms an explosion.
 
 - For window-drag bug reports, treat pixel distances as approximate unless measured: the user clarified that the reported ~300px jump is not a fixed offset. Preserve native WoW StartMoving/StartSizing for this fix, as explicitly chosen; guard repeated starts and missing mouse-up without replacing coordinate handling.
+
+- Aura Mastery has no combat-log target: show the casting paladin's selected aura, never a target placeholder. Track aura sources separately from recipients, retain selections across combat resets, and persist the aura name for saved history; use an explicit unknown label when evidence is missing.

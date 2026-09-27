@@ -3,6 +3,20 @@ local SppellTracker = RLHelper:NewModule("SppellTracker", "AceEvent-3.0")
 SppellTracker.receivesCombatEvents = true
 local CombatFilters = RLHelperCombatFilters
 
+local AURA_MASTERY = 31821
+-- All ranks, verified against the Isengard spell database.
+local PALADIN_AURAS = {
+    [465] = true, [10290] = true, [643] = true, [10291] = true, [1032] = true,
+    [10292] = true, [10293] = true, [27149] = true, [48942] = true, -- Devotion
+    [7294] = true, [10298] = true, [10299] = true, [10300] = true,
+    [10301] = true, [27150] = true, [54043] = true, -- Retribution
+    [19746] = true, -- Concentration
+    [19876] = true, [19895] = true, [19896] = true, [27151] = true, [48943] = true, -- Shadow
+    [19888] = true, [19897] = true, [19898] = true, [27152] = true, [48945] = true, -- Frost
+    [19891] = true, [19899] = true, [19900] = true, [27153] = true, [48947] = true, -- Fire
+    [32223] = true, -- Crusader
+}
+
 local HAND_OF_RECKONING = 62124
 local HOLY_WRATH = 48817
 local HAND_OF_PROTECTION = 10278
@@ -50,10 +64,17 @@ function SppellTracker:logSpell(event, kind)
     else
         severity, fields = self:GetSpellClassification(event)
     end
+    if event.spellId == AURA_MASTERY then
+        local aura = self:GetPaladinAura(event.sourceGUID)
+        fields = fields or {}
+        fields.auraSpellId = aura and aura.spellId
+        fields.auraName = aura and aura.name
+    end
     RLHelperJournal.Log(self.log, kind, event, severity, fields)
 end
 function SppellTracker:OnEnable()
     RLHelper:Debug("RL Быдло: TauntTracker включен")
+    self.paladinAuras = {}
     self.firstDamageDone = false
     self.firstValithriaHealDone = false
 end
@@ -120,6 +141,7 @@ local TRACKED_DISPEL_SPELLS = {
 
 function SppellTracker:OnInitialize()
     self:RegisterEvent("UNIT_TARGET")
+    self:RegisterEvent("PLAYER_ENTERING_WORLD")
     self:RegisterMessage("RLHelper_CombatEnded", "reset")
     self.pendingHandOfReckonings = {}
     self.log = function(...)
@@ -131,6 +153,41 @@ function SppellTracker:reset()
     self.firstDamageDone = false
     self.firstValithriaHealDone = false
     self.pendingHandOfReckonings = {}
+end
+
+function SppellTracker:PLAYER_ENTERING_WORLD()
+    self.paladinAuras = {}
+end
+
+function SppellTracker:TrackPaladinAura(event)
+    self.paladinAuras = self.paladinAuras or {}
+    if event.event == "UNIT_DIED" and event.destGUID then
+        self.paladinAuras[event.destGUID] = nil
+    elseif PALADIN_AURAS[event.spellId] and event.sourceGUID then
+        if event.event == "SPELL_CAST_SUCCESS" or event.event == "SPELL_AURA_APPLIED" or
+            event.event == "SPELL_AURA_REFRESH" then
+            self.paladinAuras[event.sourceGUID] = { spellId = event.spellId, name = event.spellName }
+        elseif event.event == "SPELL_AURA_REMOVED" and event.sourceGUID == event.destGUID then
+            local aura = self.paladinAuras[event.sourceGUID]
+            if aura and aura.spellId == event.spellId then self.paladinAuras[event.sourceGUID] = nil end
+        end
+    end
+end
+
+function SppellTracker:GetPaladinAura(guid)
+    local aura = self.paladinAuras and self.paladinAuras[guid]
+    if aura then return aura end
+    -- Recover a selection made before /reload; other paladins' buffs are not their recipient's selection.
+    local unit = (self.context or RLHelper).groupMembers[guid]
+    if type(unit) == "string" and type(UnitBuff) == "function" and UnitGUID(unit) == guid then
+        for index = 1, 40 do
+            local name, _, _, _, _, _, _, caster, _, _, spellId = UnitBuff(unit, index)
+            if not name then break end
+            if PALADIN_AURAS[spellId] and caster and UnitGUID(caster) == guid then
+                return { spellId = spellId, name = name }
+            end
+        end
+    end
 end
 
 local ENEMY_FLAGS = 0xa48
@@ -204,6 +261,7 @@ function SppellTracker:UNIT_TARGET(_, unitId)
 end
 
 function SppellTracker:handleEvent(eventData)
+    self:TrackPaladinAura(eventData)
     if not self.firstDamageDone and (eventData.event == "SWING_DAMAGE" or eventData.event == "SPELL_DAMAGE") then
         if RLHelper:IsGroupMember(eventData.sourceGUID, eventData.sourceFlags) and
             isEnemy(eventData.destFlags, eventData.destGUID) then

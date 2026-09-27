@@ -247,6 +247,8 @@ function Journal.Format(entry, neutralMessage)
         end
         if not effect and entry.extraSpellId then effect = tostring(entry.extraSpellId) end
         if effect then message = message .. (message ~= "" and " — " or "") .. "снято: " .. effect end
+    elseif entry.kind == "SPELL_USE" and entry.spellId == 31821 then
+        message = entry.auraName or "Аура неизвестна"
     elseif entry.kind == "SPELL_USE" or entry.kind == "RESURRECT" or
         entry.kind == "MISDIRECTION_START" then
         message = entry.target and formatEntityName(entry.target, true) or ""

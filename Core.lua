@@ -2309,7 +2309,7 @@ function RLHelper:CreateOptionsPanel()
     local epAwards = self:GetModule("EPAwards", true)
     if epAwards then
         epAwards:CreateSettings(content, gpReasonAnchor)
-        content:SetHeight(1000)
+        content:SetHeight(730 + epAwards.options:GetHeight())
     end
 
     self.optionsPanel = panel

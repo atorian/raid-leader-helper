@@ -733,7 +733,7 @@ describe('UI themes', function()
             addon:CreateOptionsPanel()
             local content = namedFrames.RLHelperOptionsPanelContent
             assert.are.equal(content, namedFrames.RLHelperEPAwardsSettings.parent)
-            assert.are.equal(1000, content.height)
+            assert.are.equal(730 + namedFrames.RLHelperEPAwardsSettings.height, content.height)
             assert.are.equal('1000', namedFrames.RLHelperEPAwardattendanceEditBox.text)
             assert.are.equal('7000', namedFrames.RLHelperEPAwardiccEditBox.text)
             assert.are.equal('3000', namedFrames.RLHelperEPAwardrsEditBox.text)

@@ -155,7 +155,8 @@ function DeathwhisperTracker:handleEvent(eventData)
     end
 
     if eventData.event == "SWING_MISSED" then
-        local spiritInfo = consumeTrackedSpirit(self, eventData.sourceGUID)
+        -- Absorbed or avoided swings can be followed by another attack from the same spirit.
+        local spiritInfo = self.currentSpirits[eventData.sourceGUID]
         if not spiritInfo then
             return
         end

@@ -96,3 +96,5 @@
 - Manual EP award buttons must always remain enabled, including after a prior award or without raid leadership. Previous awards suppress automatic reminders only; allow deliberate manual repeats and show the last result separately from the action label. Keep execution checks for a raid, positive amount and EPGP permissions; never accidentally invoke its whole-guild fallback outside a raid.
 
 - Release archives are owned by the CI pipeline. Do not build, upload, replace or delete release archives manually; commit and push source changes and let the existing pipeline handle packaging. The user explicitly corrected manual archive updates on 2026-09-27.
+
+- Lady spirit SWING_MISSED (including ABSORB/BLOCK) does not consume the tracked spirit: real logs show repeated misses followed by SWING_DAMAGE and Vengeful Blast from the same GUID. Keep tracking until a damaging hit; do not count an absorbed autoattack alone as an explosion.

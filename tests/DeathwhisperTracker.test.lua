@@ -182,6 +182,42 @@ describe('DeathwhisperTracker', function()
             assertRecord(log, { targetName = "TestTarget", kind = "SPIRIT_MISSED", type = "INFO" })
         end)
 
+        for _, missType in ipairs({ "ABSORB", "BLOCK", "MISS", "PARRY", "DODGE" }) do
+            it('keeps tracking a spirit after ' .. missType .. ' until its damaging hit', function()
+                DeathwhisperTracker:handleEvent({
+                    event = "SPELL_SUMMON", spellId = 71426,
+                    timestamp = time(), destGUID = "Spirit-123"
+                })
+                local missEvent = {
+                    event = "SWING_MISSED", timestamp = time(),
+                    sourceGUID = "Spirit-123", destName = "ShieldedPlayer",
+                    missType = missType
+                }
+                DeathwhisperTracker:handleEvent(missEvent)
+                DeathwhisperTracker:handleEvent(missEvent)
+
+                assert.is_not_nil(DeathwhisperTracker.currentSpirits["Spirit-123"])
+                assert.is_nil(DeathwhisperTracker.report["ShieldedPlayer"])
+                assertRecord(log, { targetName = "ShieldedPlayer", kind = "SPIRIT_MISSED", type = "INFO" })
+                log:clear()
+
+                local hitEvent = {
+                    event = "SWING_DAMAGE", timestamp = time(),
+                    sourceGUID = "Spirit-123", destName = "HitPlayer"
+                }
+                DeathwhisperTracker:handleEvent(hitEvent)
+                DeathwhisperTracker:handleEvent(hitEvent)
+
+                assert.spy(log).was_called(1)
+                assertRecord(log, { targetName = "HitPlayer", kind = "SPIRIT_HIT", type = "TACTIC_VIOLATION" })
+                assert.are.equal(1, DeathwhisperTracker.report["HitPlayer"])
+                assert.is_nil(DeathwhisperTracker.report["ShieldedPlayer"])
+                assert.is_nil(DeathwhisperTracker.currentSpirits["Spirit-123"])
+                DeathwhisperTracker:summarizeCombat()
+                assertRecord(log, { text = "Духов взорвали: всего 1 HitPlayer(1)", kind = "SPIRIT_SUMMARY" })
+            end)
+        end
+
         it('does not double log when swing damage is followed by vengeful blast', function()
             local summonEvent = {
                 event = "SPELL_SUMMON",

@@ -94,3 +94,5 @@
 - Keep EP settings inputs close to their short labels: use a 150px input-column offset, not 260px. The wider gap pushed reminder checkboxes beyond the visible settings area in the user’s client. Preserve the shortened local-RT label.
 
 - Manual EP award buttons must always remain enabled, including after a prior award or without raid leadership. Previous awards suppress automatic reminders only; allow deliberate manual repeats and show the last result separately from the action label. Keep execution checks for a raid, positive amount and EPGP permissions; never accidentally invoke its whole-guild fallback outside a raid.
+
+- Release archives are owned by the CI pipeline. Do not build, upload, replace or delete release archives manually; commit and push source changes and let the existing pipeline handle packaging. The user explicitly corrected manual archive updates on 2026-09-27.

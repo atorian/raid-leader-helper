@@ -84,3 +84,11 @@
 - For missing journal auto-wrap, check the visible V2 FontString itself: measuring taller rows does not make text wrap. Give each displayed FontString an explicit width and automatic height so WoW 3.3.5a performs its native word wrapping; avoid manual line splitting and confirm appearance in the client.
 
 - For release requests, use the user's stated bump type and the latest published tag to compute the exact next version before any release action. The user corrected a minor bump after v0.5.1 to a patch bump: release v0.5.2, not v0.6.0.
+
+- EP awards apply to the entire current raid and EPGP-selected standby through EPGP’s mass-award method, using its standby percentage. Never reject selected standby or impose a raid-only filter. Do not snapshot rosters, track individual recipients, or add catch-up workflows for attendance: the reminder appears at local RT time, and the RL controls when to award and who is present. Raid rewards use one amount per raid regardless of size/difficulty; design for the usual single gathering per day (about four hours), without introducing session management by default.
+
+- EP controls belong to a section in the common settings, not a separate category or a settings button in the award window. Hide reward rows when their reminder is disabled and collapse gaps. EP windows use the addon’s borderless background. Give each InputBoxTemplate edit box a unique name and explicit width: unnamed amount fields rendered with missing middle textures in the user’s client; confirm the fix in-game. Defaults are attendance 1000, ICC 7000, RS 3000 and Trial/Anubarak 2000; preserve saved custom amounts.
+
+- When an EP default appears missing, inspect the saved amount before changing fallback logic. On 2026-09-27, ICC displayed 0 because the saved profiles explicitly contained icc = 0 while the code default was 7000. Preserve explicit zero as a valid disabled reward; distinguish it from an unset amount. Attendance defaults to 1000 EP, as explicitly requested.
+
+- Keep EP settings inputs close to their short labels: use a 150px input-column offset, not 260px. The wider gap pushed reminder checkboxes beyond the visible settings area in the user’s client. Preserve the shortened local-RT label.

@@ -2,7 +2,7 @@
 ## Title: RL Helper
 ## Notes: Quick access to RL controls
 ## Author: Atorian
-## Version: 0.5.2
+## Version: 0.6.0
 ## SavedVariables: RLHelperDB
 ## Dependencies: DBM-Core
 ## OptionalDeps: EPGP, Recount, Skada, Details
@@ -26,6 +26,7 @@ modules\IgorDeathTracker.lua
 modules\SpellTracker.lua
 modules\Misdirection.lua
 modules\ui\GPAwardButtons.lua
+modules\EPAwards.lua
 modules\bosses\DeathwhisperTracker.lua
 modules\bosses\BloodPrincesTracker.lua
 modules\bosses\BloodQueenTracker.lua

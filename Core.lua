@@ -2280,6 +2280,12 @@ function RLHelper:CreateOptionsPanel()
         end
     end)
 
+    local epAwards = self:GetModule("EPAwards", true)
+    if epAwards then
+        epAwards:CreateSettings(content, gpReasonAnchor)
+        content:SetHeight(1000)
+    end
+
     self.optionsPanel = panel
     InterfaceOptions_AddCategory(panel)
 end

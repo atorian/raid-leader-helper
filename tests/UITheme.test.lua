@@ -654,4 +654,25 @@ describe('UI themes', function()
         assert.are.equal('current', addon.db.profile.theme)
         assert.are.equal('original-Normal', addon.mainFrame.raidCheckBtn.fonts.Normal)
     end)
+    it('embeds the EP section in the shared scrollable settings panel', function()
+        require('data.BossIds')
+        local previous = addon.modules.EPAwards
+        local ep = require('modules.EPAwards')
+        addon.modules.EPAwards = ep
+        local ok, err = pcall(function()
+            addon:CreateOptionsPanel()
+            local content = namedFrames.RLHelperOptionsPanelContent
+            assert.are.equal(content, namedFrames.RLHelperEPAwardsSettings.parent)
+            assert.are.equal(1000, content.height)
+            assert.are.equal('1000', namedFrames.RLHelperEPAwardattendanceEditBox.text)
+            assert.are.equal('7000', namedFrames.RLHelperEPAwardiccEditBox.text)
+            assert.are.equal('3000', namedFrames.RLHelperEPAwardrsEditBox.text)
+            assert.are.equal('2000', namedFrames.RLHelperEPAwardtocEditBox.text)
+            assert.is_nil(namedFrames.RLHelperEPAwardsOptions)
+        end)
+        addon.modules.EPAwards = previous
+        ep.options = nil
+        assert.is_true(ok, tostring(err))
+    end)
+
 end)

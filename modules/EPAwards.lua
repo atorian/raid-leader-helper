@@ -142,8 +142,7 @@ function EPAwards:Award(key)
     local state = self:GetState()
     local amount = self:GetAmount(key)
     if not reward or amount <= 0 then return false, "Укажите сумму ЕП в настройках." end
-    if state.awards[key] then return false, "Это начисление уже выполнено или требует проверки в EPGP." end
-    if not self:IsRaidLeader() then return false, "Начислять ЕП может лидер текущего рейда." end
+    if GetNumRaidMembers() == 0 then return false, "Для начисления ЕП нужно находиться в рейде." end
     local epgp = LibStub("AceAddon-3.0"):GetAddon("EPGP", true)
     if not epgp or type(epgp.IncMassEPBy) ~= "function" or type(epgp.RegisterCallback) ~= "function" then
         return false, "EPGP недоступен."
@@ -157,6 +156,7 @@ function EPAwards:Award(key)
         self.callbackSource = epgp
     end
     local record = { status = "pending", amount = amount, reason = reward.name, at = time() }
+    local previousAward = state.awards[key]
     state.awards[key] = record
     self.pending = { record = record, reason = reason, amount = amount }
     -- Installed EPGP applies its standby percentage inside this synchronous method.
@@ -167,13 +167,13 @@ function EPAwards:Award(key)
     epgp.IsMemberInExtrasList = isExtra
     self.pending = nil
     if not ok then
-        -- An exception may follow partial writes. Never offer a blind retry.
+        -- An exception may follow partial writes; show the uncertain result to the RL.
         if record.status ~= "awarded" then record.status = "uncertain" end
         return false, "Ошибка EPGP. Проверьте журнал EPGP перед дальнейшими начислениями."
     end
     if record.status ~= "awarded" then
         -- Installed EPGP emits MassEPAward synchronously only for a nonempty award.
-        state.awards[key] = nil
+        state.awards[key] = previousAward
         return false, "EPGP не подтвердил начисление: нет подходящих получателей."
     end
     return true
@@ -253,10 +253,15 @@ function EPAwards:RefreshWindow()
             visible = visible + 1
         end
         local amount, award = self:GetAmount(reward.key), state.awards[reward.key]
-        row.label:SetText(reward.name .. " — " .. (award and award.amount or amount) .. " ЕП")
-        row.button:SetText(award and (award.status == "awarded" and "Начислено " .. date("%H:%M", award.at) or "Проверить EPGP") or "Начислить")
-        if not award and amount > 0 and self:IsRaidLeader() then row.button:Enable() else row.button:Disable() end
-        row.label:SetAlpha((amount > 0 or award) and 1 or 0.5)
+        local text = reward.name .. " — " .. amount .. " ЕП"
+        if award then
+            local status = award.status == "awarded" and
+                "Последнее: " .. award.amount .. " ЕП в " .. date("%H:%M", award.at) or "Проверьте результат в EPGP"
+            text = text .. "\n|cffaaaaaa" .. status .. "|r"
+        end
+        row.label:SetText(text)
+        row.button:SetText("Начислить")
+        row.button:Enable()
     end
     self.window:SetHeight(75 + math.max(visible, 1) * 34)
     if visible == 0 then self.window.empty:Show() else self.window.empty:Hide() end

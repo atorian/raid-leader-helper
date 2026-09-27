@@ -92,3 +92,5 @@
 - When an EP default appears missing, inspect the saved amount before changing fallback logic. On 2026-09-27, ICC displayed 0 because the saved profiles explicitly contained icc = 0 while the code default was 7000. Preserve explicit zero as a valid disabled reward; distinguish it from an unset amount. Attendance defaults to 1000 EP, as explicitly requested.
 
 - Keep EP settings inputs close to their short labels: use a 150px input-column offset, not 260px. The wider gap pushed reminder checkboxes beyond the visible settings area in the user’s client. Preserve the shortened local-RT label.
+
+- Manual EP award buttons must always remain enabled, including after a prior award or without raid leadership. Previous awards suppress automatic reminders only; allow deliberate manual repeats and show the last result separately from the action label. Keep execution checks for a raid, positive amount and EPGP permissions; never accidentally invoke its whole-guild fallback outside a raid.

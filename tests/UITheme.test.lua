@@ -126,13 +126,21 @@ describe('UI themes', function()
             end
         end
         for _, method in ipairs({ 'SetAllPoints', 'SetFrameStrata', 'SetMovable', 'SetResizable',
-            'SetMinResize', 'SetMaxResize', 'EnableMouse', 'RegisterForDrag', 'SetJustifyV', 'SetJustifyH',
+            'SetMinResize', 'SetMaxResize', 'EnableMouse', 'SetJustifyV', 'SetJustifyH',
             'SetFading', 'SetMaxLines', 'EnableMouseWheel', 'SetHyperlinksEnabled', 'SetIndentedWordWrap',
             'SetInsertMode', 'SetAutoFocus', 'ClearFocus', 'Clear', 'AddMessage' }) do
             frame[method] = function() end
         end
-        function frame:StartMoving() self.moving = true end
-        function frame:StopMovingOrSizing() self.moving = false end
+        function frame:RegisterForDrag(...) self.dragButtons = {...} end
+        function frame:StartMoving()
+            self.moving = true
+            self.moveStarts = (self.moveStarts or 0) + 1
+        end
+        function frame:StartSizing(point)
+            self.sizing = point
+            self.sizeStarts = (self.sizeStarts or 0) + 1
+        end
+        function frame:StopMovingOrSizing() self.moving, self.sizing = false, nil end
         if name then
             namedFrames[name] = frame
             if kind == 'CheckButton' then
@@ -147,13 +155,14 @@ describe('UI themes', function()
     before_each(function()
         namedFrames, dropdownItems, originalGlobals, originalAddon, createdFrames = {}, {}, {}, {}, {}
         for _, key in ipairs({ 'CreateFrame', 'UIParent', 'InterfaceOptions_AddCategory',
-            'UIDropDownMenu_AddButton', 'UnitAffectingCombat', 'UnitIsPlayer', 'TargetUnit', 'RegisterStateDriver' }) do
+            'UIDropDownMenu_AddButton', 'UnitAffectingCombat', 'UnitIsPlayer', 'TargetUnit', 'RegisterStateDriver', 'IsMouseButtonDown' }) do
             originalGlobals[key] = _G[key] or false
         end
         for _, key in ipairs({ 'db', 'mainFrame', 'themeButtons', 'journalView',
             'optionsPanel', 'displayedCombat', 'currentCombat', 'SendMessage' }) do
             originalAddon[key] = addon[key] or false
         end
+        _G.IsMouseButtonDown = function() return true end
         _G.CreateFrame = newFrame
         _G.UIParent = newFrame('Frame')
         _G.InterfaceOptions_AddCategory = function() end
@@ -375,6 +384,67 @@ describe('UI themes', function()
             region.scripts.OnDragStop(region)
             assert.is_false(frame.moving)
         end
+    end)
+
+    it('stops native dragging when the source loses mouse-up and ignores duplicate starts', function()
+        addon:CreateMainFrame()
+        local frame = addon.mainFrame
+        for _, region in ipairs({ frame, frame.v2Scroll, frame.v2Content, frame.v2Rows[1] }) do
+            local held = true
+            _G.IsMouseButtonDown = function(button)
+                assert.are.equal('LeftButton', button)
+                return held
+            end
+            local starts = frame.moveStarts or 0
+            region.scripts.OnDragStart(region)
+            region.scripts.OnDragStart(region)
+            assert.are.equal(starts + 1, frame.moveStarts)
+            frame.scripts.OnUpdate(frame)
+            assert.is_true(frame.moving)
+            region:Hide() -- No OnDragStop: the original row/overlay disappears.
+            held = false
+            frame.scripts.OnUpdate(frame)
+            assert.is_false(frame.moving)
+            assert.is_nil(frame.scripts.OnUpdate)
+            region.scripts.OnDragStop(region)
+        end
+        _G.IsMouseButtonDown = function() return true end
+        frame.scripts.OnDragStart(frame)
+        frame.scripts.OnHide(frame)
+        assert.is_false(frame.moving)
+        assert.is_nil(frame.scripts.OnUpdate)
+    end)
+
+    it('starts native resizing only on a drag and stops it after release outside the handle', function()
+        addon:CreateMainFrame()
+        local frame, resize = addon.mainFrame
+        for _, candidate in ipairs(createdFrames) do
+            local texture = candidate:GetNormalTexture()
+            if candidate.parent == frame and texture
+                and texture:GetTexture() == 'Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up' then
+                resize = candidate
+            end
+        end
+        assert.is_truthy(resize)
+        assert.is_nil(resize.scripts.OnMouseDown)
+        assert.are.same({'LeftButton'}, resize.dragButtons)
+        resize.scripts.OnDragStart(resize)
+        assert.are.equal('BOTTOMRIGHT', frame.sizing)
+        resize.scripts.OnDragStart(resize)
+        frame.scripts.OnDragStart(frame)
+        assert.are.equal(1, frame.sizeStarts)
+        assert.is_nil(frame.moveStarts)
+        resize.scripts.OnMouseUp(resize, 'RightButton')
+        assert.are.equal('BOTTOMRIGHT', frame.sizing)
+        _G.IsMouseButtonDown = function() return false end
+        frame.scripts.OnUpdate(frame)
+        assert.is_nil(frame.sizing)
+        assert.is_nil(frame.scripts.OnUpdate)
+        _G.IsMouseButtonDown = function() return true end
+        resize.scripts.OnDragStart(resize)
+        resize.scripts.OnMouseUp(resize, 'LeftButton')
+        assert.is_nil(frame.sizing)
+        resize.scripts.OnDragStop(resize)
     end)
 
     it('uses an independent secure target button and never calls TargetUnit directly', function()

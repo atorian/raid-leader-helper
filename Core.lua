@@ -1610,8 +1610,8 @@ function RLHelper:CreateJournalRows(frame)
     scroll:SetScrollChild(content)
     local function dragWindow(region)
         region:RegisterForDrag("LeftButton")
-        region:SetScript("OnDragStart", function() frame:StartMoving() end)
-        region:SetScript("OnDragStop", function() frame:StopMovingOrSizing() end)
+        region:SetScript("OnDragStart", function() frame:BeginWindowDrag() end)
+        region:SetScript("OnDragStop", function() frame:EndWindowDrag() end)
     end
     dragWindow(scroll)
     dragWindow(content)
@@ -1657,10 +1657,10 @@ function RLHelper:CreateJournalRows(frame)
             button:SetScript("OnDragStart", function(self)
                 if InCombatLockdown() then return end
                 self:SetAttribute("macrotext1", nil)
-                frame:StartMoving()
+                frame:BeginWindowDrag()
             end)
             button:SetScript("OnDragStop", function(self)
-                frame:StopMovingOrSizing()
+                frame:EndWindowDrag()
                 if not InCombatLockdown() then self:Hide() end
             end)
         end
@@ -1767,8 +1767,26 @@ function RLHelper:CreateMainFrame()
     frame:SetMaxResize(800, 1000)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    -- Journal rows and the secure hover button can disappear during a drag.
+    -- Keep ownership on the main frame and also check the physical mouse button.
+    function frame:EndWindowDrag()
+        if not self.windowDrag then return end
+        self:StopMovingOrSizing()
+        self.windowDrag = nil
+        self:SetScript("OnUpdate", nil)
+    end
+    function frame:BeginWindowDrag(resizing)
+        if self.windowDrag then return end
+        self.windowDrag = true
+        if resizing then self:StartSizing("BOTTOMRIGHT")
+        else self:StartMoving() end
+        self:SetScript("OnUpdate", function(self)
+            if not IsMouseButtonDown("LeftButton") then self:EndWindowDrag() end
+        end)
+    end
+    frame:SetScript("OnDragStart", function(self) self:BeginWindowDrag() end)
+    frame:SetScript("OnDragStop", frame.EndWindowDrag)
+    frame:SetScript("OnHide", frame.EndWindowDrag)
 
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -1933,11 +1951,13 @@ function RLHelper:CreateMainFrame()
     resizeButton:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
     resizeButton:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     resizeButton:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-    resizeButton:SetScript("OnMouseDown", function()
-        frame:StartSizing("BOTTOMRIGHT")
+    resizeButton:RegisterForDrag("LeftButton")
+    resizeButton:SetScript("OnDragStart", function()
+        frame:BeginWindowDrag(true)
     end)
-    resizeButton:SetScript("OnMouseUp", function()
-        frame:StopMovingOrSizing()
+    resizeButton:SetScript("OnDragStop", function() frame:EndWindowDrag() end)
+    resizeButton:SetScript("OnMouseUp", function(_, button)
+        if button == "LeftButton" then frame:EndWindowDrag() end
     end)
 
     -- Log text

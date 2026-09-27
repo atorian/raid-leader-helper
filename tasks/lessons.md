@@ -98,3 +98,5 @@
 - Release archives are owned by the CI pipeline. Do not build, upload, replace or delete release archives manually; commit and push source changes and let the existing pipeline handle packaging. The user explicitly corrected manual archive updates on 2026-09-27.
 
 - Lady spirit SWING_MISSED (including ABSORB/BLOCK) does not consume the tracked spirit: real logs show repeated misses followed by SWING_DAMAGE and Vengeful Blast from the same GUID. Keep tracking until a damaging hit; do not count an absorbed autoattack alone as an explosion.
+
+- For window-drag bug reports, treat pixel distances as approximate unless measured: the user clarified that the reported ~300px jump is not a fixed offset. Preserve native WoW StartMoving/StartSizing for this fix, as explicitly chosen; guard repeated starts and missing mouse-up without replacing coordinate handling.

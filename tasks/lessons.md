@@ -106,3 +106,7 @@
 - Aura Mastery has no combat-log target: show the casting paladin's selected aura, never a target placeholder. Track aura sources separately from recipients, retain selections across combat resets, and persist the aura name for saved history; use an explicit unknown label when evidence is missing.
 
 - Before choosing a release version, check the source version and existing draft releases as well as published tags. Never downgrade the source version based only on the latest published tag. When the user identifies an existing draft, update that release and preserve its URL; let CI replace its archive.
+
+- Opening the Saurfang DPS award window must hide the general EP award window. Closing the DPS window must not reopen the general window.
+
+- The existing GP enable setting controls the entire GP/EP feature. When off, hide EP windows/button, stop reminders and Skada DPS collection, and preserve already saved results. Re-enable immediately without reload.

@@ -25,6 +25,17 @@ local SPECS = {
     {265, "WARLOCK", "Чернокнижник: Колд."}, {266, "WARLOCK", "Чернокнижник: Демон."}, {267, "WARLOCK", "Чернокнижник: Разруш."},
     {102, "DRUID", "Друид: Баланс"}, {103, "DRUID", "Друид: Кошка"}, {104, "DRUID", "Друид: Медведь"}, {105, "DRUID", "Друид: Исцеление"}
 }
+local DEFAULT_THRESHOLDS = {
+    [71] = 20000, [72] = 21000, [63] = 21000, [62] = 21000,
+    [252] = 19000, [251] = 20000, [260] = 20000, [259] = 18000,
+    [265] = 18000, [266] = 17000, [267] = 17000, [258] = 18000,
+    [70] = 20000, [262] = 18000, [263] = 18000
+}
+
+local function adjustedThreshold(player, offset)
+    return math.max(0, player.threshold + (offset or 0))
+end
+
 local SPEC_BY_ID = {}
 for _, spec in ipairs(SPECS) do SPEC_BY_ID[spec[1]] = spec end
 
@@ -41,6 +52,12 @@ function EPAwards:GetSettings()
     profile.epAwards = profile.epAwards or { rt = "19:00", amounts = {}, reminders = {} }
     profile.epAwards.saurfangThresholds = profile.epAwards.saurfangThresholds or {}
     return profile.epAwards
+end
+
+function EPAwards:GetThreshold(spec)
+    local threshold = self:GetSettings().saurfangThresholds[spec]
+    if threshold ~= nil then return threshold end
+    return DEFAULT_THRESHOLDS[spec]
 end
 
 function EPAwards:SetRT(value)
@@ -103,7 +120,18 @@ function EPAwards:OnInitialize()
     self:RegisterMessage("RLHelper_MainFrameCreated", "AttachButton")
 end
 
+function EPAwards:IsFeatureEnabled()
+    return RLHelper.db and RLHelper.db.profile.gpAwardButtonsEnabled == true
+end
+
 function EPAwards:OnEnable()
+    self:RefreshEnabledState()
+end
+
+function EPAwards:RefreshEnabledState()
+    if not self:IsFeatureEnabled() then self:OnDisable(); return end
+    if self.active then return end
+    self.active = true
     self:RegisterMessage("COMBAT_BOSS_DEFEATED", "SkadaSetComplete")
     if Skada and type(Skada.RegisterCallback) == "function" then
         Skada.RegisterCallback(self, "Skada_SetComplete", "SkadaSetComplete")
@@ -122,6 +150,7 @@ function EPAwards:OnEnable()
 end
 
 function EPAwards:OnDisable()
+    self.active = false
     if self.skadaSource then
         self.skadaSource.UnregisterCallback(self, "Skada_SetComplete")
         self.skadaSource = nil
@@ -135,6 +164,7 @@ function EPAwards:OnDisable()
 end
 
 function EPAwards:CheckTime()
+    if not self:IsFeatureEnabled() then return end
     self:GetState()
     if self.window and self.window:IsShown() then self:RefreshWindow() end
     -- No catch-up reminders when logging in after RT.
@@ -142,6 +172,7 @@ function EPAwards:CheckTime()
 end
 
 function EPAwards:Suggest(key)
+    if not self:IsFeatureEnabled() then return end
     local state = self:GetState()
     if not self:IsRaidLeader() or self:GetAmount(key) <= 0 or
         self:GetSettings().reminders[key] == false or state.awards[key] or state.prompted[key] then return end
@@ -150,6 +181,7 @@ function EPAwards:Suggest(key)
 end
 
 function EPAwards:handleEvent(event)
+    if not self:IsFeatureEnabled() then return end
     if event.event ~= "UNIT_DIED" or not event.destGUID then return end
     local npc = tonumber(event.destGUID:sub(9, 12), 16)
     if npc == BossIds.NPCS.DEATHBRINGER_SAURFANG and
@@ -165,6 +197,7 @@ end
 
 -- Read a completed winning segment, never a live DPS estimate or a wipe.
 function EPAwards:SkadaSetComplete(_, set)
+    if not self:IsFeatureEnabled() then return end
     if not Skada or not set or not set.endtime or
         set.gotboss ~= BossIds.NPCS.DEATHBRINGER_SAURFANG or
         (not set.success and self.saurfangKilledSet ~= set) then return end
@@ -173,15 +206,15 @@ function EPAwards:SkadaSetComplete(_, set)
     local saved = RLHelper.db.char.saurfangDPS
     if saved and saved.starttime == set.starttime and saved.endtime == set.endtime then return end
     local snapshot = { starttime = set.starttime, endtime = set.endtime, players = {}, unknown = 0 }
-    local thresholds = self:GetSettings().saurfangThresholds
     for _, player in ipairs(set.players or {}) do
         local spec = SPEC_BY_ID[player.spec]
+        local threshold = self:GetThreshold(player.spec)
         if not spec or spec[2] ~= player.class or type(player.GetDPS) ~= "function" then
             snapshot.unknown = snapshot.unknown + 1
-        elseif thresholds[player.spec] and thresholds[player.spec] > 0 then
+        elseif threshold and threshold > 0 then
             snapshot.players[#snapshot.players + 1] = {
                 name = player.name, class = player.class, spec = player.spec,
-                dps = player:GetDPS(), threshold = thresholds[player.spec]
+                dps = player:GetDPS(), threshold = threshold
             }
         end
     end
@@ -198,7 +231,8 @@ function EPAwards:IndividualEPAward(_, name, reason, amount)
     end
 end
 
-function EPAwards:AwardSaurfang(snapshot, selected)
+function EPAwards:AwardSaurfang(snapshot, selected, offset)
+    if not self:IsFeatureEnabled() then return false, "Начисление GP и ЕП выключено в настройках." end
     if not snapshot or snapshot ~= RLHelper.db.char.saurfangDPS then return false, "Результат боя изменился. Откройте окно заново." end
     local amount, reason = self:GetAmount("saurfang"), "RLHelper: ДПС Саурфанг"
     if amount <= 0 then return false, "Укажите сумму ЕП за ДПС Саурфанг в настройках." end
@@ -210,7 +244,7 @@ function EPAwards:AwardSaurfang(snapshot, selected)
     end
     local recipients, mains = {}, {}
     for _, player in ipairs(snapshot.players) do
-        if selected[player.name] and player.dps >= player.threshold - 100 then
+        if selected[player.name] and player.dps >= adjustedThreshold(player, offset) - 100 then
             local ep, _, main = epgp:GetEPGP(player.name)
             if not ep then return false, "Игрок не найден в EPGP: " .. player.name end
             main = main or player.name
@@ -232,7 +266,7 @@ function EPAwards:AwardSaurfang(snapshot, selected)
         self.pendingIndividual = nil
         if pending.confirmed then
             player.lastAward = { amount = amount, at = time() }
-            selected[player.name] = nil
+            selected[player.name] = false
             awarded = awarded + 1
         end
         if not ok or not pending.confirmed then
@@ -250,6 +284,7 @@ function EPAwards:MassEPAward(_, names, reason, amount)
 end
 
 function EPAwards:Award(key)
+    if not self:IsFeatureEnabled() then return false, "Начисление GP и ЕП выключено в настройках." end
     local reward = getReward(key)
     local state = self:GetState()
     local amount = self:GetAmount(key)
@@ -331,6 +366,7 @@ local function makeButton(parent, text, width, click)
 end
 
 function EPAwards:ShowReminder(key)
+    if not self:IsFeatureEnabled() then return end
     self.popups = self.popups or {}
     local popup = self.popups[key]
     if not popup then
@@ -380,6 +416,7 @@ function EPAwards:RefreshWindow()
 end
 
 function EPAwards:ToggleWindow()
+    if not self:IsFeatureEnabled() then return end
     if not self.window then
         local frame = makeWindow("Начисление ЕП", 430, 220)
         frame.rows = {}
@@ -405,20 +442,22 @@ function EPAwards:ToggleWindow()
 end
 
 function EPAwards:ShowSaurfangWindow()
+    if not self:IsFeatureEnabled() then return end
+    if self.window then self.window:Hide() end
     local frame = self.saurfangWindow
     if not frame then
-        frame = makeWindow("ДПС Саурфанг", 700, 440)
+        frame = makeWindow("ДПС Саурфанг", 700, 474)
         frame.info = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         frame.info:SetPoint("TOPLEFT", 14, -40)
         frame.info:SetWidth(670)
         frame.info:SetJustifyH("LEFT")
         for _, column in ipairs({ {14, "Имя игрока"}, {175, "Класс / спек"}, {390, "DPS"}, {480, "Планка"}, {580, "Выбран"} }) do
             local label = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            label:SetPoint("TOPLEFT", column[1], -84)
+            label:SetPoint("TOPLEFT", column[1], -118)
             label:SetText(column[2])
         end
         local scroll = CreateFrame("ScrollFrame", "RLHelperSaurfangScroll", frame, "UIPanelScrollFrameTemplate")
-        scroll:SetPoint("TOPLEFT", 14, -108)
+        scroll:SetPoint("TOPLEFT", 14, -142)
         scroll:SetPoint("BOTTOMRIGHT", -34, 76)
         local content = CreateFrame("Frame", nil, scroll)
         content:SetSize(645, 1)
@@ -429,23 +468,43 @@ function EPAwards:ShowSaurfangWindow()
         frame.result:SetWidth(670)
         frame.result:SetJustifyH("LEFT")
         frame.awardButton = makeButton(frame, "Начислить", 140, function()
-            local _, message = self:AwardSaurfang(frame.snapshot, frame.selected)
+            local _, message = self:AwardSaurfang(frame.snapshot, frame.selected, frame.offset)
             frame.result:SetText(message)
             for _, row in ipairs(frame.rows) do
                 if row.player then row.check:SetChecked(frame.selected[row.player.name] == true) end
             end
         end)
         frame.awardButton:SetPoint("BOTTOM", 0, 12)
+        frame.minusButton = makeButton(frame, "-", 28, function() self:AdjustSaurfangThreshold(-500) end)
+        frame.minusButton:SetPoint("TOPLEFT", 14, -80)
+        frame.plusButton = makeButton(frame, "+", 28, function() self:AdjustSaurfangThreshold(500) end)
+        frame.plusButton:SetPoint("LEFT", frame.minusButton, "RIGHT", 6, 0)
+        frame.adjustment = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        frame.adjustment:SetPoint("LEFT", frame.plusButton, "RIGHT", 10, 0)
         self.saurfangWindow = frame
     end
-    local snapshot = RLHelper.db.char.saurfangDPS
-    frame.snapshot, frame.selected = snapshot, {}
+    frame.snapshot, frame.selected, frame.offset = RLHelper.db.char.saurfangDPS, {}, 0
+    self:RefreshSaurfangWindow()
+    frame:Show()
+end
+
+function EPAwards:AdjustSaurfangThreshold(delta)
+    local frame = self.saurfangWindow
+    frame.offset = frame.offset + delta
+    self:RefreshSaurfangWindow()
+end
+
+function EPAwards:RefreshSaurfangWindow()
+    local frame = self.saurfangWindow
+    local snapshot = frame.snapshot
+    frame.adjustment:SetText(string.format("Поправка к планкам: %+d DPS (шаг 500)", frame.offset))
     frame.result:SetText("")
     for _, row in ipairs(frame.rows) do row:Hide(); row.player = nil end
     local count, previouslyAwarded = 0, 0
     if snapshot then
         for _, player in ipairs(snapshot.players) do
-            if player.dps >= player.threshold - 100 then
+            local threshold = adjustedThreshold(player, frame.offset)
+            if player.dps >= threshold - 100 then
                 count = count + 1
                 if player.lastAward then previouslyAwarded = previouslyAwarded + 1 end
                 local row = frame.rows[count]
@@ -465,7 +524,7 @@ function EPAwards:ShowSaurfangWindow()
                     row.check:SetSize(24, 24)
                     row.check:SetPoint("LEFT", 580, 0)
                     row.check:SetScript("OnClick", function(check)
-                        frame.selected[row.player.name] = check:GetChecked() and true or nil
+                        frame.selected[row.player.name] = check:GetChecked() and true or false
                     end)
                     frame.rows[count] = row
                 end
@@ -473,9 +532,9 @@ function EPAwards:ShowSaurfangWindow()
                 row.cells[1]:SetText(player.name)
                 row.cells[2]:SetText(SPEC_BY_ID[player.spec][3])
                 row.cells[3]:SetText(string.format("%.1f", player.dps))
-                row.cells[4]:SetText(tostring(player.threshold))
-                row.check:SetChecked(true)
-                frame.selected[player.name] = true
+                row.cells[4]:SetText(tostring(threshold))
+                if frame.selected[player.name] == nil then frame.selected[player.name] = true end
+                row.check:SetChecked(frame.selected[player.name])
                 row:Show()
             end
         end
@@ -490,10 +549,10 @@ function EPAwards:ShowSaurfangWindow()
     frame.content:SetHeight(math.max(1, count * 26))
     frame.scroll:SetVerticalScroll(0)
     if count > 0 then frame.awardButton:Enable() else frame.awardButton:Disable() end
-    frame:Show()
 end
 
 function EPAwards:AttachButton()
+    if not self:IsFeatureEnabled() then return end
     local main = RLHelper.mainFrame
     if self.button or not main then return end
     local button = CreateFrame("Button", nil, main.buttonContainer)
@@ -587,11 +646,11 @@ function EPAwards:CreateSettings(parent, anchor)
     for index, spec in ipairs(SPECS) do
         local id = spec[1]
         input("Spec" .. id, spec[3], -338 - (index - 1) * 34,
-            function() return self:GetSettings().saurfangThresholds[id] or "" end,
+            function() return self:GetThreshold(id) or "" end,
             function(value)
                 local threshold = tonumber(value)
                 if not value:find("%S") or threshold == 0 then
-                    self:GetSettings().saurfangThresholds[id] = nil
+                    self:GetSettings().saurfangThresholds[id] = 0
                 elseif threshold and threshold > 0 and threshold <= 999999 and threshold == math.floor(threshold) then
                     self:GetSettings().saurfangThresholds[id] = threshold
                 else RLHelper:Print("Планка DPS должна быть целым числом от 0 до 999999.") end

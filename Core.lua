@@ -360,6 +360,8 @@ function RLHelper:RefreshGPAwardButtons()
     if ok and module and type(module.refreshVisibility) == "function" then
         module:refreshVisibility()
     end
+    local epAwards = self:GetModule("EPAwards", true)
+    if epAwards then epAwards:RefreshEnabledState() end
 end
 
 function RLHelper:RefreshMainFrameVisibility()
@@ -2232,7 +2234,7 @@ function RLHelper:CreateOptionsPanel()
     local gpAwardButtonsEnabled = CreateFrame("CheckButton", "RLHelperGPAwardButtonsEnabledCheckButton", content,
         "InterfaceOptionsCheckButtonTemplate")
     gpAwardButtonsEnabled:SetPoint("TOPLEFT", gpAwardTitle, "BOTTOMLEFT", 0, -8)
-    _G[gpAwardButtonsEnabled:GetName() .. "Text"]:SetText("Отображать кнопки начисления GP")
+    _G[gpAwardButtonsEnabled:GetName() .. "Text"]:SetText("Включить начисление GP и ЕП")
     gpAwardButtonsEnabled:SetScript("OnClick", function(self)
         RLHelper.db.profile.gpAwardButtonsEnabled = self:GetChecked() and true or false
         RLHelper:RefreshGPAwardButtons()

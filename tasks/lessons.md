@@ -104,3 +104,5 @@
 - For window-drag bug reports, treat pixel distances as approximate unless measured: the user clarified that the reported ~300px jump is not a fixed offset. Preserve native WoW StartMoving/StartSizing for this fix, as explicitly chosen; guard repeated starts and missing mouse-up without replacing coordinate handling.
 
 - Aura Mastery has no combat-log target: show the casting paladin's selected aura, never a target placeholder. Track aura sources separately from recipients, retain selections across combat resets, and persist the aura name for saved history; use an explicit unknown label when evidence is missing.
+
+- Before choosing a release version, check the source version and existing draft releases as well as published tags. Never downgrade the source version based only on the latest published tag. When the user identifies an existing draft, update that release and preserve its URL; let CI replace its archive.

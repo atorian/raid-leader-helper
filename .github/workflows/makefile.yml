@@ -51,6 +51,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           current_tag="${GITHUB_REF_NAME}"
+          if [ -f "tasks/releases/$current_tag.md" ]; then
+            cp "tasks/releases/$current_tag.md" release-notes.md
+            exit 0
+          fi
           previous_tag="$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // ""')"
 
           if [ -n "$previous_tag" ]; then
@@ -67,24 +71,18 @@ jobs:
             } > release-notes.md
           fi
           
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Create or update draft release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body_path: release-notes.md
-          draft: true
-          prerelease: true
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./RLHelper.zip
-          asset_name: RLHelper.zip
-          asset_content_type: application/zip
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          current_tag="${GITHUB_REF_NAME}"
+          if gh release view "$current_tag" --json isDraft > existing-release.json; then
+            if [ "$(jq -r .isDraft existing-release.json)" != "true" ]; then
+              echo "Refusing to replace a published release."
+              exit 1
+            fi
+            gh release edit "$current_tag" --title "RLHelper ${current_tag#v}" --target "$GITHUB_SHA" --notes-file release-notes.md
+          else
+            gh release create "$current_tag" --verify-tag --title "RLHelper ${current_tag#v}" --notes-file release-notes.md --draft --prerelease
+          fi
+          gh release upload "$current_tag" RLHelper.zip --clobber

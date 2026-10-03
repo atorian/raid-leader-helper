@@ -2,6 +2,7 @@ local mocks = require('tests.mocks')
 require('Core')
 require('data.BossIds')
 local addon = LibStub('AceAddon-3.0'):GetAddon('RLHelper')
+local meters = require('modules.DPSMeters')
 local awards = require('modules.EPAwards')
 addon.modules.EPAwards = nil
 
@@ -25,10 +26,12 @@ describe('EP awards', function()
         settings.amounts = { attendance = 1000, icc = 2000, rs = 1500 }
         shown, calls = {}, {}
         _G.Skada = nil
+        meters:Stop()
         awards.active = nil
-        awards.saurfangWindow, awards.saurfangKilledSet = nil, nil
-        awards.individualCallbackSource, awards.pendingIndividual, awards.skadaSource = nil, nil, nil
+        awards.saurfangWindow = nil
+        awards.individualCallbackSource, awards.pendingIndividual = nil, nil
         awards.popups, awards.window, awards.callbackSource, awards.pending = nil, nil, nil, nil
+        awards:StartDPSMeter()
         awards.ShowReminder = function(_, key) table.insert(shown, key) end
         epgp = {
             CanIncEPBy = function() return true end,
@@ -46,6 +49,7 @@ describe('EP awards', function()
         end
     end)
     after_each(function()
+        meters:Stop()
         addon.db, addon.currentInstanceId = original.db, original.instance
         awards.ShowReminder = original.show
         mocks.GetAddon = original.getAddon
@@ -54,8 +58,8 @@ describe('EP awards', function()
         addon.modules.EPAwards = nil
         _G.Skada = original.skada
         awards.active = nil
-        awards.saurfangWindow, awards.saurfangKilledSet = nil, nil
-        awards.individualCallbackSource, awards.pendingIndividual, awards.skadaSource = nil, nil, nil
+        awards.saurfangWindow = nil
+        awards.individualCallbackSource, awards.pendingIndividual = nil, nil
         _G.CreateFrame, _G.InterfaceOptions_AddCategory = original.createFrame, original.categories
         addon.mainFrame, addon.themeButtons, addon.Print = original.main, original.themeButtons, original.print
         awards.options, awards.button, awards.clock = nil, nil, nil
@@ -219,6 +223,37 @@ describe('EP awards', function()
         addon.Print = function() end
         return frames
     end
+
+    it('selects a persistent DPS source in shared settings and labels an unavailable addon', function()
+        local frames = installFrames()
+        awards:CreateSettings({}, {})
+        local dropdown
+        for _, frame in ipairs(frames) do
+            if frame.name == 'RLHelperDPSSourceDropdown' then dropdown = frame end
+        end
+        assert.equals('Skada', awards:GetSettings().dpsSource)
+        assert.equals('Skada (не загружен)', dropdown.text)
+        local addButton, choices = UIDropDownMenu_AddButton, {}
+        _G.UIDropDownMenu_AddButton = function(info) choices[#choices + 1] = info end
+        dropdown.initialize()
+        _G.UIDropDownMenu_AddButton = addButton
+        assert.equals(2, #choices)
+        assert.equals('Skada', choices[1].value)
+        assert.equals('Recount', choices[2].value)
+        assert.is_true(choices[1].checked)
+        choices[2].func()
+        assert.equals('Recount', awards:GetSettings().dpsSource)
+        awards.options.scripts.OnShow()
+        assert.is_truthy(dropdown.text:find('Recount', 1, true))
+        -- Saved selections survive creation of a fresh settings panel.
+        local newFrames = installFrames()
+        awards:CreateSettings({}, {})
+        for _, frame in ipairs(newFrames) do
+            if frame.name == 'RLHelperDPSSourceDropdown' then
+                assert.is_truthy(frame.text:find('Recount', 1, true))
+            end
+        end
+    end)
 
     it('creates the compact icon, movable reminder and shared manual award status', function()
         local frames = installFrames()
@@ -429,7 +464,7 @@ describe('EP awards', function()
 
     it('snapshots configured specs from a completed victory and survives meter reset and changed settings', function()
         local set = winningSet()
-        awards:SkadaSetComplete('Skada_SetComplete', set)
+        meters:SkadaSetComplete('Skada_SetComplete', set)
         local snapshot = addon.db.char.saurfangDPS
         assert.equals(4, #snapshot.players)
         assert.equals(1, snapshot.unknown)
@@ -448,16 +483,16 @@ describe('EP awards', function()
     it('ignores live segments, wipes, unrelated bosses and additional phase segments', function()
         local set = winningSet()
         set.endtime = nil
-        awards:SkadaSetComplete('COMBAT_BOSS_DEFEATED', set)
+        meters:SkadaSetComplete('COMBAT_BOSS_DEFEATED', set)
         assert.is_nil(addon.db.char.saurfangDPS)
         set.endtime, set.success = now, nil
-        awards:SkadaSetComplete('Skada_SetComplete', set)
+        meters:SkadaSetComplete('Skada_SetComplete', set)
         assert.is_nil(addon.db.char.saurfangDPS)
         set.success, set.gotboss = true, 36597
-        awards:SkadaSetComplete('Skada_SetComplete', set)
+        meters:SkadaSetComplete('Skada_SetComplete', set)
         assert.is_nil(addon.db.char.saurfangDPS)
         set.gotboss, Skada.current = 37813, {}
-        awards:SkadaSetComplete('Skada_SetComplete', set)
+        meters:SkadaSetComplete('Skada_SetComplete', set)
         assert.is_nil(addon.db.char.saurfangDPS)
     end)
 
@@ -467,13 +502,13 @@ describe('EP awards', function()
         addon.currentInstanceId = 631
         addon.modules.EPAwards = awards
         addon:DispatchCombatEvent({ event = 'UNIT_DIED', destGUID = '0xF1300093B5000001' })
-        awards:SkadaSetComplete('Skada_SetComplete', set)
+        meters:SkadaSetComplete('Skada_SetComplete', set)
         assert.is_not_nil(addon.db.char.saurfangDPS)
         addon.db.char.saurfangDPS = nil
         Skada.current, Skada.last, set.success = nil, set, true
-        awards:SkadaSetComplete('COMBAT_BOSS_DEFEATED', set)
+        meters:SkadaSetComplete('COMBAT_BOSS_DEFEATED', set)
         local saved = addon.db.char.saurfangDPS
-        awards:SkadaSetComplete('COMBAT_BOSS_DEFEATED', set)
+        meters:SkadaSetComplete('COMBAT_BOSS_DEFEATED', set)
         assert.equals(saved, addon.db.char.saurfangDPS)
     end)
 
@@ -486,15 +521,15 @@ describe('EP awards', function()
         end
         Skada.UnregisterCallback = function(target, event) unregistered = { target, event } end
         awards:OnEnable()
-        assert.same({ awards, 'Skada_SetComplete', 'SkadaSetComplete' }, registered)
+        assert.same({ meters, 'Skada_SetComplete', 'SkadaSetComplete' }, registered)
         awards:OnDisable()
-        assert.same({ awards, 'Skada_SetComplete' }, unregistered)
+        assert.same({ meters, 'Skada_SetComplete' }, unregistered)
     end)
 
     it('offers only players at or above threshold minus 100, checks them by default and awards selected players', function()
         local frames = installFrames()
         individualEPGP()
-        awards:SkadaSetComplete('Skada_SetComplete', winningSet())
+        meters:SkadaSetComplete('Skada_SetComplete', winningSet())
         awards:ToggleWindow()
         assert.is_true(awards.window:IsShown())
         awards.window.saurfangButton.scripts.OnClick()
@@ -532,14 +567,14 @@ describe('EP awards', function()
         awards:ShowSaurfangWindow()
         assert.is_false(awards.saurfangWindow.awardButton.enabled)
         assert.is_false(awards:AwardSaurfang(nil, {}))
-        awards:SkadaSetComplete('Skada_SetComplete', winningSet())
+        meters:SkadaSetComplete('Skada_SetComplete', winningSet())
         assert.is_false(awards:AwardSaurfang(addon.db.char.saurfangDPS, { Below = true, Unholy = true }))
         assert.equals(0, #calls)
     end)
 
     it('validates every recipient before writing and retains confirmed partial awards', function()
         individualEPGP()
-        awards:SkadaSetComplete('Skada_SetComplete', winningSet())
+        meters:SkadaSetComplete('Skada_SetComplete', winningSet())
         local snapshot = addon.db.char.saurfangDPS
         local selected = { Fury = true, Arms = true }
         epgp.GetEPGP = function(_, name) if name == 'Fury' then return 1000, 100 end end
@@ -560,7 +595,7 @@ describe('EP awards', function()
 
     it('requires EPGP confirmation, permissions, positive amounts and distinct mains', function()
         individualEPGP()
-        awards:SkadaSetComplete('Skada_SetComplete', winningSet())
+        meters:SkadaSetComplete('Skada_SetComplete', winningSet())
         local snapshot = addon.db.char.saurfangDPS
         local selected = { Fury = true, Arms = true }
         epgp.CanIncEPBy = function() return false end
@@ -616,7 +651,7 @@ describe('EP awards', function()
         assert.equals(0, awards:GetThreshold(71))
         local set = winningSet()
         awards:GetSettings().saurfangThresholds = { [71] = 0 }
-        awards:SkadaSetComplete('Skada_SetComplete', set)
+        meters:SkadaSetComplete('Skada_SetComplete', set)
         for _, player in ipairs(addon.db.char.saurfangDPS.players) do
             assert.is_not.equal(71, player.spec)
             assert.equals(expected[player.spec], player.threshold)
@@ -626,7 +661,7 @@ describe('EP awards', function()
     it('adjusts all award thresholds by 500 without changing settings or the snapshot', function()
         installFrames()
         individualEPGP()
-        awards:SkadaSetComplete('Skada_SetComplete', winningSet())
+        meters:SkadaSetComplete('Skada_SetComplete', winningSet())
         local snapshot = addon.db.char.saurfangDPS
         awards:ShowSaurfangWindow()
         local frame = awards.saurfangWindow
@@ -655,7 +690,7 @@ describe('EP awards', function()
     it('excludes previously selected players when raised and clamps displayed thresholds at zero', function()
         installFrames()
         individualEPGP()
-        awards:SkadaSetComplete('Skada_SetComplete', winningSet())
+        meters:SkadaSetComplete('Skada_SetComplete', winningSet())
         awards:ShowSaurfangWindow()
         local frame = awards.saurfangWindow
         frame.plusButton.scripts.OnClick()
@@ -671,7 +706,7 @@ describe('EP awards', function()
     it('restores serialized DPS data after relog and awards later without Skada', function()
         installFrames()
         individualEPGP()
-        awards:SkadaSetComplete('Skada_SetComplete', winningSet())
+        meters:SkadaSetComplete('Skada_SetComplete', winningSet())
         -- SavedVariables retain plain data, not functions or the original table identities.
         local function serialize(value)
             if type(value) == 'table' then
@@ -693,7 +728,7 @@ describe('EP awards', function()
         assert.same(originalSnapshot, addon.db.char.saurfangDPS)
         _G.Skada = nil
         awards.active = nil
-        awards.saurfangWindow, awards.saurfangKilledSet = nil, nil
+        awards.saurfangWindow = nil
         awards.individualCallbackSource, awards.pendingIndividual = nil, nil
         now = at(28, 20, 0)
         awards:GetState()
@@ -717,7 +752,7 @@ describe('EP awards', function()
         addon.mainFrame = { buttonContainer = {}, discordButton = {} }
         addon.modules.EPAwards = awards
         awards:OnEnable()
-        awards:SkadaSetComplete('Skada_SetComplete', set)
+        meters:SkadaSetComplete('Skada_SetComplete', set)
         local saved = addon.db.char.saurfangDPS
         awards:ToggleWindow()
         awards:ShowSaurfangWindow()
@@ -734,7 +769,7 @@ describe('EP awards', function()
         assert.equals(1, unregistered)
         set.starttime = set.starttime + 1
         set.players[1].GetDPS = function() error('disabled DPS must not be read') end
-        awards:SkadaSetComplete('COMBAT_BOSS_DEFEATED', set)
+        meters:SkadaSetComplete('COMBAT_BOSS_DEFEATED', set)
         awards:CheckTime()
         awards:Suggest('attendance')
         awards:ShowReminder('attendance')
@@ -742,7 +777,7 @@ describe('EP awards', function()
         awards:ShowSaurfangWindow()
         addon.currentInstanceId = 631
         addon:DispatchCombatEvent({ event = 'UNIT_DIED', destGUID = '0xF1300093B5000001' })
-        assert.is_nil(awards.saurfangKilledSet)
+        assert.is_nil(meters.killed)
         assert.equals(saved, addon.db.char.saurfangDPS)
         assert.is_false(awards:Award('attendance'))
         assert.is_false(awards:AwardSaurfang(saved, { Fury = true }))

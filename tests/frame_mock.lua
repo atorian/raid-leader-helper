@@ -60,6 +60,9 @@ return function()
         function frame:SetBackdrop(backdrop) self.backdrop = backdrop end
         function frame:SetScript(event, fn) self.scripts[event] = fn end
         function frame:GetScript(event) return self.scripts[event] end
+        function frame:SetMaxLetters(limit) self.maxLetters = limit end
+        function frame:SetFocus() self.focused = true end
+        function frame:HighlightText() self.highlighted = true end
         function frame:SetAttribute(key, value)
             assert.is_false(self.combatLocked or false, 'protected attribute mutation in combat')
             self.attributes = self.attributes or {}

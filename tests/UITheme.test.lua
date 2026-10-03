@@ -593,16 +593,39 @@ describe('UI themes', function()
         assert.are.equal('current', addon.db.profile.theme)
         assert.are.equal('original-Normal', addon.mainFrame.raidCheckBtn.fonts.Normal)
     end)
+    it('exports from the settings button and applies a pasted profile', function()
+        addon:CreateMainFrame()
+        addon:CreateOptionsPanel()
+        addon.db.profile.theme = 'minimal'
+        addon.db.profile.pullCancelMessage = 'Стоп | 100%'
+        addon.db.profile.savedPosition = { point = 'TOPLEFT', relativePoint = 'TOPLEFT',
+            x = 25, y = -40, width = 500, height = 250 }
+        addon.db.char.combatHistoryV2 = { combats = { 'personal history' } }
+        namedFrames.RLHelperSettingsExportButton.scripts.OnClick()
+        local edit = namedFrames.RLHelperSettingsTransferEditBox
+        assert.is_true(edit.highlighted)
+        assert.is_true(edit.focused)
+        assert.are.equal(65536, edit.maxLetters)
+        addon.db.profile.theme = 'current'
+        addon.db.profile.pullCancelMessage = 'Other account'
+        namedFrames.RLHelperSettingsImportButton.scripts.OnClick()
+        assert.are.equal('minimal', addon.db.profile.theme)
+        assert.are.equal('Стоп | 100%', addon.db.profile.pullCancelMessage)
+        assert.are.same({ combats = { 'personal history' } }, addon.db.char.combatHistoryV2)
+        assert.are.equal('Минимализм', namedFrames.RLHelperThemeDropdown.text)
+    end)
+
     it('embeds the EP section in the shared scrollable settings panel', function()
         require('data.BossIds')
         local previous = addon.modules.EPAwards
+        require('modules.DPSMeters')
         local ep = require('modules.EPAwards')
         addon.modules.EPAwards = ep
         local ok, err = pcall(function()
             addon:CreateOptionsPanel()
             local content = namedFrames.RLHelperOptionsPanelContent
             assert.are.equal(content, namedFrames.RLHelperEPAwardsSettings.parent)
-            assert.are.equal(730 + namedFrames.RLHelperEPAwardsSettings.height, content.height)
+            assert.are.equal(940 + namedFrames.RLHelperEPAwardsSettings.height, content.height)
             assert.are.equal('1000', namedFrames.RLHelperEPAwardattendanceEditBox.text)
             assert.are.equal('7000', namedFrames.RLHelperEPAwardiccEditBox.text)
             assert.are.equal('3000', namedFrames.RLHelperEPAwardrsEditBox.text)

@@ -17,6 +17,7 @@ lib\blizzardEvent.lua
 lib\RingBuffer.lua
 lib\CombatFilters.lua
 lib\Journal.lua
+lib\SettingsTransfer.lua
 data\BossIds.lua
 
 # Core files
@@ -26,6 +27,7 @@ modules\IgorDeathTracker.lua
 modules\SpellTracker.lua
 modules\Misdirection.lua
 modules\ui\GPAwardButtons.lua
+modules\DPSMeters.lua
 modules\EPAwards.lua
 modules\bosses\DeathwhisperTracker.lua
 modules\bosses\BloodPrincesTracker.lua

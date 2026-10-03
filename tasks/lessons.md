@@ -110,3 +110,7 @@
 - Opening the Saurfang DPS award window must hide the general EP award window. Closing the DPS window must not reopen the general window.
 
 - The existing GP enable setting controls the entire GP/EP feature. When off, hide EP windows/button, stop reminders and Skada DPS collection, and preserve already saved results. Re-enable immediately without reload.
+
+- For Codex ENOENT in WSL, inspect the exact missing executable and distinguish agent, sandbox and Windows MCP runtimes. On 2026-10-03 an isolated test confirmed Windows Codex 0.159.0-alpha.12.1 deletes an active Linux Codex tmp/arg0 directory when both share CODEX_HOME on NTFS. Restart alone did not fix recurrence; do not promise it will. Diagnose shared-home cleanup before recommending environment switches. Windows-format attachment/MCP paths are a separate issue.
+
+- When editing global Codex instructions for Windows from WSL, use /mnt/c/Users/atori/.codex/AGENTS.md and identify it to the user as C:\Users\atori\.codex\AGENTS.md. Verify through Windows when needed; do not confuse it with the separate Linux ~/.codex/AGENTS.md.

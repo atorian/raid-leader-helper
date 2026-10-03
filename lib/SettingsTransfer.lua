@@ -1,0 +1,124 @@
+-- Versioned, text-only account settings transfer. Never evaluates imported Lua.
+local Transfer = {}
+RLHelperSettingsTransfer = Transfer
+local fields = {}
+local function field(path, kind, limit)
+    fields[#fields + 1] = { path = path, kind = kind, limit = limit }
+end
+for _, key in ipairs({ "enabled", "debug", "gpAwardButtonsEnabled", "displayOnlyInGroup",
+    "bossOnlyHistory", "igor", "halionBurstPull", "halionBurstReset", "halionPhaseTwoEntryTimer" }) do
+    field({key}, "boolean")
+end
+field({"theme"}, "theme")
+field({"pullCancelMessage"}, "string")
+field({"discordLink"}, "string")
+field({"minimap", "hide"}, "boolean")
+for _, amount in ipairs({100, 200, 250, 500, 1000}) do
+    field({"gpAwardReasons", amount}, "string")
+end
+for _, key in ipairs({"point", "relativePoint"}) do field({"savedPosition", key}, "point") end
+for _, key in ipairs({"x", "y"}) do field({"savedPosition", key}, "number", 100000) end
+for _, key in ipairs({"width", "height"}) do field({"savedPosition", key}, "size", 100000) end
+field({"epAwards", "rt"}, "time")
+field({"epAwards", "dpsSource"}, "source")
+for _, key in ipairs({"attendance", "icc", "rs", "toc", "saurfang"}) do
+    field({"epAwards", "amounts", key}, "integer", 99999)
+end
+for _, key in ipairs({"attendance", "icc", "rs", "toc"}) do
+    field({"epAwards", "reminders", key}, "boolean")
+end
+for _, spec in ipairs({71,72,73,250,251,252,65,66,70,253,254,255,259,260,261,
+    256,257,258,262,263,264,62,63,64,265,266,267,102,103,104,105}) do
+    field({"epAwards", "saurfangThresholds", spec}, "integer", 999999)
+end
+local points = {TOPLEFT=true, TOP=true, TOPRIGHT=true, LEFT=true, CENTER=true,
+    RIGHT=true, BOTTOMLEFT=true, BOTTOM=true, BOTTOMRIGHT=true}
+local function valid(value, descriptor)
+    if value == nil then return true end
+    local kind = descriptor.kind
+    if kind == "boolean" then return type(value) == "boolean" end
+    if kind == "number" or kind == "size" or kind == "integer" then
+        return type(value) == "number" and value == value and math.abs(value) <= descriptor.limit
+            and (kind ~= "size" or value > 0)
+            and (kind ~= "integer" or (value >= 0 and value == math.floor(value)))
+    end
+    if type(value) ~= "string" or #value > 4096 or value:find("%c") then return false end
+    if kind == "theme" then return value == "current" or value == "minimal" end
+    if kind == "source" then return value == "Skada" or value == "Recount" end
+    if kind == "point" then return points[value] == true end
+    if kind == "time" then
+        local h, m = value:match("^(%d%d):(%d%d)$")
+        return h ~= nil and tonumber(h) < 24 and tonumber(m) < 60
+    end
+    return true
+end
+local function encode(value)
+    if value == nil then return "-" end
+    if type(value) == "boolean" then return value and "b1" or "b0" end
+    if type(value) == "number" then return "n" .. string.format("%.17g", value) end
+    return "s" .. value:gsub(".", function(c) return string.format("%02X", c:byte()) end)
+end
+function Transfer.Export(profile)
+    local tokens = {"RLH1"}
+    for _, descriptor in ipairs(fields) do
+        local value
+        local parent = profile
+        for i = 1, #descriptor.path - 1 do parent = type(parent) == "table" and parent[descriptor.path[i]] or nil end
+        if type(parent) == "table" then value = parent[descriptor.path[#descriptor.path]] end
+        if not valid(value, descriptor) then return nil, "Недопустимое значение настройки." end
+        tokens[#tokens + 1] = encode(value)
+    end
+    tokens[#tokens + 1] = "END"
+    local text = table.concat(tokens, "|")
+    if #text > 65536 then return nil, "Настройки слишком велики для переноса." end
+    return text
+end
+function Transfer.Decode(text)
+    local errorMessage = "Строка настроек повреждена или имеет неподдерживаемый формат."
+    if type(text) ~= "string" or #text > 65536 then return nil, errorMessage end
+    text = text:gsub("%s", "")
+    local tokens = {}
+    for token in (text .. "|"):gmatch("(.-)|") do tokens[#tokens + 1] = token end
+    if #tokens ~= #fields + 2 or tokens[1] ~= "RLH1" or tokens[#tokens] ~= "END" then
+        return nil, errorMessage
+    end
+    local profile = {}
+    for index, descriptor in ipairs(fields) do
+        local token, value = tokens[index + 1]
+        if token == "b1" then value = true
+        elseif token == "b0" then value = false
+        elseif token:match("^n[%-+%d.eE]+$") then
+            value = tonumber(token:sub(2))
+            if not value then return nil, errorMessage end
+        elseif token:match("^s%x*$") and #token % 2 == 1 then
+            value = token:sub(2):gsub("%x%x", function(hex) return string.char(tonumber(hex, 16)) end)
+        elseif token ~= "-" then return nil, errorMessage end
+        if not valid(value, descriptor) then return nil, errorMessage end
+        if value ~= nil then
+            local parent = profile
+            for i = 1, #descriptor.path - 1 do
+                local key = descriptor.path[i]
+                parent[key] = parent[key] or {}
+                parent = parent[key]
+            end
+            parent[descriptor.path[#descriptor.path]] = value
+        end
+    end
+    if profile.savedPosition then
+        for _, key in ipairs({"point", "relativePoint", "x", "y", "width", "height"}) do
+            if profile.savedPosition[key] == nil then return nil, errorMessage end
+        end
+    end
+    if profile.epAwards then
+        local ep = profile.epAwards
+        ep.rt, ep.dpsSource = ep.rt or "19:00", ep.dpsSource or "Skada"
+        ep.amounts, ep.reminders, ep.saurfangThresholds = ep.amounts or {}, ep.reminders or {}, ep.saurfangThresholds or {}
+    end
+    return profile
+end
+function Transfer.Apply(profile, imported)
+    -- Replace only supported settings; leave unrelated and character data untouched.
+    for _, descriptor in ipairs(fields) do profile[descriptor.path[1]] = nil end
+    for key, value in pairs(imported) do profile[key] = value end
+end
+return Transfer

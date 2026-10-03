@@ -1,6 +1,7 @@
 local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local EPAwards = RLHelper:NewModule("EPAwards", "AceEvent-3.0")
 local BossIds = RLHelperBossIds
+local DPSMeters = RLHelper:GetModule("DPSMeters")
 local REWARDS = {
     { key = "attendance", name = "Приход вовремя", defaultAmount = 1000, reason = "за приход" },
     { key = "icc", name = "ЦЛК", defaultAmount = 7000, reason = "за прохождение ЦЛК", instance = BossIds.INSTANCES.ICECROWN_CITADEL,
@@ -12,7 +13,7 @@ local REWARDS = {
         bosses = { [BossIds.NPCS.ANUBARAK] = true, [BossIds.NPCS.ANUBARAK_ALT_1] = true,
             [BossIds.NPCS.ANUBARAK_ALT_2] = true } }
 }
--- Spec identifiers used by the installed WoW 3.3.5a Skada LibCompat.
+-- Spec identifiers shared by the DPS sources and the bundled LibCompat.
 local SPECS = {
     {71, "WARRIOR", "Воин: Армс"}, {72, "WARRIOR", "Воин: Фури"}, {73, "WARRIOR", "Воин: Защита"},
     {250, "DEATHKNIGHT", "ДК: Кровь"}, {251, "DEATHKNIGHT", "ДК: Лёд"}, {252, "DEATHKNIGHT", "ДК: Нечестивость"},
@@ -51,6 +52,7 @@ function EPAwards:GetSettings()
     local profile = RLHelper.db.profile
     profile.epAwards = profile.epAwards or { rt = "19:00", amounts = {}, reminders = {} }
     profile.epAwards.saurfangThresholds = profile.epAwards.saurfangThresholds or {}
+    profile.epAwards.dpsSource = profile.epAwards.dpsSource or "Skada"
     return profile.epAwards
 end
 
@@ -132,11 +134,7 @@ function EPAwards:RefreshEnabledState()
     if not self:IsFeatureEnabled() then self:OnDisable(); return end
     if self.active then return end
     self.active = true
-    self:RegisterMessage("COMBAT_BOSS_DEFEATED", "SkadaSetComplete")
-    if Skada and type(Skada.RegisterCallback) == "function" then
-        Skada.RegisterCallback(self, "Skada_SetComplete", "SkadaSetComplete")
-        self.skadaSource = Skada
-    end
+    self:StartDPSMeter()
     self:AttachButton()
     if self.button then self.button:Show() end
     self.clock = self.clock or CreateFrame("Frame")
@@ -151,11 +149,7 @@ end
 
 function EPAwards:OnDisable()
     self.active = false
-    if self.skadaSource then
-        self.skadaSource.UnregisterCallback(self, "Skada_SetComplete")
-        self.skadaSource = nil
-    end
-    self.saurfangKilledSet = nil
+    DPSMeters:Stop()
     if self.saurfangWindow then self.saurfangWindow:Hide() end
     if self.clock then self.clock:SetScript("OnUpdate", nil) end
     if self.window then self.window:Hide() end
@@ -185,8 +179,8 @@ function EPAwards:handleEvent(event)
     if event.event ~= "UNIT_DIED" or not event.destGUID then return end
     local npc = tonumber(event.destGUID:sub(9, 12), 16)
     if npc == BossIds.NPCS.DEATHBRINGER_SAURFANG and
-        RLHelper.currentInstanceId == BossIds.INSTANCES.ICECROWN_CITADEL and Skada then
-        self.saurfangKilledSet = Skada.current
+        RLHelper.currentInstanceId == BossIds.INSTANCES.ICECROWN_CITADEL then
+        DPSMeters:BossKilled(npc)
     end
     for _, reward in ipairs(REWARDS) do
         if reward.bosses and reward.instance == RLHelper.currentInstanceId and reward.bosses[npc] then
@@ -195,32 +189,38 @@ function EPAwards:handleEvent(event)
     end
 end
 
--- Read a completed winning segment, never a live DPS estimate or a wipe.
-function EPAwards:SkadaSetComplete(_, set)
-    if not self:IsFeatureEnabled() then return end
-    if not Skada or not set or not set.endtime or
-        set.gotboss ~= BossIds.NPCS.DEATHBRINGER_SAURFANG or
-        (not set.success and self.saurfangKilledSet ~= set) then return end
-    -- Skada also completes phase segments; awards use the whole fight.
-    if set ~= Skada.current and set ~= Skada.last then return end
+function EPAwards:StartDPSMeter()
+    DPSMeters:Start(self:GetSettings().dpsSource, function(fight) self:DPSFightComplete(fight) end)
+end
+
+function EPAwards:SetDPSSource(source)
+    if source ~= "Skada" and source ~= "Recount" then return end
+    self:GetSettings().dpsSource = source
+    if self.active then self:StartDPSMeter() end
+end
+
+-- Consume completed victories independently of the selected meter's data layout.
+function EPAwards:DPSFightComplete(set)
+    if not self:IsFeatureEnabled() or set.source ~= self:GetSettings().dpsSource or
+        set.boss ~= BossIds.NPCS.DEATHBRINGER_SAURFANG then return end
     local saved = RLHelper.db.char.saurfangDPS
-    if saved and saved.starttime == set.starttime and saved.endtime == set.endtime then return end
-    local snapshot = { starttime = set.starttime, endtime = set.endtime, players = {}, unknown = 0 }
+    if saved and (saved.source or "Skada") == set.source and
+        saved.starttime == set.starttime and saved.endtime == set.endtime then return end
+    local snapshot = { source = set.source, starttime = set.starttime, endtime = set.endtime, players = {}, unknown = 0 }
     for _, player in ipairs(set.players or {}) do
         local spec = SPEC_BY_ID[player.spec]
         local threshold = self:GetThreshold(player.spec)
-        if not spec or spec[2] ~= player.class or type(player.GetDPS) ~= "function" then
+        if not spec or spec[2] ~= player.class or type(player.dps) ~= "number" then
             snapshot.unknown = snapshot.unknown + 1
         elseif threshold and threshold > 0 then
             snapshot.players[#snapshot.players + 1] = {
                 name = player.name, class = player.class, spec = player.spec,
-                dps = player:GetDPS(), threshold = threshold
+                dps = player.dps, threshold = threshold
             }
         end
     end
     table.sort(snapshot.players, function(a, b) return a.dps > b.dps end)
     RLHelper.db.char.saurfangDPS = snapshot
-    self.saurfangKilledSet = nil
     if self.saurfangWindow and self.saurfangWindow:IsShown() then self:ShowSaurfangWindow() end
 end
 
@@ -538,10 +538,11 @@ function EPAwards:RefreshSaurfangWindow()
                 row:Show()
             end
         end
-        frame.info:SetText("Убийство: " .. date("%d.%m %H:%M", snapshot.endtime) .. ". По " .. self:GetAmount("saurfang") ..
+        frame.info:SetText("Источник: " .. (snapshot.source or "Skada") .. ". Убийство: " .. date("%d.%m %H:%M", snapshot.endtime) .. ". По " .. self:GetAmount("saurfang") ..
             " ЕП. Допуск: 100 DPS ниже планки.\nПодходят: " .. count .. ". Без данных о спеке/DPS: " .. snapshot.unknown .. ".")
     else
-        frame.info:SetText("Нет сохранённого результата. Нужна Skada и убийство Саурфанга с заданными планками.")
+        frame.info:SetText("Нет сохранённого результата. Источник: " .. self:GetSettings().dpsSource ..
+            ". Нужны загруженный метр и убийство Саурфанга с заданными планками.")
     end
     if previouslyAwarded > 0 then
         frame.result:SetText("Ранее начислено игрокам из этого списка: " .. previouslyAwarded .. ".")
@@ -572,7 +573,7 @@ end
 
 function EPAwards:CreateSettings(parent, anchor)
     local panel = CreateFrame("Frame", "RLHelperEPAwardsSettings", parent)
-    panel:SetSize(410, 350 + #SPECS * 34)
+    panel:SetSize(410, 398 + #SPECS * 34)
     panel:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -22)
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("TOPLEFT", 0, 0)
@@ -637,15 +638,36 @@ function EPAwards:CreateSettings(parent, anchor)
             self:GetSettings().amounts.saurfang = amount
         else RLHelper:Print("Сумма ЕП должна быть целым числом от 0 до 99999.") end
     end)
+    local sourceLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    sourceLabel:SetPoint("TOPLEFT", 0, -272)
+    sourceLabel:SetText("Источник DPS")
+    local sourceDropdown = CreateFrame("Frame", "RLHelperDPSSourceDropdown", panel, "UIDropDownMenuTemplate")
+    sourceDropdown:SetPoint("TOPLEFT", 134, -262)
+    UIDropDownMenu_SetWidth(sourceDropdown, 180)
+    local function refreshSource()
+        local source = self:GetSettings().dpsSource
+        UIDropDownMenu_SetText(sourceDropdown, source .. (DPSMeters:IsAvailable(source) and "" or " (не загружен)"))
+    end
+    UIDropDownMenu_Initialize(sourceDropdown, function()
+        for _, source in ipairs({ "Skada", "Recount" }) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text, info.value = source, source
+            info.checked = self:GetSettings().dpsSource == source
+            info.func = function() self:SetDPSSource(source); refreshSource() end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    refreshSource()
+    table.insert(fields, refreshSource)
     local thresholdsTitle = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    thresholdsTitle:SetPoint("TOPLEFT", 0, -280)
+    thresholdsTitle:SetPoint("TOPLEFT", 0, -328)
     thresholdsTitle:SetText("Планки ДПС — Саурфанг (по спекам)")
     local thresholdsHelp = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    thresholdsHelp:SetPoint("TOPLEFT", 0, -304)
-    thresholdsHelp:SetText("Пусто или 0 — не учитывать. DPS берётся из Skada после победы.")
+    thresholdsHelp:SetPoint("TOPLEFT", 0, -352)
+    thresholdsHelp:SetText("Пусто или 0 — не учитывать. DPS — по выбранному метру после победы.")
     for index, spec in ipairs(SPECS) do
         local id = spec[1]
-        input("Spec" .. id, spec[3], -338 - (index - 1) * 34,
+        input("Spec" .. id, spec[3], -386 - (index - 1) * 34,
             function() return self:GetThreshold(id) or "" end,
             function(value)
                 local threshold = tonumber(value)

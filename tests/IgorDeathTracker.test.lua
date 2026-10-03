@@ -52,7 +52,7 @@ describe("IgorDeathTracker", function()
         })
 
         assert.is_true(sent)
-        assert.are.same({ { message = "Игорь осуждает смерть Игрок.", channel = "EMOTE" } }, messages)
+        assert.are.same({ { message = "осуждает смерть Игрок.", channel = "EMOTE" } }, messages)
     end)
 
     it("sends a random emote when a party player dies", function()
@@ -71,7 +71,7 @@ describe("IgorDeathTracker", function()
         })
 
         assert.is_true(sent)
-        assert.are.same({ { message = "Игорь осуждает смерть Игрок.", channel = "EMOTE" } }, messages)
+        assert.are.same({ { message = "осуждает смерть Игрок.", channel = "EMOTE" } }, messages)
     end)
 
     it("does not send more than once every fifteen seconds", function()
@@ -165,7 +165,7 @@ describe("IgorDeathTracker", function()
         })
 
         assert.is_true(sent)
-        assert.are.same({ { message = "Игорь зажимает нос. Волк воняет.", channel = "EMOTE" } }, messages)
+        assert.are.same({ { message = "зажимает нос. Волк воняет.", channel = "EMOTE" } }, messages)
     end)
 
     it("ignores group pet deaths with totem name prefix", function()

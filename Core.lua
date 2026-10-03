@@ -2093,6 +2093,30 @@ function RLHelper:CreateMinimapButton()
     self.minimapButton = button
 end
 
+function RLHelper:ExportSettings()
+    local epAwards = self:GetModule("EPAwards", true)
+    if epAwards then epAwards:GetSettings() end
+    return RLHelperSettingsTransfer.Export(self.db.profile)
+end
+
+function RLHelper:ImportSettings(text)
+    local imported, message = RLHelperSettingsTransfer.Decode(text)
+    if not imported then return false, message end
+    RLHelperSettingsTransfer.Apply(self.db.profile, imported)
+    self:SetTheme(self.db.profile.theme)
+    self:MinimizeWindow()
+    self:RefreshDiscordButton()
+    self:RefreshMainFrameVisibility()
+    self:RefreshGPAwardButtons()
+    local epAwards = self:GetModule("EPAwards", true)
+    if epAwards then
+        local settings = epAwards:GetSettings()
+        epAwards:SetRT(settings.rt)
+        epAwards:SetDPSSource(settings.dpsSource)
+    end
+    return true, "Настройки аккаунта импортированы."
+end
+
 function RLHelper:CreateOptionsPanel()
     if type(CreateFrame) ~= "function" or type(InterfaceOptions_AddCategory) ~= "function" then
         return
@@ -2106,7 +2130,7 @@ function RLHelper:CreateOptionsPanel()
     scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -30, 12)
 
     local content = CreateFrame("Frame", "RLHelperOptionsPanelContent", scrollFrame)
-    content:SetSize(440, 710)
+    content:SetSize(440, 920)
     if scrollFrame.SetScrollChild then
         scrollFrame:SetScrollChild(content)
     end
@@ -2290,7 +2314,7 @@ function RLHelper:CreateOptionsPanel()
         isFirstGpReason = false
     end
 
-    panel:SetScript("OnShow", function()
+    local function refreshSettings()
         UIDropDownMenu_SetText(themeDropdown, themeLabels[UITheme.GetName(RLHelper)])
         cancelEditBox:SetText(RLHelper.db.profile.pullCancelMessage or "")
         discordEditBox:SetText(RLHelper.db.profile.discordLink or "")
@@ -2306,12 +2330,58 @@ function RLHelper:CreateOptionsPanel()
             editBox:SetText(getGPReason(amount))
             editBox:SetCursorPosition(0)
         end
+    end
+    panel:SetScript("OnShow", refreshSettings)
+
+    local transferTitle = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    transferTitle:SetPoint("TOPLEFT", gpReasonAnchor, "BOTTOMLEFT", 0, -22)
+    transferTitle:SetText("Перенос настроек аккаунта")
+    local transferHelp = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    transferHelp:SetPoint("TOPLEFT", transferTitle, "BOTTOMLEFT", 0, -8)
+    transferHelp:SetWidth(390)
+    transferHelp:SetJustifyH("LEFT")
+    transferHelp:SetText("Экспорт: Ctrl+C. Импорт: вставьте строку через Ctrl+V.\nИмпорт заменяет общие настройки всех персонажей аккаунта.\nИстория боёв, результаты DPS и выполненные начисления ЕП не переносятся.")
+    local transferEdit = CreateFrame("EditBox", "RLHelperSettingsTransferEditBox", content, "InputBoxTemplate")
+    transferEdit:SetSize(390, 24)
+    transferEdit:SetPoint("TOPLEFT", transferHelp, "BOTTOMLEFT", 0, -12)
+    transferEdit:SetAutoFocus(false)
+    transferEdit:SetMaxLetters(65536)
+    transferEdit:SetScript("OnEscapePressed", function(edit) edit:ClearFocus() end)
+    local transferStatus = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    transferStatus:SetWidth(390)
+    transferStatus:SetJustifyH("LEFT")
+    local exportButton = CreateFrame("Button", "RLHelperSettingsExportButton", content, "UIPanelButtonTemplate")
+    exportButton:SetSize(110, 24)
+    exportButton:SetPoint("TOPLEFT", transferEdit, "BOTTOMLEFT", 0, -8)
+    exportButton:SetText("Экспорт")
+    exportButton:SetScript("OnClick", function()
+        local text, message = RLHelper:ExportSettings()
+        if not text then transferStatus:SetText(message); return end
+        transferEdit:SetText(text)
+        transferEdit:SetFocus()
+        transferEdit:HighlightText()
+        transferStatus:SetText("Скопируйте выделенную строку через Ctrl+C.")
     end)
+    local importButton = CreateFrame("Button", "RLHelperSettingsImportButton", content, "UIPanelButtonTemplate")
+    importButton:SetSize(110, 24)
+    importButton:SetPoint("LEFT", exportButton, "RIGHT", 8, 0)
+    importButton:SetText("Импорт")
+    importButton:SetScript("OnClick", function()
+        transferEdit:ClearFocus()
+        local ok, message = RLHelper:ImportSettings(transferEdit:GetText())
+        transferStatus:SetText(message)
+        if ok then
+            refreshSettings()
+            local ep = RLHelper:GetModule("EPAwards", true)
+            if ep and ep.options then ep.options:GetScript("OnShow")(ep.options) end
+        end
+    end)
+    transferStatus:SetPoint("TOPLEFT", exportButton, "BOTTOMLEFT", 0, -8)
 
     local epAwards = self:GetModule("EPAwards", true)
     if epAwards then
-        epAwards:CreateSettings(content, gpReasonAnchor)
-        content:SetHeight(730 + epAwards.options:GetHeight())
+        epAwards:CreateSettings(content, transferStatus)
+        content:SetHeight(940 + epAwards.options:GetHeight())
     end
 
     self.optionsPanel = panel

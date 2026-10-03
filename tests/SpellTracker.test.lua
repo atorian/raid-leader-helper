@@ -129,18 +129,13 @@ describe('SpellTracker', function()
             assertRecord(log, { spellId = 31789, sourceName = "Julian", targetName = "Soxen", kind = "TAUNT", type = "INFO" })
         end)
 
-        it('logs Aura Mastery on spell cast success without target', function()
-            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
-                "0x0000000000000001", "Palanessa", 0x512, "0x0000000000000000", nil, 0x80000000,
-                31821, "Мастер аур", 0x1)
-
-            assertRecord(log, { spellId = 31821, sourceName = "Palanessa", kind = "SPELL_USE", type = "INFO" })
-        end)
-
         it('logs Aura Mastery only on spell cast success', function()
             dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
                 "0x0000000000000001", "Palanessa", 0x512, "0x0000000000000000", nil, 0x80000000,
                 31821, "Мастер аур", 0x1)
+            assert.spy(log).was_called(1)
+            assertRecord(log, { spellId = 31821, sourceName = "Palanessa", kind = "SPELL_USE", type = "INFO" })
+
             dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_AURA_APPLIED",
                 "0x0000000000000001", "Palanessa", 0x512, "0x0000000000000001", "Palanessa", 0x512,
                 31821, "Мастер аур", 0x1, "BUFF")
@@ -149,18 +144,13 @@ describe('SpellTracker', function()
             assertRecord(log, { spellId = 31821, sourceName = "Palanessa", kind = "SPELL_USE", type = "INFO" })
         end)
 
-        it('logs Hand of Freedom on spell cast success with target', function()
-            dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
-                "0x0000000000000001", "Tilasha", 0x511, "0x000000000016742E", "Sensei", 0x4000514,
-                1044, "Длань свободы", 0x2)
-
-            assertRecord(log, { spellId = 1044, sourceName = "Tilasha", targetName = "Sensei", kind = "SPELL_USE", type = "INFO" })
-        end)
-
         it('logs Hand of Freedom only on spell cast success', function()
             dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_CAST_SUCCESS",
                 "0x0000000000000001", "Tilasha", 0x511, "0x000000000016742E", "Sensei", 0x4000514,
                 1044, "Длань свободы", 0x2)
+            assert.spy(log).was_called(1)
+            assertRecord(log, { spellId = 1044, sourceName = "Tilasha", targetName = "Sensei", kind = "SPELL_USE", type = "INFO" })
+
             dispatch(SpellTracker, "COMBAT_LOG_EVENT_UNFILTERED", GetTime(), "SPELL_AURA_APPLIED",
                 "0x0000000000000001", "Tilasha", 0x511, "0x000000000016742E", "Sensei", 0x4000514,
                 1044, "Длань свободы", 0x2, "BUFF")

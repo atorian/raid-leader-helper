@@ -1,5 +1,6 @@
 require('tests.mocks')
 local mocks = require('tests.mocks')
+local mockFrames = require('tests.frame_mock')
 require('Core')
 local GPAwardButtons = require("../modules/ui/GPAwardButtons")
 local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
@@ -225,7 +226,6 @@ describe('GPAwardButtons', function()
 
     it('updates the undo button enabled state after award and undo', function()
         local slashCalls = {}
-        local createdFrames = {}
         local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
         RLHelper.mainFrame = {}
         RLHelper.SetMainFrameBottomPanel = function()
@@ -236,45 +236,7 @@ describe('GPAwardButtons', function()
                 table.insert(slashCalls, command)
             end
         }
-        _G.CreateFrame = function(frameType, name, parent, template)
-            local frame = {
-                frameType = frameType,
-                name = name,
-                parent = parent,
-                template = template,
-                visible = true,
-                points = {},
-                scripts = {},
-                enabled = true
-            }
-            function frame:SetSize(width, height)
-                self.width = width
-                self.height = height
-            end
-            function frame:SetPoint(...)
-                table.insert(self.points, { ... })
-            end
-            function frame:SetHeight(height)
-                self.height = height
-            end
-            function frame:SetText(text)
-                self.text = text
-            end
-            function frame:SetScript(event, callback)
-                self.scripts[event] = callback
-            end
-            function frame:Show()
-                self.visible = true
-            end
-            function frame:Enable()
-                self.enabled = true
-            end
-            function frame:Disable()
-                self.enabled = false
-            end
-            table.insert(createdFrames, frame)
-            return frame
-        end
+        _G.CreateFrame = mockFrames().newFrame
 
         GPAwardButtons:attachToMainFrame()
 
@@ -288,50 +250,12 @@ describe('GPAwardButtons', function()
 
     it('hides GP award footer and clears bottom panel when disabled in profile', function()
         local bottomPanel
-        local frames = {}
         RLHelper.mainFrame = {}
         RLHelper.db.profile.gpAwardButtonsEnabled = false
         RLHelper.SetMainFrameBottomPanel = function(_, panel)
             bottomPanel = panel
         end
-        _G.CreateFrame = function()
-            local frame = {
-                visible = true,
-                points = {},
-                scripts = {},
-                enabled = true
-            }
-            function frame:SetSize(width, height)
-                self.width = width
-                self.height = height
-            end
-            function frame:SetPoint(...)
-                table.insert(self.points, { ... })
-            end
-            function frame:SetHeight(height)
-                self.height = height
-            end
-            function frame:SetText(text)
-                self.text = text
-            end
-            function frame:SetScript(event, callback)
-                self.scripts[event] = callback
-            end
-            function frame:Show()
-                self.visible = true
-            end
-            function frame:Hide()
-                self.visible = false
-            end
-            function frame:Enable()
-                self.enabled = true
-            end
-            function frame:Disable()
-                self.enabled = false
-            end
-            table.insert(frames, frame)
-            return frame
-        end
+        _G.CreateFrame = mockFrames().newFrame
 
         GPAwardButtons:attachToMainFrame()
 

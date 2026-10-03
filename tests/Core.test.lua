@@ -2,6 +2,7 @@ local function record(text) return RLHelperJournal.Create('TEST', { timestamp = 
 local M = require('tests.mocks')
 local blizzardEvent = require('../lib/blizzardEvent')
 local RLHelper = require("Core")
+local mockFrames = require("tests.frame_mock")
 
 -- Test suites
 describe("RLHelper.blizzardEvent", function()
@@ -678,6 +679,7 @@ describe("RLHelper frame positioning", function()
 end)
 
 describe("RLHelper settings helpers", function()
+    local ui
     local originalDb
     local originalPrint
     local originalOpenToCategory
@@ -697,6 +699,7 @@ describe("RLHelper settings helpers", function()
     local originalUnitIsGroupAssistant
 
     before_each(function()
+        ui = mockFrames()
         originalDb = RLHelper.db
         originalPrint = RLHelper.Print
         originalOpenToCategory = _G.InterfaceOptionsFrame_OpenToCategory
@@ -722,6 +725,7 @@ describe("RLHelper settings helpers", function()
     end)
 
     after_each(function()
+        ui.restoreGlobals()
         RLHelper.db = originalDb
         RLHelper.Print = originalPrint
         RLHelper.OpenOptionsPanel = originalOpenOptionsPanel
@@ -934,70 +938,8 @@ describe("RLHelper settings helpers", function()
     end)
 
     it("creates options panel with Russian setting labels", function()
-        local texts = {}
-
-        local function newFrame(frameType, name, parent, template)
-            local frame = {
-                frameType = frameType,
-                name = name,
-                parent = parent,
-                template = template,
-                scripts = {}
-            }
-
-            function frame:GetName()
-                return self.name
-            end
-
-            function frame:CreateFontString()
-                return newFrame("FontString", nil, self)
-            end
-
-            function frame:SetText(text)
-                self.text = text
-                table.insert(texts, text)
-            end
-
-            function frame:SetPoint()
-            end
-
-            function frame:SetSize()
-            end
-
-            function frame:SetAutoFocus()
-            end
-
-            function frame:SetTextInsets()
-            end
-
-            function frame:SetCursorPosition()
-            end
-
-            function frame:SetScript(event, callback)
-                self.scripts[event] = callback
-            end
-
-            function frame:GetText()
-                return self.text or ""
-            end
-
-            function frame:ClearFocus()
-            end
-
-            function frame:SetChecked(value)
-                self.checked = value
-            end
-
-            if frameType == "CheckButton" and name then
-                _G[name .. "Text"] = {
-                    SetText = function(_, text)
-                        table.insert(texts, text)
-                    end
-                }
-            end
-
-            return frame
-        end
+        local texts = ui.texts
+        local newFrame = ui.newFrame
 
         _G.UIParent = newFrame("Frame", "UIParent")
         _G.CreateFrame = newFrame
@@ -1038,90 +980,8 @@ describe("RLHelper settings helpers", function()
     end)
 
     it("creates a scrollable options panel with aligned GP reason rows", function()
-        local framesByName = {}
-        local labelsByText = {}
-
-        local function newFrame(frameType, name, parent, template)
-            local frame = {
-                frameType = frameType,
-                name = name,
-                parent = parent,
-                template = template,
-                points = {},
-                scripts = {}
-            }
-
-            if name then
-                framesByName[name] = frame
-            end
-
-            function frame:GetName()
-                return self.name
-            end
-
-            function frame:CreateFontString()
-                return newFrame("FontString", nil, self)
-            end
-
-            function frame:SetText(text)
-                self.text = text
-                labelsByText[text] = self
-            end
-
-            function frame:SetPoint(...)
-                table.insert(self.points, { ... })
-            end
-
-            function frame:SetSize(width, height)
-                self.width = width
-                self.height = height
-            end
-
-            function frame:SetWidth(width)
-                self.fixedWidth = width
-            end
-
-            function frame:SetHeight(height)
-                self.height = height
-            end
-
-            function frame:SetAutoFocus()
-            end
-
-            function frame:SetTextInsets()
-            end
-
-            function frame:SetCursorPosition()
-            end
-
-            function frame:SetScript(event, callback)
-                self.scripts[event] = callback
-            end
-
-            function frame:SetScrollChild(child)
-                self.scrollChild = child
-            end
-
-            function frame:GetText()
-                return self.text or ""
-            end
-
-            function frame:ClearFocus()
-            end
-
-            function frame:SetChecked(value)
-                self.checked = value
-            end
-
-            if frameType == "CheckButton" and name then
-                _G[name .. "Text"] = {
-                    SetText = function()
-                    end
-                }
-            end
-
-            return frame
-        end
+        local framesByName, labelsByText = ui.namedFrames, ui.labelsByText
+        local newFrame = ui.newFrame
 
         RLHelper.db = {
             profile = {}
@@ -1148,90 +1008,19 @@ describe("RLHelper settings helpers", function()
         for _, amount in ipairs({ 100, 200, 250, 500, 1000 }) do
             local label = labelsByText[amount .. " GP"]
             local editBox = framesByName["RLHelperGPAwardReason" .. amount .. "EditBox"]
-            assert.are.equal(70, label.fixedWidth)
+            assert.are.equal(70, label.width)
             assert.are.equal(amount == 100 and 4 or 0, label.points[1][4])
             assert.are.same({ "LEFT", label, "LEFT", 78, 0 }, editBox.points[1])
-            assert.are.equal(260, editBox.fixedWidth)
-            assert.is_true(editBox.points[1][4] + editBox.fixedWidth <= contentFrame.width - 24)
+            assert.are.equal(260, editBox.width)
+            assert.is_true(editBox.points[1][4] + editBox.width <= contentFrame.width - 24)
         end
     end)
 
     it("stores the Discord link from the options edit box and refreshes the button", function()
-        local editBoxes = {}
+        local editBoxes = ui.editBoxes
         local refreshCalls = 0
         local originalRefreshDiscordButton = RLHelper.RefreshDiscordButton
-
-        local function newFrame(frameType, name, parent, template)
-            local frame = {
-                frameType = frameType,
-                name = name,
-                parent = parent,
-                template = template,
-                scripts = {}
-            }
-
-            function frame:GetName()
-                return self.name
-            end
-
-            function frame:CreateFontString()
-                return newFrame("FontString", nil, self)
-            end
-
-            function frame:SetText(text)
-                self.text = text
-            end
-
-            function frame:SetPoint()
-            end
-
-            function frame:SetSize(width, height)
-                self.width = width
-                self.height = height
-            end
-
-            function frame:SetWidth(width)
-                self.fixedWidth = width
-            end
-
-            function frame:SetAutoFocus()
-            end
-
-            function frame:SetTextInsets()
-            end
-
-            function frame:SetCursorPosition()
-            end
-
-            function frame:SetScript(event, callback)
-                self.scripts[event] = callback
-            end
-
-            function frame:GetText()
-                return self.text or ""
-            end
-
-            function frame:ClearFocus()
-                self.clearedFocus = true
-            end
-
-            function frame:SetChecked(value)
-                self.checked = value
-            end
-
-            if frameType == "EditBox" then
-                table.insert(editBoxes, frame)
-            end
-
-            if frameType == "CheckButton" and name then
-                _G[name .. "Text"] = {
-                    SetText = function()
-                    end
-                }
-            end
-
-            return frame
-        end
+        local newFrame = ui.newFrame
 
         RLHelper.db = {
             profile = {}
@@ -1252,95 +1041,18 @@ describe("RLHelper settings helpers", function()
         assert.are.equal("https://discord.gg/options", RLHelper.db.profile.discordLink)
         assert.are.equal("RLHelperPullCancelEditBox", editBoxes[1].name)
         assert.are.equal("RLHelperDiscordLinkEditBox", editBoxes[2].name)
-        assert.are.equal(320, editBoxes[1].fixedWidth)
-        assert.are.equal(320, editBoxes[2].fixedWidth)
-        assert.are.equal(editBoxes[1].fixedWidth, editBoxes[2].fixedWidth)
+        assert.are.equal(320, editBoxes[1].width)
+        assert.are.equal(320, editBoxes[2].width)
+        assert.are.equal(editBoxes[1].width, editBoxes[2].width)
         assert.is_true(editBoxes[2].clearedFocus)
         assert.are.equal(1, refreshCalls)
     end)
 
     it("stores GP award visibility and reason settings from the options panel", function()
-        local editBoxes = {}
-        local checkButtons = {}
+        local editBoxes, checkButtons = ui.editBoxes, ui.namedFrames
         local refreshCalls = 0
         local originalGetModule = RLHelper.GetModule
-
-        local function newFrame(frameType, name, parent, template)
-            local frame = {
-                frameType = frameType,
-                name = name,
-                parent = parent,
-                template = template,
-                scripts = {}
-            }
-
-            function frame:GetName()
-                return self.name
-            end
-
-            function frame:CreateFontString()
-                return newFrame("FontString", nil, self)
-            end
-
-            function frame:SetText(text)
-                self.text = text
-            end
-
-            function frame:SetPoint()
-            end
-
-            function frame:SetSize(width, height)
-                self.width = width
-                self.height = height
-            end
-
-            function frame:SetWidth(width)
-                self.fixedWidth = width
-            end
-
-            function frame:SetAutoFocus()
-            end
-
-            function frame:SetTextInsets()
-            end
-
-            function frame:SetCursorPosition()
-            end
-
-            function frame:SetScript(event, callback)
-                self.scripts[event] = callback
-            end
-
-            function frame:GetText()
-                return self.text or ""
-            end
-
-            function frame:ClearFocus()
-                self.clearedFocus = true
-            end
-
-            function frame:SetChecked(value)
-                self.checked = value
-            end
-
-            function frame:GetChecked()
-                return self.checked
-            end
-
-            if frameType == "EditBox" then
-                table.insert(editBoxes, frame)
-            end
-
-            if frameType == "CheckButton" and name then
-                checkButtons[name] = frame
-                _G[name .. "Text"] = {
-                    SetText = function()
-                    end
-                }
-            end
-
-            return frame
-        end
+        local newFrame = ui.newFrame
 
         RLHelper.db = {
             profile = {
@@ -1550,199 +1262,7 @@ describe("RLHelper main frame raid check button", function()
     local frames
     local printedMessages
 
-    local function newFrame(frameType, name, parent, template)
-        local frame = {
-            frameType = frameType,
-            name = name,
-            parent = parent,
-            template = template,
-            visible = true,
-            points = {},
-            scripts = {}
-        }
-
-        function frame:SetSize(width, height)
-            self.width = width
-            self.height = height
-        end
-
-        function frame:SetPoint(...)
-            table.insert(self.points, { ... })
-        end
-
-        function frame:SetAllPoints(parent)
-            self.allPoints = parent
-        end
-
-        function frame:SetFrameStrata(strata)
-            self.frameStrata = strata
-        end
-
-        function frame:ClearAllPoints()
-            self.points = {}
-        end
-
-        function frame:SetMovable(value)
-            self.movable = value
-        end
-
-        function frame:SetResizable(value)
-            self.resizable = value
-        end
-
-        function frame:SetMinResize(width, height)
-            self.minResize = { width, height }
-        end
-
-        function frame:SetMaxResize(width, height)
-            self.maxResize = { width, height }
-        end
-
-        function frame:EnableMouse(value)
-            self.mouseEnabled = value
-        end
-
-        function frame:RegisterForDrag(button)
-            self.dragButton = button
-        end
-
-        function frame:SetScript(event, callback)
-            self.scripts[event] = callback
-        end
-
-        function frame:SetBackdrop(backdrop)
-            self.backdrop = backdrop
-        end
-
-        function frame:CreateFontString()
-            return newFrame("FontString", nil, self)
-        end
-
-        function frame:SetText(text)
-            self.text = text
-        end
-
-        function frame:GetFontString()
-            return {
-                SetFont = function(_, font, size, flags)
-                    frame.font = { font, size, flags }
-                end,
-                SetPoint = function(_, ...)
-                    frame.fontPoint = { ... }
-                end
-            }
-        end
-
-        function frame:SetNormalTexture(texture)
-            self.normalTexture = texture
-        end
-
-        function frame:SetPushedTexture(texture)
-            self.pushedTexture = texture
-        end
-
-        function frame:SetHighlightTexture(texture)
-            self.highlightTexture = texture
-        end
-
-        function frame:SetDisabledTexture(texture)
-            self.disabledTexture = texture
-        end
-
-        function frame:SetHeight(height)
-            self.height = height
-        end
-
-        function frame:Show()
-            self.visible = true
-        end
-
-        function frame:Hide()
-            self.visible = false
-        end
-
-        function frame:SetFont(font, size, flags)
-            self.font = { font, size, flags }
-        end
-
-        function frame:SetJustifyV(value)
-            self.justifyV = value
-        end
-
-        function frame:SetJustifyH(value)
-            self.justifyH = value
-        end
-
-        function frame:SetFading(value)
-            self.fading = value
-        end
-
-        function frame:SetMaxLines(value)
-            self.maxLines = value
-        end
-
-        function frame:EnableMouseWheel(value)
-            self.mouseWheelEnabled = value
-        end
-
-        function frame:SetHyperlinksEnabled(value)
-            self.hyperlinksEnabled = value
-        end
-
-        function frame:SetIndentedWordWrap(value)
-            self.indentedWordWrap = value
-        end
-
-        function frame:SetInsertMode(value)
-            self.insertMode = value
-        end
-
-        function frame:StartMoving()
-            self.startedMoving = true
-        end
-
-        function frame:StopMovingOrSizing()
-            self.stoppedMoving = true
-        end
-
-        function frame:StartSizing(direction)
-            self.startedSizing = direction
-        end
-
-        function frame:Clear()
-            self.cleared = true
-        end
-
-        function frame:ScrollUp()
-            self.scrolledUp = true
-        end
-
-        function frame:ScrollDown()
-            self.scrolledDown = true
-        end
-
-        function frame:SetScrollChild(child) self.scrollChild = child end
-        function frame:GetVerticalScroll() return self.offset or 0 end
-        function frame:SetVerticalScroll(value) self.offset = value end
-        function frame:GetVerticalScrollRange() return 0 end
-        function frame:GetHeight()
-            if self.frameType == 'FontString' then return self.height or self:GetStringHeight() end
-            return self.height or 400
-        end
-        function frame:GetWidth() return self.width or 400 end
-        function frame:SetWidth(value) self.width = value end
-        function frame:GetFont() return unpack(self.font or { 'Fonts\\FRIZQT__.TTF', 12, 'OUTLINE' }) end
-        function frame:GetStringHeight() return 20 end
-        function frame:GetSpacing() return 0 end
-        function frame:CreateTexture() return newFrame('Texture', nil, self) end
-        function frame:SetTexture() end
-        function frame:SetAlpha() end
-        function frame:Disable() end
-        function frame:Enable() end
-        function frame:AddMessage() end
-        table.insert(frames, frame)
-        return frame
-    end
+    local ui, newFrame
 
     before_each(function()
         originalCreateFrame = _G.CreateFrame
@@ -1761,7 +1281,8 @@ describe("RLHelper main frame raid check button", function()
         originalUnitIsGroupLeader = _G.UnitIsGroupLeader
         originalUnitIsGroupAssistant = _G.UnitIsGroupAssistant
         originalDb = RLHelper.db
-        frames = {}
+        ui = mockFrames()
+        newFrame, frames = ui.newFrame, ui.frames
         printedMessages = {}
 
         _G.UIParent = newFrame("Frame", "UIParent")
@@ -1801,6 +1322,7 @@ describe("RLHelper main frame raid check button", function()
     end)
 
     after_each(function()
+        ui.restoreGlobals()
         _G.CreateFrame = originalCreateFrame
         _G.UIParent = originalUIParent
         _G.UIDropDownMenu_SetWidth = originalUIDropDownMenuSetWidth
@@ -1841,7 +1363,7 @@ describe("RLHelper main frame raid check button", function()
         assert.are.same({ "LEFT", RLHelper.mainFrame.combatListButton, "RIGHT", 4, 0 }, RLHelper.mainFrame.discordButton.points[1])
         assert.equals(18, RLHelper.mainFrame.discordButton.width)
         assert.equals(18, RLHelper.mainFrame.discordButton.height)
-        assert.equals("Interface\\FriendsFrame\\UI-Toast-ChatInviteIcon", RLHelper.mainFrame.discordButton.normalTexture)
+        assert.equals("Interface\\FriendsFrame\\UI-Toast-ChatInviteIcon", RLHelper.mainFrame.discordButton:GetNormalTexture():GetTexture())
         assert.is_false(RLHelper.mainFrame.discordButton.visible)
         assert.is_false(RLHelper.mainFrame.combatListFrame.visible)
         assert.is_false(RLHelper.mainFrame.combatListClickCatcher.visible)
@@ -1915,7 +1437,7 @@ describe("RLHelper main frame raid check button", function()
         assert.equals("|cffffff00> Текущий|r", RLHelper.mainFrame.combatListRows[1].label.text)
         assert.equals("|cff808080  01. |r|cffffffffКороль-лич|r|cff808080: " .. date("%H:%M", startTime - 60) .. "|r", RLHelper.mainFrame.combatListRows[2].label.text)
         assert.equals("|cff808080  02. |r|cffffffffВалитрия Сноходица|r|cff808080: " .. date("%H:%M", startTime - 120) .. "|r", RLHelper.mainFrame.combatListRows[3].label.text)
-        assert.equals("Interface\\QuestFrame\\UI-QuestTitleHighlight", RLHelper.mainFrame.combatListRows[2].highlightTexture)
+        assert.equals("Interface\\QuestFrame\\UI-QuestTitleHighlight", RLHelper.mainFrame.combatListRows[2]:GetHighlightTexture():GetTexture())
     end)
 
     it("sizes the combat list overlay to long row text", function()
@@ -2533,100 +2055,22 @@ describe("RLHelper pull controls", function()
 end)
 
 describe("RLHelper.affectingGroup", function()
-    it("should return true when source is player (0x511)", function()
-        local event = {
-            sourceFlags = 0x511,
-            destFlags = 0xa48
-        }
-        assert.is_true(affectingGroup(event))
-    end)
-
-    it("should return true when source is party member (0x512)", function()
-        local event = {
-            sourceFlags = 0x512,
-            destFlags = 0xa48
-        }
-        assert.is_true(affectingGroup(event))
-    end)
-
-    it("should return true when source is raid member (0x514)", function()
-        local event = {
-            sourceFlags = 0x514,
-            destFlags = 0xa48
-        }
-        assert.is_true(affectingGroup(event))
-    end)
-
-    it("should return true when destination is player (0x511)", function()
-        local event = {
-            sourceFlags = 0xa48,
-            destFlags = 0x511
-        }
-        assert.is_true(affectingGroup(event))
-    end)
-
-    it("should return true when destination is party member (0x512)", function()
-        local event = {
-            sourceFlags = 0xa48,
-            destFlags = 0x512
-        }
-        assert.is_true(affectingGroup(event))
-    end)
-
-    it("should return true when destination is raid member (0x514)", function()
-        local event = {
-            sourceFlags = 0xa48,
-            destFlags = 0x514
-        }
-        assert.is_true(affectingGroup(event))
-    end)
-
-    it("should return false when neither source nor destination is player/party/raid", function()
-        local event = {
-            sourceFlags = 0xa48,
-            destFlags = 0xa48
-        }
-        assert.is_false(affectingGroup(event))
-    end)
-
-    it("should handle nil flags", function()
-        local event = {
-            sourceFlags = nil,
-            destFlags = nil
-        }
-        assert.is_false(affectingGroup(event))
-    end)
-
-    it("should ignore events from other players (0x510)", function()
-        local event = {
-            sourceFlags = 0x510, -- Player but not in group/raid
-            destFlags = 0xa48
-        }
-        assert.is_false(affectingGroup(event))
-    end)
-
-    it("should ignore events to other players (0x510)", function()
-        local event = {
-            sourceFlags = 0xa48,
-            destFlags = 0x510 -- Player but not in group/raid
-        }
-        assert.is_false(affectingGroup(event))
-    end)
-
-    it("should ignore events from neutral NPCs (0x518)", function()
-        local event = {
-            sourceFlags = 0x518, -- NPC but not in group/raid
-            destFlags = 0xa48
-        }
-        assert.is_false(affectingGroup(event))
-    end)
-
-    it("should ignore events to neutral NPCs (0x518)", function()
-        local event = {
-            sourceFlags = 0xa48,
-            destFlags = 0x518 -- NPC but not in group/raid
-        }
-        assert.is_false(affectingGroup(event))
-    end)
+    for _, case in ipairs({
+        { "should return true when source is player (0x511)", 0x511, 0xa48, true },
+        { "should return true when source is party member (0x512)", 0x512, 0xa48, true },
+        { "should return true when source is raid member (0x514)", 0x514, 0xa48, true },
+        { "should return true when destination is player (0x511)", 0xa48, 0x511, true },
+        { "should return true when destination is party member (0x512)", 0xa48, 0x512, true },
+        { "should return true when destination is raid member (0x514)", 0xa48, 0x514, true },
+        { "should return false when neither source nor destination is player/party/raid", 0xa48, 0xa48, false },
+        { "should handle nil flags", nil, nil, false },
+        { "should ignore events from other players (0x510)", 0x510, 0xa48, false },
+        { "should ignore events to other players (0x510)", 0xa48, 0x510, false },
+        { "should ignore events from neutral NPCs (0x518)", 0x518, 0xa48, false },
+        { "should ignore events to neutral NPCs (0x518)", 0xa48, 0x518, false },
+    }) do
+        it(case[1], function()
+            assert.are.equal(case[4], affectingGroup({ sourceFlags = case[2], destFlags = case[3] }))
+        end)
+    end
 end)
-

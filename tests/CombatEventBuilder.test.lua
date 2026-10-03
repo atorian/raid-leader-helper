@@ -43,42 +43,27 @@ describe("Combat Event Builder", function()
         assert.equals("0xF140000000000001", sourceGUID)
     end)
 
-    it(
-        "создает событие наложения баффа Божественного вмешательства",
-        function()
-            local _, timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags, spellId,
-                spellName = Builder:New():FromPlayer("Паладин"):ToPlayer("Игрок"):ApplyAura(19752,
-                "Божественное вмешательство"):Build()
+    for _, case in ipairs({
+        { "создает событие наложения баффа Божественного вмешательства", "Паладин", "Игрок", 19752,
+            "Божественное вмешательство" },
+        { "создает событие наложения баффа с правильными флагами и GUID'ами", "Охотник", "Танк", 34477,
+            "Перенаправление" },
+    }) do
+        it(case[1], function()
+            local _, _, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags, spellId,
+                spellName = Builder:New():FromPlayer(case[2]):ToPlayer(case[3]):ApplyAura(case[4], case[5]):Build()
 
             assert.equals("SPELL_AURA_APPLIED", event)
-            assert.equals("Паладин", sourceName)
-            assert.equals("Игрок", destName)
-            assert.equals(19752, spellId)
-            assert.equals("Божественное вмешательство", spellName)
-            assert.equals("0x0000000000000001", sourceGUID)
-            assert.equals("0x0000000000000002", destGUID)
-        end)
-
-    it(
-        "создает событие наложения баффа с правильными флагами и GUID'ами",
-        function()
-            local _, timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags, spellId,
-                spellName = Builder:New():FromPlayer("Охотник"):ToPlayer("Танк"):ApplyAura(34477,
-                "Перенаправление"):Build()
-
-            -- Проверяем базовые параметры
-            assert.equals("SPELL_AURA_APPLIED", event)
-            assert.equals("Охотник", sourceName)
+            assert.equals(case[2], sourceName)
             assert.equals(PLAYER_FLAGS, sourceFlags)
-            assert.equals("Танк", destName)
+            assert.equals(case[3], destName)
             assert.equals(PLAYER_FLAGS, destFlags)
-            assert.equals(34477, spellId)
-            assert.equals("Перенаправление", spellName)
-
-            -- Проверяем точные значения GUID'ов
+            assert.equals(case[4], spellId)
+            assert.equals(case[5], spellName)
             assert.equals("0x0000000000000001", sourceGUID)
             assert.equals("0x0000000000000002", destGUID)
         end)
+    end
 
     it("создает событие смерти моба", function()
         local _, timestamp, event, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags = Builder:New()

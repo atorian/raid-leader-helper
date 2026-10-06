@@ -2223,11 +2223,14 @@ function RLHelper:CreateOptionsPanel()
         RLHelper.db.profile.igor = self:GetChecked() and true or false
     end)
 
-    local halionBurstTitle = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    halionBurstTitle:SetPoint("TOPLEFT", igor, "BOTTOMLEFT", 0, -16)
+    local halionPanel = CreateFrame("Frame", "RLHelperHalionOptionsPanel", UIParent)
+    halionPanel.name, halionPanel.parent = "РС Бурст", panel.name
+
+    local halionBurstTitle = halionPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    halionBurstTitle:SetPoint("TOPLEFT", halionPanel, "TOPLEFT", 12, -12)
     halionBurstTitle:SetText("РС Бурст")
 
-    local halionBurstReset = CreateFrame("CheckButton", "RLHelperHalionBurstResetCheckButton", content,
+    local halionBurstReset = CreateFrame("CheckButton", "RLHelperHalionBurstResetCheckButton", halionPanel,
         "InterfaceOptionsCheckButtonTemplate")
     halionBurstReset:SetPoint("TOPLEFT", halionBurstTitle, "BOTTOMLEFT", 0, -8)
     _G[halionBurstReset:GetName() .. "Text"]:SetText("Сброс ДПС под Геру")
@@ -2235,7 +2238,7 @@ function RLHelper:CreateOptionsPanel()
         RLHelper.db.profile.halionBurstReset = self:GetChecked() and true or false
     end)
 
-    local halionBurst = CreateFrame("CheckButton", "RLHelperHalionBurstCheckButton", content,
+    local halionBurst = CreateFrame("CheckButton", "RLHelperHalionBurstCheckButton", halionPanel,
         "InterfaceOptionsCheckButtonTemplate")
     halionBurst:SetPoint("TOPLEFT", halionBurstReset, "BOTTOMLEFT", 0, -8)
     _G[halionBurst:GetName() .. "Text"]:SetText("Отсчет на выход для Ретрика")
@@ -2243,7 +2246,7 @@ function RLHelper:CreateOptionsPanel()
         RLHelper.db.profile.halionBurstPull = self:GetChecked() and true or false
     end)
 
-    local halionPhaseTwoEntryTimer = CreateFrame("CheckButton", "RLHelperHalionPhaseTwoEntryTimerCheckButton", content,
+    local halionPhaseTwoEntryTimer = CreateFrame("CheckButton", "RLHelperHalionPhaseTwoEntryTimerCheckButton", halionPanel,
         "InterfaceOptionsCheckButtonTemplate")
     halionPhaseTwoEntryTimer:SetPoint("TOPLEFT", halionBurst, "BOTTOMLEFT", 0, -8)
     _G[halionPhaseTwoEntryTimer:GetName() .. "Text"]:SetText("Отсчет на вход после 2го метеорита")
@@ -2330,11 +2333,14 @@ function RLHelper:CreateOptionsPanel()
         displayOnlyInGroup:SetChecked(RLHelper.db.profile.displayOnlyInGroup)
         bossOnlyHistory:SetChecked(RLHelper.db.profile.bossOnlyHistory)
         igor:SetChecked(RLHelper.db.profile.igor)
+    end
+    panel:SetScript("OnShow", refreshSettings)
+    local function refreshHalionSettings()
         halionBurst:SetChecked(RLHelper:IsHalionBurstPullEnabled())
         halionBurstReset:SetChecked(RLHelper:IsHalionBurstResetEnabled())
         halionPhaseTwoEntryTimer:SetChecked(RLHelper:IsHalionPhaseTwoEntryTimerEnabled())
     end
-    panel:SetScript("OnShow", refreshSettings)
+    halionPanel:SetScript("OnShow", refreshHalionSettings)
     local function refreshEPGPSettings()
         gpAwardButtonsEnabled:SetChecked(RLHelper.db.profile.gpAwardButtonsEnabled)
         RLHelper.db.profile.gpAwardReasons = RLHelper.db.profile.gpAwardReasons or {}
@@ -2346,7 +2352,7 @@ function RLHelper:CreateOptionsPanel()
     epgpPanel:SetScript("OnShow", refreshEPGPSettings)
 
     local transferTitle = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    transferTitle:SetPoint("TOPLEFT", halionPhaseTwoEntryTimer, "BOTTOMLEFT", 4, -22)
+    transferTitle:SetPoint("TOPLEFT", igor, "BOTTOMLEFT", 4, -22)
     transferTitle:SetText("Перенос настроек аккаунта")
     local transferHelp = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     transferHelp:SetPoint("TOPLEFT", transferTitle, "BOTTOMLEFT", 0, -8)
@@ -2384,6 +2390,7 @@ function RLHelper:CreateOptionsPanel()
         transferStatus:SetText(message)
         if ok then
             refreshSettings()
+            refreshHalionSettings()
             refreshEPGPSettings()
             local ep = RLHelper:GetModule("EPAwards", true)
             if ep and ep.options then ep.options:GetScript("OnShow")(ep.options) end
@@ -2399,6 +2406,8 @@ function RLHelper:CreateOptionsPanel()
 
     self.optionsPanel = panel
     InterfaceOptions_AddCategory(panel)
+    InterfaceOptions_AddCategory(halionPanel)
+    self.halionOptionsPanel = halionPanel
     InterfaceOptions_AddCategory(epgpPanel)
     self.epgpOptionsPanel = epgpPanel
 end

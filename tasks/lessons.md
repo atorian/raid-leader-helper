@@ -118,3 +118,7 @@
 - Boss DPS settings extend the existing per-specialization Saurfang thresholds. When adding configurable bosses, preserve spec-specific values, existing Saurfang settings/results, and avoid assuming one shared DPS threshold per boss. The user chose per-spec thresholds on 2026-10-06.
 
 - Keep the DPS boss dropdown compact (220px) and place Add/Remove immediately beside it (x=247). The 275px dropdown pushed the action buttons beyond the visible settings area in the user’s 2026-10-06 screenshot; verify the whole row in the client, not only the nominal content width.
+
+- For Putricide EP rewards, do not assume the existing spec DPS threshold and the per-ooze damage threshold are cumulative requirements. The user corrected this: there is one DPS award with a choice of threshold, boss DPS or damage to every ooze. The RL explicitly selects the condition in settings; do not use AND/OR eligibility or create a second award.
+
+- For Putricide per-ooze EP thresholds, «слизни» includes both Volatile Ooze (37697) and Gas Cloud (37562), as explicitly confirmed by the user. Count each GUID of either type separately; never exclude gas clouds from spawn counts or eligibility.

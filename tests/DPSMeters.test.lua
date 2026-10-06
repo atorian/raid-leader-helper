@@ -74,6 +74,84 @@ describe('DPS meter sources', function()
         awards.active = original.active
     end)
 
+    local function oozeEvents()
+        local first, second = '0xF130009341000001', '0xF130009341000002'
+        meters:handleEvent({ event = 'SPELL_AURA_APPLIED', sourceGUID = first })
+        meters:handleEvent({ event = 'SWING_DAMAGE', sourceGUID = '0x0000000000000001',
+            sourceName = 'Fury', destGUID = first, amount = 60000, overkill = -1 })
+        meters:handleEvent({ event = 'SPELL_PERIODIC_DAMAGE', sourceGUID = '0x0000000000000001',
+            sourceName = 'Fury', destGUID = first, amount = 45000, overkill = 5000 })
+        meters:handleEvent({ event = 'SPELL_SUMMON', sourceGUID = '0x0000000000000001',
+            sourceName = 'Fury', destGUID = '0xF140000123000001' })
+        meters:handleEvent({ event = 'SPELL_DAMAGE', sourceGUID = '0xF140000123000001',
+            sourceName = 'Pet', destGUID = second, amount = 100000 })
+        meters:handleEvent({ event = 'UNIT_DIED', destGUID = '0xF130009341000003' })
+        meters:handleEvent({ event = 'SPELL_DAMAGE', sourceGUID = '0x0000000000000001',
+            sourceName = 'Fury', destGUID = '0xF1300092BA000004', amount = 100000 })
+        meters:handleEvent({ event = 'UNIT_DIED', destGUID = '0xF1300092BA000005' })
+        return { [first] = { Fury = 100000 }, [second] = { Fury = 100000 }, ['0xF130009341000003'] = {},
+            ['0xF1300092BA000004'] = { Fury = 100000 }, ['0xF1300092BA000005'] = {} }
+    end
+
+    it('keeps individual ooze GUIDs and pet ownership in a completed Recount fight', function()
+        local expected = oozeEvents()
+        meters:BossKilled(36678)
+        Recount:LeaveCombat(1180)
+        assert.same(expected, completed[1].oozeDamage)
+        assert.equals(3, #completed[1].players)
+    end)
+
+    it('keeps individual ooze GUIDs in a completed Skada fight without a death callback', function()
+        local set = { gotboss = 36678, success = true, starttime = 1000, endtime = 1180, players = {} }
+        _G.Skada = { current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
+        meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
+        local expected = oozeEvents()
+        meters:SkadaSetComplete('Skada_SetComplete', set)
+        assert.same(expected, completed[1].oozeDamage)
+        -- A fresh fight never reuses damage from a wipe or the previous victory.
+        set = { gotboss = 36678, success = true, starttime = 1200, endtime = 1380, players = {} }
+        Skada.current = set
+        meters:handleEvent({ event = 'SPELL_AURA_APPLIED', destGUID = '0xF130009341000004' })
+        meters:SkadaSetComplete('Skada_SetComplete', set)
+        assert.same({ ['0xF130009341000004'] = {} }, completed[2].oozeDamage)
+    end)
+
+    it('does not carry ooze damage from a Recount wipe into the next attempt', function()
+        oozeEvents()
+        Recount:LeaveCombat(1180)
+        assert.equals(0, #completed)
+        Recount.InCombat, Recount.InCombatT = true, 1200
+        meters:handleEvent({ event = 'SPELL_AURA_APPLIED', destGUID = '0xF130009341000004' })
+        meters:BossKilled(36678)
+        Recount:LeaveCombat(1380)
+        assert.same({ ['0xF130009341000004'] = {} }, completed[1].oozeDamage)
+    end)
+
+    it('retains ownership of a pet summoned before Skada starts the fight', function()
+        _G.Skada = { current = {}, RegisterCallback = function() end, UnregisterCallback = function() end }
+        meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
+        meters:handleEvent({ event = 'SPELL_SUMMON', sourceGUID = '0x0000000000000001',
+            sourceName = 'Fury', destGUID = '0xF140000123000001' })
+        Skada.current = { gotboss = 36678, success = true, starttime = 1000, endtime = 1180, players = {} }
+        meters:handleEvent({ event = 'SPELL_DAMAGE', sourceGUID = '0xF140000123000001', sourceName = 'Pet',
+            destGUID = '0xF130009341000001', amount = 100000 })
+        meters:SkadaSetComplete('Skada_SetComplete', Skada.current)
+        assert.same({ ['0xF130009341000001'] = { Fury = 100000 } }, completed[1].oozeDamage)
+    end)
+
+    it('credits an already summoned raid pet to its owner and stops collecting when disabled', function()
+        local originalName = UnitName
+        _G.UnitName = function(unit) return unit == 'raid1' and 'Fury' or 'Arms' end
+        meters:handleEvent({ event = 'RANGE_DAMAGE', sourceGUID = 'guid-raidpet1', sourceName = 'Pet',
+            destGUID = '0xF130009341000001', amount = 100000 })
+        _G.UnitName = originalName
+        assert.same({ ['0xF130009341000001'] = { Fury = 100000 } }, meters.oozeDamage)
+        meters:Stop()
+        meters:handleEvent({ event = 'SPELL_DAMAGE', sourceGUID = '0x0000000000000001', sourceName = 'Fury',
+            destGUID = '0xF130009341000001', amount = 100000 })
+        assert.is_nil(meters.oozeDamage)
+    end)
+
     it('reads the completed Recount segment with no Skada, excludes pets, outsiders and stale players', function()
         meters:BossKilled(37813)
         assert.equals(0, #completed)

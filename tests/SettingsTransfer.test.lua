@@ -95,6 +95,30 @@ describe('Account settings transfer', function()
         assert.are.same(profile, Transfer.Decode(assert(Transfer.Export(profile))))
     end)
 
+    it('round trips Putricide award mode and damage while retaining old transfer versions', function()
+        require('data.BossIds')
+        profile.epAwards.saurfangThresholds = nil
+        profile.epAwards.dpsBosses = { [36678] = { [72] = 22000 } }
+        local old = assert(Transfer.Export(profile))
+        assert.equals('RLH2', old:sub(1, 4))
+        profile.epAwards.putricideMode = 'ooze'
+        profile.epAwards.putricideOozeDamage = 100000
+        local text = assert(Transfer.Export(profile))
+        assert.equals('RLH3', text:sub(1, 4))
+        assert.same(profile, Transfer.Decode(text))
+        assert.is_nil(Transfer.Decode(text:gsub('n100000', 'n9999999')))
+        assert.is_nil(Transfer.Decode(text:gsub('n100000', 'n0.5')))
+        assert.is_nil(Transfer.Decode(text:gsub('s6F6F7A65', 's626164')))
+        profile.epAwards.putricideMode = 'boss'
+        profile.epAwards.putricideOozeDamage = 0
+        assert.same(profile, Transfer.Decode(assert(Transfer.Export(profile))))
+        local decoded = assert(Transfer.Decode(old))
+        assert.is_nil(decoded.epAwards.putricideMode)
+        assert.is_nil(decoded.epAwards.putricideOozeDamage)
+        profile.epAwards.putricideMode = 'bad'
+        assert.is_nil(Transfer.Export(profile))
+    end)
+
     it('rejects corrupt, duplicate or unsupported boss configurations atomically', function()
         require('data.BossIds')
         profile.epAwards.saurfangThresholds = nil

@@ -69,10 +69,13 @@ function Transfer.Export(profile)
         if not valid(value, descriptor) then return nil, "Недопустимое значение настройки." end
         tokens[#tokens + 1] = encode(value)
     end
-    local bosses = profile.epAwards and profile.epAwards.dpsBosses
+    local ep = profile.epAwards
+    local putricide = ep and (ep.putricideMode ~= nil or ep.putricideOozeDamage ~= nil)
+    local bosses = ep and ep.dpsBosses
+    if putricide and not bosses then bosses = {} end
     if bosses then
         if type(bosses) ~= "table" then return nil, "Недопустимые настройки планок DPS." end
-        tokens[1] = "RLH2"
+        tokens[1] = putricide and "RLH3" or "RLH2"
         local ids = {}
         for id, thresholds in pairs(bosses) do
             local encounter = RLHelperBossIds and RLHelperBossIds.DPS_ENCOUNTER_BY_NPC[id]
@@ -94,6 +97,14 @@ function Transfer.Export(profile)
             end
         end
     end
+    if putricide then
+        if (ep.putricideMode ~= nil and ep.putricideMode ~= "boss" and ep.putricideMode ~= "ooze") or
+            not valid(ep.putricideOozeDamage, {kind = "integer", limit = 999999}) then
+            return nil, "Недопустимые настройки планки Мерзоцида."
+        end
+        tokens[#tokens + 1] = encode(ep.putricideMode)
+        tokens[#tokens + 1] = encode(ep.putricideOozeDamage)
+    end
     tokens[#tokens + 1] = "END"
     local text = table.concat(tokens, "|")
     if #text > 65536 then return nil, "Настройки слишком велики для переноса." end
@@ -105,7 +116,8 @@ function Transfer.Decode(text)
     text = text:gsub("%s", "")
     local tokens = {}
     for token in (text .. "|"):gmatch("(.-)|") do tokens[#tokens + 1] = token end
-    local extended = tokens[1] == "RLH2"
+    local putricide = tokens[1] == "RLH3"
+    local extended = tokens[1] == "RLH2" or putricide
     if (tokens[1] ~= "RLH1" and not extended) or tokens[#tokens] ~= "END" or
         (not extended and #tokens ~= #fields + 2) or (extended and #tokens < #fields + 3) then
         return nil, errorMessage
@@ -137,7 +149,7 @@ function Transfer.Decode(text)
         local count = tonumber(tokens[cursor])
         local catalog = RLHelperBossIds and RLHelperBossIds.DPS_ENCOUNTERS
         if not catalog or not count or count < 0 or count > #catalog or count ~= math.floor(count) or
-            #tokens ~= #fields + 3 + count * (#specs + 1) then return nil, errorMessage end
+            #tokens ~= #fields + 3 + count * (#specs + 1) + (putricide and 2 or 0) then return nil, errorMessage end
         profile.epAwards = profile.epAwards or {}
         local bosses = {}
         profile.epAwards.dpsBosses = bosses
@@ -158,6 +170,17 @@ function Transfer.Decode(text)
                     end
                     thresholds[spec] = value
                 end
+            end
+        end
+        if putricide then
+            local mode, damage = tokens[cursor + 1], tokens[cursor + 2]
+            if mode == "s626F7373" then profile.epAwards.putricideMode = "boss"
+            elseif mode == "s6F6F7A65" then profile.epAwards.putricideMode = "ooze"
+            elseif mode ~= "-" then return nil, errorMessage end
+            if damage ~= "-" then
+                local value = damage:match("^n[%-+%d.eE]+$") and tonumber(damage:sub(2))
+                if not value or not valid(value, {kind = "integer", limit = 999999}) then return nil, errorMessage end
+                profile.epAwards.putricideOozeDamage = value
             end
         end
     end

@@ -388,7 +388,7 @@ describe('EP awards', function()
                 assert.equals(90, f.width)
             end
         end
-        assert.equals(37, count)
+        assert.equals(38, count)
     end)
 
     it('gives selected standby the full award regardless of EPGP percentage and restores EPGP', function()
@@ -816,6 +816,137 @@ describe('EP awards', function()
         _G.UIDropDownMenu_AddButton = originalAdd
         return result
     end
+
+    local function putricideFight()
+        awards:AddDPSBoss(36678)
+        local settings = awards:GetSettings()
+        settings.putricideMode = 'ooze'
+        settings.dpsBosses[36678] = { [72] = 999999 }
+        local fight = { source = 'Skada', boss = 36678, starttime = now - 180, endtime = now,
+            players = { { name = 'All', class = 'WARRIOR', spec = 72, dps = 1 },
+                { name = 'Uneven', class = 'WARRIOR', spec = 72, dps = 9999999 },
+                { name = 'Skipped', class = 'WARRIOR', spec = 72, dps = 9999999 },
+                { name = 'NoSpec', class = 'HUNTER' } }, oozeDamage = {} }
+        for i = 1, 4 do
+            local npc = i % 2 == 0 and 37562 or 37697
+            fight.oozeDamage[string.format('0xF130%06X%06X', npc, i)] = {
+                All = 100000, Uneven = i == 4 and 99999 or 200000,
+                Skipped = i == 4 and nil or 200000, NoSpec = 100000 }
+        end
+        fight.oozeDamage['0xF1300092BA000004'].Skipped = nil
+        return fight
+    end
+
+    it('requires damage to every ooze, regardless of class, spec, boss DPS or total add damage', function()
+        installFrames()
+        individualEPGP()
+        awards:DPSFightComplete(putricideFight())
+        local snapshot = awards:GetDPSResults()[36678]
+        assert.equals('ooze', snapshot.mode)
+        assert.equals(100000, snapshot.oozeThreshold)
+        assert.equals(4, snapshot.oozeCount)
+        local players = {}
+        for _, player in ipairs(snapshot.players) do players[player.name] = player end
+        assert.equals(100000, players.All.oozeMin)
+        assert.equals(99999, players.Uneven.oozeMin)
+        assert.equals(0, players.Skipped.oozeMin)
+        awards:ShowDPSWindow(36678)
+        assert.same({ All = true, NoSpec = true }, awards.dpsWindow.selected)
+        assert.equals('Мин. урон', awards.dpsWindow.valueHeader.text)
+        assert.is_false(awards.dpsWindow.plusButton:IsShown())
+        assert.is_true(awards:AwardDPS(snapshot, { All = true, NoSpec = true, Uneven = true, Skipped = true }, -999999))
+        assert.equals(2, #calls)
+        local names = {}
+        for _, call in ipairs(calls) do names[call[1]] = call[3] end
+        assert.same({ All = 500, NoSpec = 500 }, names)
+    end)
+
+    it('freezes the chosen ooze condition, threshold and per-spawn damage for later awards', function()
+        installFrames()
+        individualEPGP()
+        local fight = putricideFight()
+        awards:GetSettings().putricideOozeDamage = 120000
+        awards:DPSFightComplete(fight)
+        local snapshot = awards:GetDPSResults()[36678]
+        assert.equals(120000, snapshot.oozeThreshold)
+        awards:GetSettings().putricideMode = 'boss'
+        awards:GetSettings().putricideOozeDamage = 1
+        for _, damage in pairs(fight.oozeDamage) do damage.All = 999999 end
+        assert.equals(100000, snapshot.players[1].oozeMin)
+        _G.Skada = nil
+        now = at(28, 20, 0)
+        awards:GetState()
+        awards:ShowDPSWindow(36678)
+        assert.equals('Минимум урона каждому слизню: 120000', awards.dpsWindow.adjustment.text)
+        assert.is_false(awards:AwardDPS(snapshot, { All = true }, -999999))
+        assert.equals(0, #calls)
+    end)
+
+    it('never qualifies an ooze award with missing data or a disabled damage threshold', function()
+        individualEPGP()
+        for _, disabled in ipairs({ false, true }) do
+            local fight = putricideFight()
+            if disabled then awards:GetSettings().putricideOozeDamage = 0 else fight.oozeDamage = nil end
+            awards:GetDPSResults()[36678] = nil
+            awards:DPSFightComplete(fight)
+            assert.is_false(awards:AwardDPS(awards:GetDPSResults()[36678], { All = true }))
+        end
+        assert.equals(0, #calls)
+    end)
+
+    it('uses the existing spec DPS rule when the RL selects boss mode', function()
+        installFrames()
+        individualEPGP()
+        local fight = putricideFight()
+        awards:GetSettings().putricideMode = 'boss'
+        awards:GetSettings().dpsBosses[36678][72] = 10000
+        awards:DPSFightComplete(fight)
+        local snapshot = awards:GetDPSResults()[36678]
+        assert.is_nil(snapshot.mode)
+        awards:ShowDPSWindow(36678)
+        assert.same({ Uneven = true, Skipped = true }, awards.dpsWindow.selected)
+        assert.equals('DPS', awards.dpsWindow.valueHeader.text)
+        assert.is_true(awards.dpsWindow.plusButton:IsShown())
+        assert.is_true(awards:AwardDPS(snapshot, { All = true, NoSpec = true, Uneven = true }))
+        assert.equals(1, #calls)
+        assert.equals('Uneven', calls[1][1])
+    end)
+
+    it('edits one common ooze threshold and preserves boss spec thresholds when changing modes', function()
+        local frames = installFrames()
+        awards:AddDPSBoss(36678)
+        awards:GetSettings().dpsBosses[36678][72] = 22222
+        awards:CreateSettings({}, {})
+        local named = {}
+        for _, f in ipairs(frames) do if f.name then named[f.name] = f end end
+        local mode, damage, fury = named.RLHelperPutricideModeDropdown,
+            named.RLHelperEPAwardPutricideOozeDamageEditBox, named.RLHelperEPAwardSpec72EditBox
+        assert.is_false(mode:IsShown())
+        assert.is_false(damage:IsShown())
+        for _, choice in ipairs(choices(named.RLHelperDPSBossDropdown)) do
+            if choice.text:find('Мерзоцид', 1, true) then choice.func(); break end
+        end
+        assert.is_true(mode:IsShown())
+        assert.is_true(fury:IsShown())
+        assert.is_false(damage:IsShown())
+        choices(mode)[2].func()
+        assert.is_false(fury:IsShown())
+        assert.is_true(damage:IsShown())
+        assert.equals('100000', damage:GetText())
+        assert.equals(22222, awards:GetThreshold(72, 36678))
+        damage:SetText('125000'); damage.scripts.OnEnterPressed()
+        for _, bad in ipairs({ '-1', '1.5', '1000000', 'abc' }) do
+            damage:SetText(bad); damage.scripts.OnEnterPressed()
+            assert.equals('125000', damage:GetText())
+        end
+        awards.options.scripts.OnShow()
+        assert.equals('125000', damage:GetText())
+        choices(mode)[1].func()
+        assert.is_true(fury:IsShown())
+        assert.is_false(damage:IsShown())
+        assert.equals('22222', fury:GetText())
+        assert.equals(125000, awards:GetOozeThreshold())
+    end)
 
     it('migrates Saurfang thresholds and a saved award without changing custom or disabled specs', function()
         addon.db.profile.epAwards = { rt = '19:00', amounts = { saurfang = 750 }, reminders = {},

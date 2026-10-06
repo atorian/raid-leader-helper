@@ -2,6 +2,7 @@ local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local EPAwards = RLHelper:NewModule("EPAwards", "AceEvent-3.0")
 local BossIds = RLHelperBossIds
 local SAURFANG = BossIds.NPCS.DEATHBRINGER_SAURFANG
+local PUTRICIDE = BossIds.NPCS.PROFESSOR_PUTRICIDE
 local DPSMeters = RLHelper:GetModule("DPSMeters")
 local REWARDS = {
     { key = "attendance", name = "Приход вовремя", defaultAmount = 1000, reason = "за приход" },
@@ -38,6 +39,13 @@ local function adjustedThreshold(player, offset)
     return math.max(0, player.threshold + (offset or 0))
 end
 
+local function qualifies(snapshot, player, offset)
+    if snapshot.mode == "ooze" then
+        return snapshot.oozeCount > 0 and snapshot.oozeThreshold > 0 and player.oozeMin >= snapshot.oozeThreshold
+    end
+    return player.dps >= adjustedThreshold(player, offset) - 100
+end
+
 local SPEC_BY_ID = {}
 for _, spec in ipairs(SPECS) do SPEC_BY_ID[spec[1]] = spec end
 
@@ -62,6 +70,15 @@ function EPAwards:GetSettings()
     end
     profile.epAwards.dpsSource = profile.epAwards.dpsSource or "Skada"
     return profile.epAwards
+end
+
+function EPAwards:IsOozeMode(boss)
+    return boss == PUTRICIDE and self:GetSettings().putricideMode == "ooze"
+end
+
+function EPAwards:GetOozeThreshold()
+    local value = self:GetSettings().putricideOozeDamage
+    return value == nil and 100000 or value
 end
 
 function EPAwards:GetThreshold(spec, boss)
@@ -249,10 +266,25 @@ function EPAwards:DPSFightComplete(set)
         saved.starttime == set.starttime and saved.endtime == set.endtime then return end
     local snapshot = { boss = boss, source = set.source, starttime = set.starttime,
         endtime = set.endtime, players = {}, unknown = 0 }
+    if self:IsOozeMode(boss) then
+        snapshot.mode, snapshot.oozeThreshold, snapshot.oozes = "ooze", self:GetOozeThreshold(), {}
+        for guid in pairs(set.oozeDamage or {}) do snapshot.oozes[#snapshot.oozes + 1] = guid end
+        table.sort(snapshot.oozes)
+        snapshot.oozeCount = #snapshot.oozes
+    end
     for _, player in ipairs(set.players or {}) do
         local spec = SPEC_BY_ID[player.spec]
         local threshold = self:GetThreshold(player.spec, boss)
-        if not spec or spec[2] ~= player.class or type(player.dps) ~= "number" then
+        if snapshot.mode == "ooze" then
+            local damage, minimum = {}, nil
+            for _, guid in ipairs(snapshot.oozes) do
+                local amount = set.oozeDamage[guid][player.name] or 0
+                damage[guid] = amount
+                minimum = minimum and math.min(minimum, amount) or amount
+            end
+            snapshot.players[#snapshot.players + 1] = { name = player.name, class = player.class,
+                spec = player.spec, oozeDamage = damage, oozeMin = minimum or 0 }
+        elseif not spec or spec[2] ~= player.class or type(player.dps) ~= "number" then
             snapshot.unknown = snapshot.unknown + 1
         elseif threshold and threshold > 0 then
             snapshot.players[#snapshot.players + 1] = {
@@ -261,7 +293,9 @@ function EPAwards:DPSFightComplete(set)
             }
         end
     end
-    table.sort(snapshot.players, function(a, b) return a.dps > b.dps end)
+    table.sort(snapshot.players, function(a, b)
+        return (snapshot.mode == "ooze" and a.oozeMin or a.dps) > (snapshot.mode == "ooze" and b.oozeMin or b.dps)
+    end)
     self:GetDPSResults()[boss] = snapshot
     if self.dpsWindow and self.dpsWindow:IsShown() and self.dpsWindow.boss == boss then self:ShowDPSWindow(boss) end
 end
@@ -290,7 +324,7 @@ function EPAwards:AwardDPS(snapshot, selected, offset)
     end
     local recipients, mains = {}, {}
     for _, player in ipairs(snapshot.players) do
-        if selected[player.name] and player.dps >= adjustedThreshold(player, offset) - 100 then
+        if selected[player.name] and qualifies(snapshot, player, offset) then
             local ep, _, main = epgp:GetEPGP(player.name)
             if not ep then return false, "Игрок не найден в EPGP: " .. player.name end
             main = main or player.name
@@ -516,6 +550,7 @@ function EPAwards:ShowDPSWindow(boss)
             local label = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             label:SetPoint("TOPLEFT", column[1], -158)
             label:SetText(column[2])
+            if column[1] == 390 then frame.valueHeader = label end
         end
         local scroll = CreateFrame("ScrollFrame", "RLHelperDPSScroll", frame, "UIPanelScrollFrameTemplate")
         scroll:SetPoint("TOPLEFT", 14, -182)
@@ -569,14 +604,22 @@ end
 function EPAwards:RefreshDPSWindow()
     local frame = self.dpsWindow
     local snapshot = frame.snapshot
-    frame.adjustment:SetText(string.format("Поправка к планкам: %+d DPS (шаг 500)", frame.offset))
+    local oozeMode = snapshot and snapshot.mode == "ooze"
+    frame.valueHeader:SetText(oozeMode and "Мин. урон" or "DPS")
+    if oozeMode then
+        frame.minusButton:Hide(); frame.plusButton:Hide()
+        frame.adjustment:SetText("Минимум урона каждому слизню: " .. snapshot.oozeThreshold)
+    else
+        frame.minusButton:Show(); frame.plusButton:Show()
+        frame.adjustment:SetText(string.format("Поправка к планкам: %+d DPS (шаг 500)", frame.offset))
+    end
     frame.result:SetText("")
     for _, row in ipairs(frame.rows) do row:Hide(); row.player = nil end
     local count, previouslyAwarded = 0, 0
     if snapshot then
         for _, player in ipairs(snapshot.players) do
-            local threshold = adjustedThreshold(player, frame.offset)
-            if player.dps >= threshold - 100 then
+            local threshold = oozeMode and snapshot.oozeThreshold or adjustedThreshold(player, frame.offset)
+            if qualifies(snapshot, player, frame.offset) then
                 count = count + 1
                 if player.lastAward then previouslyAwarded = previouslyAwarded + 1 end
                 local row = frame.rows[count]
@@ -602,8 +645,8 @@ function EPAwards:RefreshDPSWindow()
                 end
                 row.player = player
                 row.cells[1]:SetText(player.name)
-                row.cells[2]:SetText(SPEC_BY_ID[player.spec][3])
-                row.cells[3]:SetText(string.format("%.1f", player.dps))
+                row.cells[2]:SetText(SPEC_BY_ID[player.spec] and SPEC_BY_ID[player.spec][3] or "Спек неизвестен")
+                row.cells[3]:SetText(oozeMode and tostring(player.oozeMin) or string.format("%.1f", player.dps))
                 row.cells[4]:SetText(tostring(threshold))
                 if frame.selected[player.name] == nil then frame.selected[player.name] = true end
                 row.check:SetChecked(frame.selected[player.name])
@@ -611,7 +654,10 @@ function EPAwards:RefreshDPSWindow()
             end
         end
         frame.info:SetText("Источник: " .. (snapshot.source or "Skada") .. ". Убийство: " .. date("%d.%m %H:%M", snapshot.endtime) .. ". По " .. self:GetAmount("saurfang") ..
-            " ЕП. Допуск: 100 DPS ниже планки.\nПодходят: " .. count .. ". Без данных о спеке/DPS: " .. snapshot.unknown .. ".")
+            (oozeMode and (" ЕП. Слизней: " .. snapshot.oozeCount .. ". Урон каждому, без допуска.") or
+                " ЕП. Допуск: 100 DPS ниже планки.") .. "\nПодходят: " .. count ..
+            (oozeMode and (snapshot.oozeCount == 0 and ". Нет данных по слизням." or ".") or
+                (". Без данных о спеке/DPS: " .. snapshot.unknown .. ".")))
     else
         frame.info:SetText("Нет сохранённого результата. Источник: " .. self:GetSettings().dpsSource ..
             ". Нужны загруженный метр и победа над выбранным боссом с заданными планками.")
@@ -669,12 +715,11 @@ function EPAwards:CreateSettings(parent, anchor)
         local function refresh()
             edit:SetText(tostring(read())); edit:SetCursorPosition(0)
             if thresholdField then
-                if self:GetSettings().dpsBosses[panel.boss] then edit:Show(); label:Show()
-                else edit:Hide(); label:Hide() end
+                if thresholdField() then edit:Show(); label:Show() else edit:Hide(); label:Hide() end
             end
         end
         local function commit()
-            if thresholdField and not self:GetSettings().dpsBosses[panel.boss] then return end
+            if thresholdField and not thresholdField() then return end
             save(edit:GetText())
             refresh()
         end
@@ -683,7 +728,7 @@ function EPAwards:CreateSettings(parent, anchor)
         edit:SetScript("OnEscapePressed", function() refresh(); edit:ClearFocus() end)
         refresh()
         table.insert(fields, refresh)
-        return edit
+        return edit, label
     end
     input("rt", "Время РТ (местное)", -60, function() return self:GetSettings().rt end, function(value)
         if not self:SetRT(value) then
@@ -807,6 +852,26 @@ function EPAwards:CreateSettings(parent, anchor)
     thresholdsHelp:SetWidth(390)
     thresholdsHelp:SetJustifyH("LEFT")
     thresholdsHelp:SetText("Добавьте босса и заполните планки. Enter сохраняет значение.\nПусто или 0 — не учитывать спек. DPS — после победы.")
+    local modeLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    modeLabel:SetPoint("TOPLEFT", 0, -500)
+    modeLabel:SetText("Условие награды")
+    local modeDropdown = CreateFrame("Frame", "RLHelperPutricideModeDropdown", panel, "UIDropDownMenuTemplate")
+    modeDropdown:SetPoint("TOPLEFT", 134, -494)
+    UIDropDownMenu_SetWidth(modeDropdown, 200)
+    local modeLabels = { boss = "ДПС по спекам", ooze = "Урон каждому слизню" }
+    UIDropDownMenu_Initialize(modeDropdown, function()
+        for _, mode in ipairs({ "boss", "ooze" }) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text, info.checked = modeLabels[mode], (self:GetSettings().putricideMode or "boss") == mode
+            info.func = function()
+                for _, edit in ipairs(panel.thresholdInputs) do edit:ClearFocus() end
+                self:GetSettings().putricideMode = mode
+                panel.refresh()
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    local specRows = {}
     local function refreshBoss()
         for _, raid in ipairs(raids) do
             if raid[1] == panel.raid then UIDropDownMenu_SetText(raidDropdown, raid[2]) end
@@ -815,14 +880,28 @@ function EPAwards:CreateSettings(parent, anchor)
         UIDropDownMenu_SetText(bossDropdown, encounter.name)
         local configured = self:GetSettings().dpsBosses[panel.boss] ~= nil
         if configured then add:Disable(); remove:Enable() else add:Enable(); remove:Disable() end
-        local height = configured and (506 + #SPECS * 34) or 492
+        local putricide = panel.boss == PUTRICIDE
+        local oozeMode = self:IsOozeMode(panel.boss)
+        if configured and putricide then modeLabel:Show(); modeDropdown:Show()
+        else modeLabel:Hide(); modeDropdown:Hide() end
+        UIDropDownMenu_SetText(modeDropdown, modeLabels[self:GetSettings().putricideMode or "boss"])
+        thresholdsTitle:SetText(oozeMode and "Планка урона по слизням" or "Планки ДПС по спекам")
+        thresholdsHelp:SetText(oozeMode and
+            "Одна планка для всех классов: урон каждому слизню.\nEnter сохраняет значение. 0 — отключить награду." or
+            "Добавьте босса и заполните планки. Enter сохраняет значение.\nПусто или 0 — не учитывать спек. DPS — после победы.")
+        for index, row in ipairs(specRows) do
+            local y = -494 - (index - 1) * 34 - (putricide and 76 or 0)
+            row.label:ClearAllPoints(); row.label:SetPoint("TOPLEFT", 0, y)
+            row.edit:ClearAllPoints(); row.edit:SetPoint("TOPLEFT", 150, y + 5)
+        end
+        local height = configured and (oozeMode and 590 or (506 + #SPECS * 34 + (putricide and 76 or 0))) or 492
         panel:SetHeight(height)
         if parent.SetHeight then parent:SetHeight(300 + height) end
     end
     table.insert(fields, refreshBoss)
     for index, spec in ipairs(SPECS) do
         local id = spec[1]
-        local edit = input("Spec" .. id, spec[3], -494 - (index - 1) * 34,
+        local edit, label = input("Spec" .. id, spec[3], -494 - (index - 1) * 34,
             function() return self:GetThreshold(id, panel.boss) or "" end,
             function(value)
                 local threshold = tonumber(value)
@@ -832,9 +911,19 @@ function EPAwards:CreateSettings(parent, anchor)
                 elseif threshold and threshold > 0 and threshold <= 999999 and threshold == math.floor(threshold) then
                     thresholds[id] = threshold
                 else RLHelper:Print("Планка DPS должна быть целым числом от 0 до 999999.") end
-            end, true)
+            end, function() return self:GetSettings().dpsBosses[panel.boss] and not self:IsOozeMode(panel.boss) end)
         panel.thresholdInputs[#panel.thresholdInputs + 1] = edit
+        specRows[#specRows + 1] = { edit = edit, label = label }
     end
+    local oozeEdit = input("PutricideOozeDamage", "Урон на слизня", -538,
+        function() return self:GetOozeThreshold() end,
+        function(value)
+            local amount = tonumber(value)
+            if amount and amount >= 0 and amount <= 999999 and amount == math.floor(amount) then
+                self:GetSettings().putricideOozeDamage = amount
+            else RLHelper:Print("Урон на слизня должен быть целым числом от 0 до 999999.") end
+        end, function() return self:GetSettings().dpsBosses[panel.boss] and self:IsOozeMode(panel.boss) end)
+    panel.thresholdInputs[#panel.thresholdInputs + 1] = oozeEdit
     panel.refresh = function() for _, refresh in ipairs(fields) do refresh() end end
     panel.refresh()
     panel:SetScript("OnShow", panel.refresh)

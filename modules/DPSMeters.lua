@@ -1,5 +1,59 @@
 local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local DPSMeters = RLHelper:NewModule("DPSMeters", "AceEvent-3.0")
+local PUTRICIDE = RLHelperBossIds.NPCS.PROFESSOR_PUTRICIDE
+-- Неустойчивый слизнюк and Облако газа, checked on wotlk.ezhead.org.
+local OOZE_NPCS = { [37697] = true, [37562] = true }
+local DAMAGE_EVENTS = { SWING_DAMAGE = true, RANGE_DAMAGE = true, SPELL_DAMAGE = true,
+    SPELL_PERIODIC_DAMAGE = true, DAMAGE_SHIELD = true }
+
+DPSMeters.receivesCombatEvents = true
+DPSMeters.zoneGateInstanceId = RLHelperBossIds.INSTANCES.ICECROWN_CITADEL
+
+local function isOoze(guid)
+    return guid and OOZE_NPCS[tonumber(guid:sub(9, 12), 16)]
+end
+
+-- Meter totals merge enemies by name. Keep separate GUIDs for repeated ooze spawns.
+function DPSMeters:handleEvent(event)
+    if not self.complete or RLHelper.currentInstanceId ~= self.zoneGateInstanceId then return end
+    local segment, number
+    if self.source == "Skada" and Skada then segment = Skada.current
+    elseif self.source == "Recount" and Recount and Recount.InCombat then
+        segment, number = Recount.db2, Recount.db2.FightNum
+    end
+    if not segment then return end
+    if self.oozeSegment ~= segment or self.oozeNumber ~= number then
+        self.oozeSegment, self.oozeNumber = segment, number
+        self.oozeDamage = {}
+        self.petOwners = self.petOwners or {}
+    end
+    for _, guid in pairs({ event.sourceGUID, event.destGUID }) do
+        if isOoze(guid) then self.oozeDamage[guid] = self.oozeDamage[guid] or {} end
+    end
+    if event.event ~= "SPELL_SUMMON" and not (DAMAGE_EVENTS[event.event] and isOoze(event.destGUID)) then return end
+    local owners = self.petOwners
+    local sourceName = event.sourceGUID and owners[event.sourceGUID]
+    if not sourceName and event.sourceGUID then
+        if event.sourceGUID:sub(1, 6) == "0x0000" then sourceName = event.sourceName
+        else
+            for i = 1, GetNumRaidMembers() do
+                if UnitGUID("raidpet" .. i) == event.sourceGUID then
+                    sourceName = UnitName("raid" .. i)
+                    owners[event.sourceGUID] = sourceName
+                    break
+                end
+            end
+        end
+    end
+    if event.event == "SPELL_SUMMON" and sourceName and event.destGUID then
+        owners[event.destGUID] = sourceName
+    end
+    if DAMAGE_EVENTS[event.event] and isOoze(event.destGUID) and sourceName and event.amount then
+        local damage = self.oozeDamage[event.destGUID]
+        local amount = math.max(0, event.amount - math.max(0, event.overkill or 0))
+        damage[sourceName] = (damage[sourceName] or 0) + amount
+    end
+end
 
 -- Sources publish plain completed fights: source, boss, starttime, endtime,
 -- players = { { name, class, spec, dps } }. Award rules belong to the consumer.
@@ -23,6 +77,7 @@ function DPSMeters:Stop()
         self.dbm = nil
     end
     self.source, self.complete, self.killed = nil, nil, nil
+    self.oozeSegment, self.oozeNumber, self.oozeDamage, self.petOwners = nil, nil, nil, nil
 end
 
 function DPSMeters:Start(source, complete)
@@ -48,7 +103,9 @@ function DPSMeters:Start(source, complete)
         hooksecurefunc(recount, "LeaveCombat", function(_, finish) self:RecountFightComplete(recount, finish) end)
         if type(recount.ResetData) == "function" then
             hooksecurefunc(recount, "ResetData", function()
-                if self.source == "Recount" then self.killed = nil end
+                if self.source == "Recount" then
+                    self.killed, self.oozeSegment, self.oozeDamage, self.petOwners = nil, nil, nil, nil
+                end
             end)
         end
         self.hookedRecount = recount
@@ -57,7 +114,8 @@ end
 
 function DPSMeters:BossKilled(boss)
     if self.source == "Skada" and Skada then
-        self.killed = { boss = boss, set = Skada.current }
+        self.killed = { boss = boss, set = Skada.current,
+            oozeDamage = boss == PUTRICIDE and self.oozeSegment == Skada.current and self.oozeDamage or nil }
     elseif self.source == "Recount" and self:IsAvailable("Recount") and Recount.InCombat then
         local specs = {}
         -- Freeze specs at the kill, before players can change talents after combat.
@@ -70,7 +128,9 @@ function DPSMeters:BossKilled(boss)
             end
         end
         self.killed = { boss = boss, db = Recount.db2, number = Recount.db2.FightNum,
-            starttime = Recount.InCombatT, specs = specs }
+            starttime = Recount.InCombatT, specs = specs,
+            oozeDamage = boss == PUTRICIDE and self.oozeSegment == Recount.db2 and
+                self.oozeNumber == Recount.db2.FightNum and self.oozeDamage or nil }
     end
 end
 
@@ -89,6 +149,10 @@ function DPSMeters:SkadaSetComplete(_, set)
     if not setEncounter and killedEncounter and self.killed.set == set then boss = self.killed.boss end
     local fight = { source = "Skada", boss = boss, starttime = set.starttime,
         endtime = set.endtime, players = {} }
+    if boss == PUTRICIDE then
+        fight.oozeDamage = confirmedKill and self.killed.oozeDamage or
+            (self.oozeSegment == set and self.oozeDamage or nil)
+    end
     for _, player in ipairs(set.players or {}) do
         fight.players[#fight.players + 1] = { name = player.name, class = player.class, spec = player.spec,
             dps = type(player.GetDPS) == "function" and player:GetDPS() or nil }
@@ -106,7 +170,7 @@ function DPSMeters:RecountFightComplete(recount, finish)
     if not killed or killed.db ~= recount.db2 or killed.starttime ~= recount.InCombatT or
         recount.db2.FightNum ~= killed.number + 1 or recount.InCombat then return end
     local fight = { source = "Recount", boss = killed.boss, starttime = killed.starttime,
-        endtime = finish, players = {} }
+        endtime = finish, players = {}, oozeDamage = killed.oozeDamage }
     for name, player in pairs(recount.db2.combatants) do
         if (player.type == "Self" or player.type == "Grouped") and player.LastFightIn == killed.number and
             player.Fights and player.Fights.LastFightData then

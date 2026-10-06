@@ -27,8 +27,9 @@ end
 for _, key in ipairs({"attendance", "icc", "rs", "toc"}) do
     field({"epAwards", "reminders", key}, "boolean")
 end
-for _, spec in ipairs({71,72,73,250,251,252,65,66,70,253,254,255,259,260,261,
-    256,257,258,262,263,264,62,63,64,265,266,267,102,103,104,105}) do
+local specs = {71,72,73,250,251,252,65,66,70,253,254,255,259,260,261,
+    256,257,258,262,263,264,62,63,64,265,266,267,102,103,104,105}
+for _, spec in ipairs(specs) do
     field({"epAwards", "saurfangThresholds", spec}, "integer", 999999)
 end
 local points = {TOPLEFT=true, TOP=true, TOPRIGHT=true, LEFT=true, CENTER=true,
@@ -68,6 +69,31 @@ function Transfer.Export(profile)
         if not valid(value, descriptor) then return nil, "Недопустимое значение настройки." end
         tokens[#tokens + 1] = encode(value)
     end
+    local bosses = profile.epAwards and profile.epAwards.dpsBosses
+    if bosses then
+        if type(bosses) ~= "table" then return nil, "Недопустимые настройки планок DPS." end
+        tokens[1] = "RLH2"
+        local ids = {}
+        for id, thresholds in pairs(bosses) do
+            local encounter = RLHelperBossIds and RLHelperBossIds.DPS_ENCOUNTER_BY_NPC[id]
+            if not encounter or encounter.id ~= id or type(thresholds) ~= "table" then
+                return nil, "Недопустимые настройки планок DPS."
+            end
+            ids[#ids + 1] = id
+        end
+        table.sort(ids)
+        tokens[#tokens + 1] = tostring(#ids)
+        for _, id in ipairs(ids) do
+            tokens[#tokens + 1] = tostring(id)
+            for _, spec in ipairs(specs) do
+                local value = bosses[id][spec]
+                if not valid(value, {kind = "integer", limit = 999999}) then
+                    return nil, "Недопустимое значение планки DPS."
+                end
+                tokens[#tokens + 1] = encode(value)
+            end
+        end
+    end
     tokens[#tokens + 1] = "END"
     local text = table.concat(tokens, "|")
     if #text > 65536 then return nil, "Настройки слишком велики для переноса." end
@@ -79,7 +105,9 @@ function Transfer.Decode(text)
     text = text:gsub("%s", "")
     local tokens = {}
     for token in (text .. "|"):gmatch("(.-)|") do tokens[#tokens + 1] = token end
-    if #tokens ~= #fields + 2 or tokens[1] ~= "RLH1" or tokens[#tokens] ~= "END" then
+    local extended = tokens[1] == "RLH2"
+    if (tokens[1] ~= "RLH1" and not extended) or tokens[#tokens] ~= "END" or
+        (not extended and #tokens ~= #fields + 2) or (extended and #tokens < #fields + 3) then
         return nil, errorMessage
     end
     local profile = {}
@@ -104,6 +132,35 @@ function Transfer.Decode(text)
             parent[descriptor.path[#descriptor.path]] = value
         end
     end
+    if extended then
+        local cursor = #fields + 2
+        local count = tonumber(tokens[cursor])
+        local catalog = RLHelperBossIds and RLHelperBossIds.DPS_ENCOUNTERS
+        if not catalog or not count or count < 0 or count > #catalog or count ~= math.floor(count) or
+            #tokens ~= #fields + 3 + count * (#specs + 1) then return nil, errorMessage end
+        profile.epAwards = profile.epAwards or {}
+        local bosses = {}
+        profile.epAwards.dpsBosses = bosses
+        for _ = 1, count do
+            cursor = cursor + 1
+            local id = tonumber(tokens[cursor])
+            local encounter = RLHelperBossIds.DPS_ENCOUNTER_BY_NPC[id]
+            if not encounter or encounter.id ~= id or bosses[id] then return nil, errorMessage end
+            local thresholds = {}
+            bosses[id] = thresholds
+            for _, spec in ipairs(specs) do
+                cursor = cursor + 1
+                local token = tokens[cursor]
+                if token ~= "-" then
+                    local value = token:match("^n[%-+%d.eE]+$") and tonumber(token:sub(2))
+                    if not value or not valid(value, {kind = "integer", limit = 999999}) then
+                        return nil, errorMessage
+                    end
+                    thresholds[spec] = value
+                end
+            end
+        end
+    end
     if profile.savedPosition then
         for _, key in ipairs({"point", "relativePoint", "x", "y", "width", "height"}) do
             if profile.savedPosition[key] == nil then return nil, errorMessage end
@@ -112,7 +169,8 @@ function Transfer.Decode(text)
     if profile.epAwards then
         local ep = profile.epAwards
         ep.rt, ep.dpsSource = ep.rt or "19:00", ep.dpsSource or "Skada"
-        ep.amounts, ep.reminders, ep.saurfangThresholds = ep.amounts or {}, ep.reminders or {}, ep.saurfangThresholds or {}
+        ep.amounts, ep.reminders = ep.amounts or {}, ep.reminders or {}
+        if not ep.dpsBosses then ep.saurfangThresholds = ep.saurfangThresholds or {} end
     end
     return profile
 end

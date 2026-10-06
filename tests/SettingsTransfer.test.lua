@@ -81,4 +81,31 @@ describe('Account settings transfer', function()
         assert.are.equal(character, addon.db.char)
         addon.db = previous
     end)
+    it('round trips every configured boss, empty configurations and per-spec disabled values', function()
+        require('data.BossIds')
+        profile.epAwards.saurfangThresholds = nil
+        profile.epAwards.dpsBosses = {}
+        for _, encounter in ipairs(RLHelperBossIds.DPS_ENCOUNTERS) do
+            profile.epAwards.dpsBosses[encounter.id] = { [71] = 0, [72] = encounter.id }
+        end
+        local text = assert(Transfer.Export(profile))
+        assert.equals('RLH2', text:sub(1, 4))
+        assert.are.same(profile, Transfer.Decode(text))
+        profile.epAwards.dpsBosses = {}
+        assert.are.same(profile, Transfer.Decode(assert(Transfer.Export(profile))))
+    end)
+
+    it('rejects corrupt, duplicate or unsupported boss configurations atomically', function()
+        require('data.BossIds')
+        profile.epAwards.saurfangThresholds = nil
+        profile.epAwards.dpsBosses = { [37813] = { [72] = 22000 }, [39863] = {} }
+        local text = assert(Transfer.Export(profile))
+        for _, bad in ipairs({ text:gsub('|37813|', '|99999|'), text:gsub('|39863|', '|37813|'),
+            text:gsub('n22000', 'n1.5'), text:gsub('|2|37813|', '|3|37813|'), text .. '|-' }) do
+            assert.is_nil(Transfer.Decode(bad))
+        end
+        profile.epAwards.dpsBosses[99999] = {}
+        assert.is_nil(Transfer.Export(profile))
+    end)
+
 end)

@@ -114,3 +114,7 @@
 - For Codex ENOENT in WSL, inspect the exact missing executable and distinguish agent, sandbox and Windows MCP runtimes. On 2026-10-03 an isolated test confirmed Windows Codex 0.159.0-alpha.12.1 deletes an active Linux Codex tmp/arg0 directory when both share CODEX_HOME on NTFS. Restart alone did not fix recurrence; do not promise it will. Diagnose shared-home cleanup before recommending environment switches. Windows-format attachment/MCP paths are a separate issue.
 
 - When editing global Codex instructions for Windows from WSL, use /mnt/c/Users/atori/.codex/AGENTS.md and identify it to the user as C:\Users\atori\.codex\AGENTS.md. Verify through Windows when needed; do not confuse it with the separate Linux ~/.codex/AGENTS.md.
+
+- Boss DPS settings extend the existing per-specialization Saurfang thresholds. When adding configurable bosses, preserve spec-specific values, existing Saurfang settings/results, and avoid assuming one shared DPS threshold per boss. The user chose per-spec thresholds on 2026-10-06.
+
+- Keep the DPS boss dropdown compact (220px) and place Add/Remove immediately beside it (x=247). The 275px dropdown pushed the action buttons beyond the visible settings area in the user’s 2026-10-06 screenshot; verify the whole row in the client, not only the nominal content width.

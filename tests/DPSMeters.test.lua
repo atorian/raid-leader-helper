@@ -203,14 +203,14 @@ describe('DPS meter sources', function()
         awards:SetDPSSource('Recount')
         awards:handleEvent({ event = 'UNIT_DIED', destGUID = '0xF1300093B5000001' })
         Recount:LeaveCombat(1180)
-        local saved = addon.db.char.saurfangDPS
+        local saved = awards:GetDPSResults()[37813]
         assert.equals('Recount', saved.source)
         assert.equals(2, #saved.players)
         assert.equals(1, saved.unknown)
         assert.equals(20000, saved.players[1].dps)
         awards:SetDPSSource('Skada')
         Recount.db2.combatants = {}
-        assert.equals(saved, addon.db.char.saurfangDPS)
+        assert.equals(saved, awards:GetDPSResults()[37813])
         assert.equals(2, #saved.players)
     end)
 
@@ -218,12 +218,77 @@ describe('DPS meter sources', function()
         awards.active = true
         awards:SetDPSSource('Recount')
         local saved = { players = {}, source = 'Skada' }
-        addon.db.char.saurfangDPS = saved
+        awards:GetDPSResults()[37813] = saved
         awards:handleEvent({ event = 'UNIT_DIED', destGUID = '0xF1300093B5000001' })
         addon.db.profile.gpAwardButtonsEnabled = false
         awards:RefreshEnabledState()
         Recount:LeaveCombat(1180)
-        assert.equals(saved, addon.db.char.saurfangDPS)
+        assert.equals(saved, awards:GetDPSResults()[37813])
         assert.is_nil(meters.source)
     end)
+    it('collects shared encounters and rescued bosses after a DBM victory and unregisters on stop', function()
+        local previousDBM, callbacks, registered = DBM, {}, 0
+        _G.DBM = {
+            RegisterCallback = function(_, event, callback)
+                assert.equals('DBM_Kill', event)
+                assert.is_nil(callbacks[event])
+                callbacks[event] = callback
+                registered = registered + 1
+            end,
+            UnregisterCallback = function(_, event, callback)
+                assert.equals(callbacks[event], callback)
+                callbacks[event] = nil
+            end
+        }
+        local ok, err = pcall(function()
+            meters:Start('Recount', function(fight) completed[#completed + 1] = fight end)
+            addon.currentInstanceId = 649
+            awards:AddDPSBoss(34496)
+            -- One twin's death is not evidence that the whole encounter ended.
+            awards:handleEvent({ event = 'UNIT_DIED', destGUID = string.format('0xF130%06X000001', 34496) })
+            Recount:LeaveCombat(1180)
+            assert.equals(0, #completed)
+            Recount.InCombat, Recount.InCombatT = true, 1200
+            callbacks.DBM_Kill('DBM_Kill', { creatureId = 34497 })
+            Recount:LeaveCombat(1380)
+            assert.equals(1, #completed)
+            assert.equals(34497, completed[1].boss)
+            meters:Start('Recount', function(fight) completed[#completed + 1] = fight end)
+            assert.equals(2, registered)
+            addon.currentInstanceId = 631
+            Recount.InCombat, Recount.InCombatT = true, 1400
+            callbacks.DBM_Kill('DBM_Kill', { creatureId = 36789 })
+            Recount:LeaveCombat(1580)
+            assert.equals(36789, completed[2].boss)
+            Recount.InCombat, Recount.InCombatT = true, 1600
+            callbacks.DBM_Kill('DBM_Kill', { creatureId = 34497 }) -- Wrong instance.
+            Recount:LeaveCombat(1780)
+            assert.equals(2, #completed)
+            meters:Stop()
+            assert.is_nil(callbacks.DBM_Kill)
+        end)
+        meters:Stop()
+        _G.DBM = previousDBM
+        assert.is_true(ok, tostring(err))
+    end)
+
+    it('matches alternate NPCs to the same complete Skada encounter', function()
+        local set = { gotboss = 39863, starttime = 1000, endtime = 1180, players = {} }
+        _G.Skada = { current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
+        meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
+        meters:BossKilled(40142)
+        meters:SkadaSetComplete('Skada_SetComplete', set)
+        assert.equals(1, #completed)
+        assert.equals(39863, completed[1].boss)
+    end)
+
+    it('uses the confirmed encounter when Skada identifies a vehicle instead of its commander', function()
+        local set = { gotboss = true, success = true, starttime = 1000, endtime = 1180, players = {} }
+        _G.Skada = { current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
+        meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
+        meters:BossKilled(36939)
+        meters:SkadaSetComplete('Skada_SetComplete', set)
+        assert.equals(36939, completed[1].boss)
+    end)
+
 end)

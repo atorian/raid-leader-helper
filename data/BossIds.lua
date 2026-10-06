@@ -179,6 +179,28 @@ BossIds.BY_INSTANCE = {
     }
 }
 
+-- One entry per encounter; alternate NPCs and shared encounters use the same key.
+BossIds.DPS_ENCOUNTERS, BossIds.DPS_ENCOUNTER_BY_NPC = {}, {}
+for _, raid in ipairs({
+    { I.ICECROWN_CITADEL, "ЦЛК" }, { I.RUBY_SANCTUM, "РС" }, { I.TRIAL_OF_THE_CRUSADER, "ИВК" }
+}) do
+    local byName = {}
+    for npc, name in pairs(BossIds.BY_INSTANCE[raid[1]]) do
+        local encounter = byName[name]
+        if not encounter then
+            encounter = { id = npc, name = name, instance = raid[1], raid = raid[2] }
+            byName[name] = encounter
+            BossIds.DPS_ENCOUNTERS[#BossIds.DPS_ENCOUNTERS + 1] = encounter
+        end
+        encounter.id = math.min(encounter.id, npc)
+        BossIds.DPS_ENCOUNTER_BY_NPC[npc] = encounter
+    end
+end
+table.sort(BossIds.DPS_ENCOUNTERS, function(a, b)
+    if a.instance ~= b.instance then return a.instance < b.instance end
+    return a.id < b.id
+end)
+
 _G.RLHelperBossIds = BossIds
 
 return BossIds

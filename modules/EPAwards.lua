@@ -1,6 +1,7 @@
 local RLHelper = LibStub("AceAddon-3.0"):GetAddon("RLHelper")
 local EPAwards = RLHelper:NewModule("EPAwards", "AceEvent-3.0")
 local BossIds = RLHelperBossIds
+local SAURFANG = BossIds.NPCS.DEATHBRINGER_SAURFANG
 local DPSMeters = RLHelper:GetModule("DPSMeters")
 local REWARDS = {
     { key = "attendance", name = "Приход вовремя", defaultAmount = 1000, reason = "за приход" },
@@ -51,15 +52,44 @@ end
 function EPAwards:GetSettings()
     local profile = RLHelper.db.profile
     profile.epAwards = profile.epAwards or { rt = "19:00", amounts = {}, reminders = {} }
-    profile.epAwards.saurfangThresholds = profile.epAwards.saurfangThresholds or {}
+    if not profile.epAwards.dpsBosses then
+        local thresholds = profile.epAwards.saurfangThresholds or {}
+        for spec, value in pairs(DEFAULT_THRESHOLDS) do
+            if thresholds[spec] == nil then thresholds[spec] = value end
+        end
+        profile.epAwards.dpsBosses = { [SAURFANG] = thresholds }
+        profile.epAwards.saurfangThresholds = nil
+    end
     profile.epAwards.dpsSource = profile.epAwards.dpsSource or "Skada"
     return profile.epAwards
 end
 
-function EPAwards:GetThreshold(spec)
-    local threshold = self:GetSettings().saurfangThresholds[spec]
-    if threshold ~= nil then return threshold end
-    return DEFAULT_THRESHOLDS[spec]
+function EPAwards:GetThreshold(spec, boss)
+    local thresholds = self:GetSettings().dpsBosses[boss or SAURFANG]
+    return thresholds and thresholds[spec]
+end
+
+function EPAwards:AddDPSBoss(boss)
+    local encounter = BossIds.DPS_ENCOUNTER_BY_NPC[boss]
+    if not encounter or encounter.id ~= boss then return false end
+    local bosses = self:GetSettings().dpsBosses
+    bosses[boss] = bosses[boss] or {}
+    return true
+end
+
+function EPAwards:RemoveDPSBoss(boss)
+    self:GetSettings().dpsBosses[boss] = nil
+end
+
+function EPAwards:GetDPSResults()
+    local char = RLHelper.db.char
+    char.dpsResults = char.dpsResults or {}
+    if char.saurfangDPS then
+        char.saurfangDPS.boss = SAURFANG
+        char.dpsResults[SAURFANG] = char.dpsResults[SAURFANG] or char.saurfangDPS
+        char.saurfangDPS = nil
+    end
+    return char.dpsResults
 end
 
 function EPAwards:SetRT(value)
@@ -150,7 +180,7 @@ end
 function EPAwards:OnDisable()
     self.active = false
     DPSMeters:Stop()
-    if self.saurfangWindow then self.saurfangWindow:Hide() end
+    if self.dpsWindow then self.dpsWindow:Hide() end
     if self.clock then self.clock:SetScript("OnUpdate", nil) end
     if self.window then self.window:Hide() end
     for _, popup in pairs(self.popups or {}) do popup:Hide() end
@@ -178,9 +208,18 @@ function EPAwards:handleEvent(event)
     if not self:IsFeatureEnabled() then return end
     if event.event ~= "UNIT_DIED" or not event.destGUID then return end
     local npc = tonumber(event.destGUID:sub(9, 12), 16)
-    if npc == BossIds.NPCS.DEATHBRINGER_SAURFANG and
-        RLHelper.currentInstanceId == BossIds.INSTANCES.ICECROWN_CITADEL then
-        DPSMeters:BossKilled(npc)
+    local encounter = BossIds.DPS_ENCOUNTER_BY_NPC[npc]
+    if encounter and encounter.instance == RLHelper.currentInstanceId and
+        self:GetSettings().dpsBosses[encounter.id] then
+        -- For shared encounters and bosses rescued/retreating, DBM confirms the victory.
+        local N = BossIds.NPCS
+        if encounter.id == N.GORMOK_THE_IMPALER then
+            if npc == N.ICEHOWL then DPSMeters:BossKilled(npc) end
+        elseif encounter.id ~= N.VIVIENNE_BLACKWHISPER and encounter.id ~= N.EYDIS_DARKBANE and
+            encounter.id ~= N.PRINCE_VALANAR and encounter.id ~= N.HIGH_OVERLORD_SAURFANG and
+            encounter.id ~= N.VALITHRIA_DREAMWALKER then
+            DPSMeters:BossKilled(npc)
+        end
     end
     for _, reward in ipairs(REWARDS) do
         if reward.bosses and reward.instance == RLHelper.currentInstanceId and reward.bosses[npc] then
@@ -201,15 +240,18 @@ end
 
 -- Consume completed victories independently of the selected meter's data layout.
 function EPAwards:DPSFightComplete(set)
+    local encounter = BossIds.DPS_ENCOUNTER_BY_NPC[set.boss]
     if not self:IsFeatureEnabled() or set.source ~= self:GetSettings().dpsSource or
-        set.boss ~= BossIds.NPCS.DEATHBRINGER_SAURFANG then return end
-    local saved = RLHelper.db.char.saurfangDPS
+        not encounter or not self:GetSettings().dpsBosses[encounter.id] then return end
+    local boss = encounter.id
+    local saved = self:GetDPSResults()[boss]
     if saved and (saved.source or "Skada") == set.source and
         saved.starttime == set.starttime and saved.endtime == set.endtime then return end
-    local snapshot = { source = set.source, starttime = set.starttime, endtime = set.endtime, players = {}, unknown = 0 }
+    local snapshot = { boss = boss, source = set.source, starttime = set.starttime,
+        endtime = set.endtime, players = {}, unknown = 0 }
     for _, player in ipairs(set.players or {}) do
         local spec = SPEC_BY_ID[player.spec]
-        local threshold = self:GetThreshold(player.spec)
+        local threshold = self:GetThreshold(player.spec, boss)
         if not spec or spec[2] ~= player.class or type(player.dps) ~= "number" then
             snapshot.unknown = snapshot.unknown + 1
         elseif threshold and threshold > 0 then
@@ -220,8 +262,8 @@ function EPAwards:DPSFightComplete(set)
         end
     end
     table.sort(snapshot.players, function(a, b) return a.dps > b.dps end)
-    RLHelper.db.char.saurfangDPS = snapshot
-    if self.saurfangWindow and self.saurfangWindow:IsShown() then self:ShowSaurfangWindow() end
+    self:GetDPSResults()[boss] = snapshot
+    if self.dpsWindow and self.dpsWindow:IsShown() and self.dpsWindow.boss == boss then self:ShowDPSWindow(boss) end
 end
 
 function EPAwards:IndividualEPAward(_, name, reason, amount)
@@ -231,11 +273,15 @@ function EPAwards:IndividualEPAward(_, name, reason, amount)
     end
 end
 
-function EPAwards:AwardSaurfang(snapshot, selected, offset)
+function EPAwards:AwardDPS(snapshot, selected, offset)
     if not self:IsFeatureEnabled() then return false, "Начисление GP и ЕП выключено в настройках." end
-    if not snapshot or snapshot ~= RLHelper.db.char.saurfangDPS then return false, "Результат боя изменился. Откройте окно заново." end
-    local amount, reason = self:GetAmount("saurfang"), "RLHelper: ДПС Саурфанг"
-    if amount <= 0 then return false, "Укажите сумму ЕП за ДПС Саурфанг в настройках." end
+    if not snapshot or snapshot ~= self:GetDPSResults()[snapshot.boss] then
+        return false, "Результат боя изменился. Откройте окно заново."
+    end
+    local encounter = BossIds.DPS_ENCOUNTER_BY_NPC[snapshot.boss]
+    local amount = self:GetAmount("saurfang")
+    local reason = "RLHelper: ДПС " .. (snapshot.boss == SAURFANG and "Саурфанг" or encounter.name)
+    if amount <= 0 then return false, "Укажите сумму ЕП за ДПС в настройках." end
     local epgp = LibStub("AceAddon-3.0"):GetAddon("EPGP", true)
     if not epgp or type(epgp.IncEPBy) ~= "function" or type(epgp.GetEPGP) ~= "function" or
         type(epgp.RegisterCallback) ~= "function" then return false, "EPGP недоступен." end
@@ -434,30 +480,45 @@ function EPAwards:ToggleWindow()
         frame.empty = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         frame.empty:SetPoint("TOPLEFT", 14, -68)
         frame.empty:SetText("Нет включённых начислений.")
-        frame.saurfangButton = makeButton(frame, "ДПС Саурфанг", 155, function() self:ShowSaurfangWindow() end)
-        frame.saurfangButton:SetPoint("BOTTOMRIGHT", -14, 10)
+        frame.dpsButton = makeButton(frame, "ДПС боссов", 155, function() self:ShowDPSWindow() end)
+        frame.dpsButton:SetPoint("BOTTOMRIGHT", -14, 10)
         self.window = frame
     end
     if self.window:IsShown() then self.window:Hide() else self:RefreshWindow(); self.window:Show() end
 end
 
-function EPAwards:ShowSaurfangWindow()
+function EPAwards:ShowDPSWindow(boss)
     if not self:IsFeatureEnabled() then return end
     if self.window then self.window:Hide() end
-    local frame = self.saurfangWindow
+    local frame = self.dpsWindow
     if not frame then
-        frame = makeWindow("ДПС Саурфанг", 700, 474)
+        frame = makeWindow("ДПС боссов", 700, 514)
+        frame.bossDropdown = CreateFrame("Frame", "RLHelperDPSAwardBossDropdown", frame, "UIDropDownMenuTemplate")
+        frame.bossDropdown:SetPoint("TOPLEFT", -2, -30)
+        UIDropDownMenu_SetWidth(frame.bossDropdown, 300)
+        UIDropDownMenu_Initialize(frame.bossDropdown, function()
+            local settings, results = self:GetSettings(), self:GetDPSResults()
+            for _, encounter in ipairs(BossIds.DPS_ENCOUNTERS) do
+                if settings.dpsBosses[encounter.id] or results[encounter.id] then
+                    local info = UIDropDownMenu_CreateInfo()
+                    info.text = encounter.raid .. ": " .. encounter.name
+                    info.checked = frame.boss == encounter.id
+                    info.func = function() self:ShowDPSWindow(encounter.id) end
+                    UIDropDownMenu_AddButton(info)
+                end
+            end
+        end)
         frame.info = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        frame.info:SetPoint("TOPLEFT", 14, -40)
+        frame.info:SetPoint("TOPLEFT", 14, -80)
         frame.info:SetWidth(670)
         frame.info:SetJustifyH("LEFT")
         for _, column in ipairs({ {14, "Имя игрока"}, {175, "Класс / спек"}, {390, "DPS"}, {480, "Планка"}, {580, "Выбран"} }) do
             local label = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            label:SetPoint("TOPLEFT", column[1], -118)
+            label:SetPoint("TOPLEFT", column[1], -158)
             label:SetText(column[2])
         end
-        local scroll = CreateFrame("ScrollFrame", "RLHelperSaurfangScroll", frame, "UIPanelScrollFrameTemplate")
-        scroll:SetPoint("TOPLEFT", 14, -142)
+        local scroll = CreateFrame("ScrollFrame", "RLHelperDPSScroll", frame, "UIPanelScrollFrameTemplate")
+        scroll:SetPoint("TOPLEFT", 14, -182)
         scroll:SetPoint("BOTTOMRIGHT", -34, 76)
         local content = CreateFrame("Frame", nil, scroll)
         content:SetSize(645, 1)
@@ -468,34 +529,45 @@ function EPAwards:ShowSaurfangWindow()
         frame.result:SetWidth(670)
         frame.result:SetJustifyH("LEFT")
         frame.awardButton = makeButton(frame, "Начислить", 140, function()
-            local _, message = self:AwardSaurfang(frame.snapshot, frame.selected, frame.offset)
+            local _, message = self:AwardDPS(frame.snapshot, frame.selected, frame.offset)
             frame.result:SetText(message)
             for _, row in ipairs(frame.rows) do
                 if row.player then row.check:SetChecked(frame.selected[row.player.name] == true) end
             end
         end)
         frame.awardButton:SetPoint("BOTTOM", 0, 12)
-        frame.minusButton = makeButton(frame, "-", 28, function() self:AdjustSaurfangThreshold(-500) end)
-        frame.minusButton:SetPoint("TOPLEFT", 14, -80)
-        frame.plusButton = makeButton(frame, "+", 28, function() self:AdjustSaurfangThreshold(500) end)
+        frame.minusButton = makeButton(frame, "-", 28, function() self:AdjustDPSThreshold(-500) end)
+        frame.minusButton:SetPoint("TOPLEFT", 14, -120)
+        frame.plusButton = makeButton(frame, "+", 28, function() self:AdjustDPSThreshold(500) end)
         frame.plusButton:SetPoint("LEFT", frame.minusButton, "RIGHT", 6, 0)
         frame.adjustment = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         frame.adjustment:SetPoint("LEFT", frame.plusButton, "RIGHT", 10, 0)
-        self.saurfangWindow = frame
+        self.dpsWindow = frame
     end
-    frame.snapshot, frame.selected, frame.offset = RLHelper.db.char.saurfangDPS, {}, 0
-    self:RefreshSaurfangWindow()
+    local settings, results = self:GetSettings(), self:GetDPSResults()
+    boss = boss or frame.boss
+    if not boss or (not settings.dpsBosses[boss] and not results[boss]) then
+        boss = nil
+        for _, encounter in ipairs(BossIds.DPS_ENCOUNTERS) do
+            if settings.dpsBosses[encounter.id] or results[encounter.id] then boss = encounter.id; break end
+        end
+    end
+    frame.boss, frame.snapshot, frame.selected, frame.offset = boss, results[boss], {}, 0
+    local encounter = BossIds.DPS_ENCOUNTER_BY_NPC[boss]
+    UIDropDownMenu_SetText(frame.bossDropdown,
+        encounter and (encounter.raid .. ": " .. encounter.name) or "Добавьте босса в настройках ЕПГП")
+    self:RefreshDPSWindow()
     frame:Show()
 end
 
-function EPAwards:AdjustSaurfangThreshold(delta)
-    local frame = self.saurfangWindow
+function EPAwards:AdjustDPSThreshold(delta)
+    local frame = self.dpsWindow
     frame.offset = frame.offset + delta
-    self:RefreshSaurfangWindow()
+    self:RefreshDPSWindow()
 end
 
-function EPAwards:RefreshSaurfangWindow()
-    local frame = self.saurfangWindow
+function EPAwards:RefreshDPSWindow()
+    local frame = self.dpsWindow
     local snapshot = frame.snapshot
     frame.adjustment:SetText(string.format("Поправка к планкам: %+d DPS (шаг 500)", frame.offset))
     frame.result:SetText("")
@@ -542,7 +614,7 @@ function EPAwards:RefreshSaurfangWindow()
             " ЕП. Допуск: 100 DPS ниже планки.\nПодходят: " .. count .. ". Без данных о спеке/DPS: " .. snapshot.unknown .. ".")
     else
         frame.info:SetText("Нет сохранённого результата. Источник: " .. self:GetSettings().dpsSource ..
-            ". Нужны загруженный метр и убийство Саурфанга с заданными планками.")
+            ". Нужны загруженный метр и победа над выбранным боссом с заданными планками.")
     end
     if previouslyAwarded > 0 then
         frame.result:SetText("Ранее начислено игрокам из этого списка: " .. previouslyAwarded .. ".")
@@ -573,7 +645,7 @@ end
 
 function EPAwards:CreateSettings(parent, anchor)
     local panel = CreateFrame("Frame", "RLHelperEPAwardsSettings", parent)
-    panel:SetSize(410, 398 + #SPECS * 34)
+    panel:SetSize(410, 506 + #SPECS * 34)
     panel:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -22)
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     title:SetPoint("TOPLEFT", 0, 0)
@@ -582,7 +654,7 @@ function EPAwards:CreateSettings(parent, anchor)
     help:SetPoint("TOPLEFT", 0, -24)
     help:SetText("Галочка — показывать начисление и напоминание. 0 ЕП — отключить.")
     local fields = {}
-    local function input(key, labelText, y, read, save)
+    local function input(key, labelText, y, read, save, thresholdField)
         local label = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
         label:SetWidth(145)
         label:SetJustifyH("LEFT")
@@ -594,8 +666,15 @@ function EPAwards:CreateSettings(parent, anchor)
         edit:SetPoint("TOPLEFT", 150, y + 5)
         edit:SetAutoFocus(false)
         edit:SetTextInsets(2, 4, 0, 0)
-        local function refresh() edit:SetText(tostring(read())); edit:SetCursorPosition(0) end
+        local function refresh()
+            edit:SetText(tostring(read())); edit:SetCursorPosition(0)
+            if thresholdField then
+                if self:GetSettings().dpsBosses[panel.boss] then edit:Show(); label:Show()
+                else edit:Hide(); label:Hide() end
+            end
+        end
         local function commit()
+            if thresholdField and not self:GetSettings().dpsBosses[panel.boss] then return end
             save(edit:GetText())
             refresh()
         end
@@ -632,7 +711,7 @@ function EPAwards:CreateSettings(parent, anchor)
         refresh()
         table.insert(fields, refresh)
     end
-    input("saurfang", "ДПС Саурфанг (ЕП)", -234, function() return self:GetAmount("saurfang") end, function(value)
+    input("saurfang", "ДПС боссов (ЕП)", -234, function() return self:GetAmount("saurfang") end, function(value)
         local amount = tonumber(value)
         if amount and amount >= 0 and amount <= 99999 and amount == math.floor(amount) then
             self:GetSettings().amounts.saurfang = amount
@@ -659,26 +738,106 @@ function EPAwards:CreateSettings(parent, anchor)
     end)
     refreshSource()
     table.insert(fields, refreshSource)
+    local raids = { {BossIds.INSTANCES.ICECROWN_CITADEL, "ЦЛК"}, {BossIds.INSTANCES.RUBY_SANCTUM, "РС"},
+        {BossIds.INSTANCES.TRIAL_OF_THE_CRUSADER, "ИВК"} }
+    panel.boss = SAURFANG
+    if not self:GetSettings().dpsBosses[panel.boss] then
+        for _, encounter in ipairs(BossIds.DPS_ENCOUNTERS) do
+            if self:GetSettings().dpsBosses[encounter.id] then panel.boss = encounter.id; break end
+        end
+    end
+    panel.raid = BossIds.DPS_ENCOUNTER_BY_NPC[panel.boss].instance
+    panel.thresholdInputs = {}
+    local raidDropdown = CreateFrame("Frame", "RLHelperDPSRaidDropdown", panel, "UIDropDownMenuTemplate")
+    raidDropdown:SetPoint("TOPLEFT", -16, -320)
+    UIDropDownMenu_SetWidth(raidDropdown, 90)
+    local bossDropdown = CreateFrame("Frame", "RLHelperDPSBossDropdown", panel, "UIDropDownMenuTemplate")
+    bossDropdown:SetPoint("TOPLEFT", -16, -358)
+    UIDropDownMenu_SetWidth(bossDropdown, 220)
+    local add = makeButton(panel, "Добавить", 85, function()
+        for _, edit in ipairs(panel.thresholdInputs) do edit:ClearFocus() end
+        self:AddDPSBoss(panel.boss)
+        panel.refresh()
+    end)
+    add:SetPoint("TOPLEFT", 247, -362)
+    local remove = makeButton(panel, "Удалить", 85, function()
+        for _, edit in ipairs(panel.thresholdInputs) do edit:ClearFocus() end
+        self:RemoveDPSBoss(panel.boss)
+        panel.refresh()
+    end)
+    remove:SetPoint("TOPLEFT", 247, -394)
+    local function selectBoss(boss)
+        for _, edit in ipairs(panel.thresholdInputs) do edit:ClearFocus() end
+        panel.boss = boss
+        panel.refresh()
+    end
+    UIDropDownMenu_Initialize(raidDropdown, function()
+        for _, raid in ipairs(raids) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text, info.checked = raid[2], panel.raid == raid[1]
+            info.func = function()
+                for _, encounter in ipairs(BossIds.DPS_ENCOUNTERS) do
+                    if encounter.instance == raid[1] then
+                        panel.raid = raid[1]
+                        selectBoss(encounter.id)
+                        break
+                    end
+                end
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    UIDropDownMenu_Initialize(bossDropdown, function()
+        for _, encounter in ipairs(BossIds.DPS_ENCOUNTERS) do
+            if encounter.instance == panel.raid then
+                local info = UIDropDownMenu_CreateInfo()
+                local added = self:GetSettings().dpsBosses[encounter.id] ~= nil
+                info.text = encounter.name .. (added and " (добавлен)" or "")
+                info.checked = panel.boss == encounter.id
+                info.func = function() selectBoss(encounter.id) end
+                UIDropDownMenu_AddButton(info)
+            end
+        end
+    end)
     local thresholdsTitle = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    thresholdsTitle:SetPoint("TOPLEFT", 0, -328)
-    thresholdsTitle:SetText("Планки ДПС — Саурфанг (по спекам)")
+    thresholdsTitle:SetPoint("TOPLEFT", 0, -430)
+    thresholdsTitle:SetText("Планки ДПС по спекам")
     local thresholdsHelp = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    thresholdsHelp:SetPoint("TOPLEFT", 0, -352)
-    thresholdsHelp:SetText("Пусто или 0 — не учитывать. DPS — по выбранному метру после победы.")
+    thresholdsHelp:SetPoint("TOPLEFT", 0, -454)
+    thresholdsHelp:SetWidth(390)
+    thresholdsHelp:SetJustifyH("LEFT")
+    thresholdsHelp:SetText("Добавьте босса и заполните планки. Enter сохраняет значение.\nПусто или 0 — не учитывать спек. DPS — после победы.")
+    local function refreshBoss()
+        for _, raid in ipairs(raids) do
+            if raid[1] == panel.raid then UIDropDownMenu_SetText(raidDropdown, raid[2]) end
+        end
+        local encounter = BossIds.DPS_ENCOUNTER_BY_NPC[panel.boss]
+        UIDropDownMenu_SetText(bossDropdown, encounter.name)
+        local configured = self:GetSettings().dpsBosses[panel.boss] ~= nil
+        if configured then add:Disable(); remove:Enable() else add:Enable(); remove:Disable() end
+        local height = configured and (506 + #SPECS * 34) or 492
+        panel:SetHeight(height)
+        if parent.SetHeight then parent:SetHeight(300 + height) end
+    end
+    table.insert(fields, refreshBoss)
     for index, spec in ipairs(SPECS) do
         local id = spec[1]
-        input("Spec" .. id, spec[3], -386 - (index - 1) * 34,
-            function() return self:GetThreshold(id) or "" end,
+        local edit = input("Spec" .. id, spec[3], -494 - (index - 1) * 34,
+            function() return self:GetThreshold(id, panel.boss) or "" end,
             function(value)
                 local threshold = tonumber(value)
+                local thresholds = self:GetSettings().dpsBosses[panel.boss]
                 if not value:find("%S") or threshold == 0 then
-                    self:GetSettings().saurfangThresholds[id] = 0
+                    thresholds[id] = 0
                 elseif threshold and threshold > 0 and threshold <= 999999 and threshold == math.floor(threshold) then
-                    self:GetSettings().saurfangThresholds[id] = threshold
+                    thresholds[id] = threshold
                 else RLHelper:Print("Планка DPS должна быть целым числом от 0 до 999999.") end
-            end)
+            end, true)
+        panel.thresholdInputs[#panel.thresholdInputs + 1] = edit
     end
-    panel:SetScript("OnShow", function() for _, refresh in ipairs(fields) do refresh() end end)
+    panel.refresh = function() for _, refresh in ipairs(fields) do refresh() end end
+    panel.refresh()
+    panel:SetScript("OnShow", panel.refresh)
     self.options = panel
 end
 

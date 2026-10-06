@@ -18,6 +18,10 @@ function DPSMeters:Stop()
         self.skada.UnregisterCallback(self, "Skada_SetComplete")
         self.skada = nil
     end
+    if self.dbm then
+        self.dbm:UnregisterCallback("DBM_Kill", self.dbmKill)
+        self.dbm = nil
+    end
     self.source, self.complete, self.killed = nil, nil, nil
 end
 
@@ -26,6 +30,15 @@ function DPSMeters:Start(source, complete)
     self.source, self.complete = source, complete
     self:RegisterMessage("COMBAT_BOSS_DEFEATED", "SkadaSetComplete")
     if not self:IsAvailable(source) then return end
+    if DBM and type(DBM.RegisterCallback) == "function" and type(DBM.UnregisterCallback) == "function" then
+        self.dbmKill = self.dbmKill or function(_, mod)
+            local npc = mod and (mod.creatureId or (mod.combatInfo and mod.combatInfo.mob))
+            local encounter = RLHelperBossIds.DPS_ENCOUNTER_BY_NPC[npc]
+            if encounter and encounter.instance == RLHelper.currentInstanceId then self:BossKilled(npc) end
+        end
+        self.dbm = DBM
+        DBM:RegisterCallback("DBM_Kill", self.dbmKill)
+    end
     if source == "Skada" then
         self.skada = Skada
         Skada.RegisterCallback(self, "Skada_SetComplete", "SkadaSetComplete")
@@ -62,11 +75,19 @@ function DPSMeters:BossKilled(boss)
 end
 
 function DPSMeters:SkadaSetComplete(_, set)
+    local encounters = RLHelperBossIds.DPS_ENCOUNTER_BY_NPC
+    local killedEncounter = self.killed and encounters[self.killed.boss]
+    local setEncounter = set and encounters[set.gotboss]
+    local confirmedKill = set and self.killed and self.killed.set == set and
+        (self.killed.boss == set.gotboss or (killedEncounter and killedEncounter == setEncounter))
     if self.source ~= "Skada" or not self.complete or not Skada or not set or not set.endtime or
-        not set.gotboss or (not set.success and (not self.killed or self.killed.set ~= set or self.killed.boss ~= set.gotboss)) then return end
+        not set.gotboss or (not set.success and not confirmedKill) then return end
     -- Skada also completes phase segments; consume only the whole fight.
     if set ~= Skada.current and set ~= Skada.last then return end
-    local fight = { source = "Skada", boss = set.gotboss, starttime = set.starttime,
+    -- Skada may identify a vehicle/add; DBM supplies the encounter's registered boss.
+    local boss = set.gotboss
+    if not setEncounter and killedEncounter and self.killed.set == set then boss = self.killed.boss end
+    local fight = { source = "Skada", boss = boss, starttime = set.starttime,
         endtime = set.endtime, players = {} }
     for _, player in ipairs(set.players or {}) do
         fight.players[#fight.players + 1] = { name = player.name, class = player.class, spec = player.spec,

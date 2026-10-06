@@ -2130,7 +2130,7 @@ function RLHelper:CreateOptionsPanel()
     scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -30, 12)
 
     local content = CreateFrame("Frame", "RLHelperOptionsPanelContent", scrollFrame)
-    content:SetSize(440, 920)
+    content:SetSize(440, 760)
     if scrollFrame.SetScrollChild then
         scrollFrame:SetScrollChild(content)
     end
@@ -2251,11 +2251,20 @@ function RLHelper:CreateOptionsPanel()
         RLHelper.db.profile.halionPhaseTwoEntryTimer = self:GetChecked() and true or false
     end)
 
-    local gpAwardTitle = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    gpAwardTitle:SetPoint("TOPLEFT", halionPhaseTwoEntryTimer, "BOTTOMLEFT", 0, -16)
-    gpAwardTitle:SetText("Начисление GP")
+    local epgpPanel = CreateFrame("Frame", "RLHelperEPGPOptionsPanel", UIParent)
+    epgpPanel.name, epgpPanel.parent = "ЕПГП", panel.name
+    local epgpScroll = CreateFrame("ScrollFrame", "RLHelperEPGPOptionsScroll", epgpPanel, "UIPanelScrollFrameTemplate")
+    epgpScroll:SetPoint("TOPLEFT", epgpPanel, "TOPLEFT", 8, -12)
+    epgpScroll:SetPoint("BOTTOMRIGHT", epgpPanel, "BOTTOMRIGHT", -30, 12)
+    local epgpContent = CreateFrame("Frame", "RLHelperEPGPOptionsContent", epgpScroll)
+    epgpContent:SetSize(440, 300)
+    epgpScroll:SetScrollChild(epgpContent)
 
-    local gpAwardButtonsEnabled = CreateFrame("CheckButton", "RLHelperGPAwardButtonsEnabledCheckButton", content,
+    local gpAwardTitle = epgpContent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    gpAwardTitle:SetPoint("TOPLEFT", epgpContent, "TOPLEFT", 12, 0)
+    gpAwardTitle:SetText("ЕПГП")
+
+    local gpAwardButtonsEnabled = CreateFrame("CheckButton", "RLHelperGPAwardButtonsEnabledCheckButton", epgpContent,
         "InterfaceOptionsCheckButtonTemplate")
     gpAwardButtonsEnabled:SetPoint("TOPLEFT", gpAwardTitle, "BOTTOMLEFT", 0, -8)
     _G[gpAwardButtonsEnabled:GetName() .. "Text"]:SetText("Включить начисление GP и ЕП")
@@ -2277,14 +2286,14 @@ function RLHelper:CreateOptionsPanel()
     local gpReasonAnchor = gpAwardButtonsEnabled
     local isFirstGpReason = true
     for _, amount in ipairs({ 100, 200, 250, 500, 1000 }) do
-        local label = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        local label = epgpContent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         label:SetPoint("TOPLEFT", gpReasonAnchor, "BOTTOMLEFT", isFirstGpReason and 4 or 0, -10)
         if label.SetWidth then
             label:SetWidth(70)
         end
         label:SetText(amount .. " GP")
 
-        local editBox = CreateFrame("EditBox", "RLHelperGPAwardReason" .. amount .. "EditBox", content, "InputBoxTemplate")
+        local editBox = CreateFrame("EditBox", "RLHelperGPAwardReason" .. amount .. "EditBox", epgpContent, "InputBoxTemplate")
         editBox:SetSize(260, 24)
         if editBox.SetWidth then
             editBox:SetWidth(260)
@@ -2324,6 +2333,9 @@ function RLHelper:CreateOptionsPanel()
         halionBurst:SetChecked(RLHelper:IsHalionBurstPullEnabled())
         halionBurstReset:SetChecked(RLHelper:IsHalionBurstResetEnabled())
         halionPhaseTwoEntryTimer:SetChecked(RLHelper:IsHalionPhaseTwoEntryTimerEnabled())
+    end
+    panel:SetScript("OnShow", refreshSettings)
+    local function refreshEPGPSettings()
         gpAwardButtonsEnabled:SetChecked(RLHelper.db.profile.gpAwardButtonsEnabled)
         RLHelper.db.profile.gpAwardReasons = RLHelper.db.profile.gpAwardReasons or {}
         for amount, editBox in pairs(gpReasonEditBoxes) do
@@ -2331,10 +2343,10 @@ function RLHelper:CreateOptionsPanel()
             editBox:SetCursorPosition(0)
         end
     end
-    panel:SetScript("OnShow", refreshSettings)
+    epgpPanel:SetScript("OnShow", refreshEPGPSettings)
 
     local transferTitle = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    transferTitle:SetPoint("TOPLEFT", gpReasonAnchor, "BOTTOMLEFT", 0, -22)
+    transferTitle:SetPoint("TOPLEFT", halionPhaseTwoEntryTimer, "BOTTOMLEFT", 4, -22)
     transferTitle:SetText("Перенос настроек аккаунта")
     local transferHelp = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     transferHelp:SetPoint("TOPLEFT", transferTitle, "BOTTOMLEFT", 0, -8)
@@ -2372,6 +2384,7 @@ function RLHelper:CreateOptionsPanel()
         transferStatus:SetText(message)
         if ok then
             refreshSettings()
+            refreshEPGPSettings()
             local ep = RLHelper:GetModule("EPAwards", true)
             if ep and ep.options then ep.options:GetScript("OnShow")(ep.options) end
         end
@@ -2380,12 +2393,14 @@ function RLHelper:CreateOptionsPanel()
 
     local epAwards = self:GetModule("EPAwards", true)
     if epAwards then
-        epAwards:CreateSettings(content, transferStatus)
-        content:SetHeight(940 + epAwards.options:GetHeight())
+        epAwards:CreateSettings(epgpContent, gpReasonAnchor)
+        epgpContent:SetHeight(300 + epAwards.options:GetHeight())
     end
 
     self.optionsPanel = panel
     InterfaceOptions_AddCategory(panel)
+    InterfaceOptions_AddCategory(epgpPanel)
+    self.epgpOptionsPanel = epgpPanel
 end
 
 function RLHelper:OpenOptionsPanel()

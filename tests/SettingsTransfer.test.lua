@@ -25,6 +25,13 @@ describe('Account settings transfer', function()
         assert.are.same(profile, Transfer.Decode('  ' .. text:gsub('|', '|\n') .. '  '))
     end)
 
+    it('round trips Details and the unavailable DPS source sentinel', function()
+        for _, source in ipairs({ "Details", "ErrorDPSCounter" }) do
+            profile.epAwards.dpsSource = source
+            assert.equals(source, assert(Transfer.Decode(assert(Transfer.Export(profile)))).epAwards.dpsSource)
+        end
+    end)
+
     it('omits personal data, obsolete settings and unknown fields', function()
         profile.combatHistory = { 'secret history' }
         profile.combatHistoryV2 = { combats = {} }

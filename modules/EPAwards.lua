@@ -79,7 +79,7 @@ function EPAwards:GetSettings()
         profile.epAwards.dpsBosses = { [SAURFANG] = thresholds }
         profile.epAwards.saurfangThresholds = nil
     end
-    profile.epAwards.dpsSource = profile.epAwards.dpsSource or "Skada"
+    profile.epAwards.dpsSource = profile.epAwards.dpsSource or "Details"
     return profile.epAwards
 end
 
@@ -185,6 +185,8 @@ function EPAwards:IsFeatureEnabled()
 end
 
 function EPAwards:OnEnable()
+    local settings = self:GetSettings()
+    settings.dpsSource = DPSMeters:ResolveSource(settings.dpsSource)
     self:RefreshEnabledState()
 end
 
@@ -257,11 +259,14 @@ function EPAwards:handleEvent(event)
 end
 
 function EPAwards:StartDPSMeter()
-    DPSMeters:Start(self:GetSettings().dpsSource, function(fight) self:DPSFightComplete(fight) end)
+    local settings = self:GetSettings()
+    settings.dpsSource = DPSMeters:ResolveSource(settings.dpsSource)
+    DPSMeters:Start(settings.dpsSource, function(fight) self:DPSFightComplete(fight) end)
 end
 
 function EPAwards:SetDPSSource(source)
-    if source ~= "Skada" and source ~= "Recount" then return end
+    if source ~= "Details" and source ~= "Skada" and source ~= "Recount" and source ~= "ErrorDPSCounter" then return end
+    source = DPSMeters:ResolveSource(source)
     self:GetSettings().dpsSource = source
     if self.active then self:StartDPSMeter() end
 end
@@ -781,15 +786,31 @@ function EPAwards:CreateSettings(parent, anchor)
     sourceLabel:SetText("Источник DPS")
     local sourceDropdown = CreateFrame("Frame", "RLHelperDPSSourceDropdown", panel, "UIDropDownMenuTemplate")
     sourceDropdown:SetPoint("TOPLEFT", 134, -262)
-    UIDropDownMenu_SetWidth(sourceDropdown, 180)
+    local viewport = parent.GetParent and parent:GetParent()
+    local sourceHelp = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    sourceHelp:SetPoint("TOPLEFT", 0, -298)
+    sourceHelp:SetJustifyH("LEFT")
+    sourceHelp:SetText(DPSMeters.requirements)
+    panel.sourceHelp = sourceHelp
     local function refreshSource()
+        -- Anchored option panels have no width until InterfaceOptions displays the category.
+        local viewportWidth = viewport and viewport:GetWidth() or 0
+        if viewportWidth <= 0 then viewportWidth = 375 end
+        local availableWidth = viewportWidth - 16 - 10
+        -- UIDropDownMenuTemplate contributes 50px beyond the configured text width.
+        UIDropDownMenu_SetWidth(sourceDropdown, availableWidth - 134 - 50)
+        sourceHelp:SetWidth(availableWidth)
         local source = self:GetSettings().dpsSource
-        UIDropDownMenu_SetText(sourceDropdown, source .. (DPSMeters:IsAvailable(source) and "" or " (не загружен)"))
+        UIDropDownMenu_SetText(sourceDropdown, DPSMeters:GetSourceText(source))
     end
     UIDropDownMenu_Initialize(sourceDropdown, function()
-        for _, source in ipairs({ "Skada", "Recount" }) do
+        for _, source in ipairs(DPSMeters.sources) do
             local info = UIDropDownMenu_CreateInfo()
-            info.text, info.value = source, source
+            local available, reason = DPSMeters:IsAvailable(source)
+            info.text, info.value = DPSMeters:GetSourceText(source), source
+            info.disabled = not available
+            info.tooltipTitle, info.tooltipText = source, reason
+            info.tooltipOnButton, info.tooltipWhileDisabled = true, true
             info.checked = self:GetSettings().dpsSource == source
             info.func = function() self:SetDPSSource(source); refreshSource() end
             UIDropDownMenu_AddButton(info)
@@ -808,23 +829,23 @@ function EPAwards:CreateSettings(parent, anchor)
     panel.raid = BossIds.DPS_ENCOUNTER_BY_NPC[panel.boss].instance
     panel.thresholdInputs = {}
     local raidDropdown = CreateFrame("Frame", "RLHelperDPSRaidDropdown", panel, "UIDropDownMenuTemplate")
-    raidDropdown:SetPoint("TOPLEFT", -16, -320)
+    raidDropdown:SetPoint("TOPLEFT", -16, -378)
     UIDropDownMenu_SetWidth(raidDropdown, 90)
     local bossDropdown = CreateFrame("Frame", "RLHelperDPSBossDropdown", panel, "UIDropDownMenuTemplate")
-    bossDropdown:SetPoint("TOPLEFT", -16, -358)
+    bossDropdown:SetPoint("TOPLEFT", -16, -416)
     UIDropDownMenu_SetWidth(bossDropdown, 220)
     local add = makeButton(panel, "Добавить", 85, function()
         for _, edit in ipairs(panel.thresholdInputs) do edit:ClearFocus() end
         self:AddDPSBoss(panel.boss)
         panel.refresh()
     end)
-    add:SetPoint("TOPLEFT", 247, -362)
+    add:SetPoint("TOPLEFT", 247, -420)
     local remove = makeButton(panel, "Удалить", 85, function()
         for _, edit in ipairs(panel.thresholdInputs) do edit:ClearFocus() end
         self:RemoveDPSBoss(panel.boss)
         panel.refresh()
     end)
-    remove:SetPoint("TOPLEFT", 247, -394)
+    remove:SetPoint("TOPLEFT", 247, -452)
     local function selectBoss(boss)
         for _, edit in ipairs(panel.thresholdInputs) do edit:ClearFocus() end
         panel.boss = boss
@@ -859,18 +880,18 @@ function EPAwards:CreateSettings(parent, anchor)
         end
     end)
     local thresholdsTitle = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    thresholdsTitle:SetPoint("TOPLEFT", 0, -430)
+    thresholdsTitle:SetPoint("TOPLEFT", 0, -488)
     thresholdsTitle:SetText("Планки ДПС по спекам")
     local thresholdsHelp = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    thresholdsHelp:SetPoint("TOPLEFT", 0, -454)
+    thresholdsHelp:SetPoint("TOPLEFT", 0, -512)
     thresholdsHelp:SetWidth(390)
     thresholdsHelp:SetJustifyH("LEFT")
     thresholdsHelp:SetText("Добавьте босса и заполните планки. Enter сохраняет значение.\nПусто или 0 — не учитывать спек. DPS — после победы.")
     local modeLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    modeLabel:SetPoint("TOPLEFT", 0, -500)
+    modeLabel:SetPoint("TOPLEFT", 0, -558)
     modeLabel:SetText("Условие награды")
     local modeDropdown = CreateFrame("Frame", "RLHelperPutricideModeDropdown", panel, "UIDropDownMenuTemplate")
-    modeDropdown:SetPoint("TOPLEFT", 134, -494)
+    modeDropdown:SetPoint("TOPLEFT", 134, -552)
     UIDropDownMenu_SetWidth(modeDropdown, 200)
     local modeLabels = { boss = "ДПС по спекам", ooze = "Урон по слизням" }
     UIDropDownMenu_Initialize(modeDropdown, function()
@@ -904,18 +925,18 @@ function EPAwards:CreateSettings(parent, anchor)
             "Общий урон; планка умножается на число призывов.\nЦель газа: -100000. 0 — отключить награду." or
             "Добавьте босса и заполните планки. Enter сохраняет значение.\nПусто или 0 — не учитывать спек. DPS — после победы.")
         for index, row in ipairs(specRows) do
-            local y = -494 - (index - 1) * 34 - (putricide and 76 or 0)
+            local y = -552 - (index - 1) * 34 - (putricide and 76 or 0)
             row.label:ClearAllPoints(); row.label:SetPoint("TOPLEFT", 0, y)
             row.edit:ClearAllPoints(); row.edit:SetPoint("TOPLEFT", 150, y + 5)
         end
-        local height = configured and (oozeMode and 590 or (506 + #SPECS * 34 + (putricide and 76 or 0))) or 492
+        local height = configured and (oozeMode and 648 or (564 + #SPECS * 34 + (putricide and 76 or 0))) or 550
         panel:SetHeight(height)
         if parent.SetHeight then parent:SetHeight(300 + height) end
     end
     table.insert(fields, refreshBoss)
     for index, spec in ipairs(SPECS) do
         local id = spec[1]
-        local edit, label = input("Spec" .. id, spec[3], -494 - (index - 1) * 34,
+        local edit, label = input("Spec" .. id, spec[3], -552 - (index - 1) * 34,
             function() return self:GetThreshold(id, panel.boss) or "" end,
             function(value)
                 local threshold = tonumber(value)
@@ -929,7 +950,7 @@ function EPAwards:CreateSettings(parent, anchor)
         panel.thresholdInputs[#panel.thresholdInputs + 1] = edit
         specRows[#specRows + 1] = { edit = edit, label = label }
     end
-    local oozeEdit = input("PutricideOozeDamage", "Урон на слизня", -538,
+    local oozeEdit = input("PutricideOozeDamage", "Урон на слизня", -596,
         function() return self:GetOozeThreshold() end,
         function(value)
             local amount = tonumber(value)

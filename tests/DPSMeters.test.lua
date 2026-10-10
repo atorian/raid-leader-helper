@@ -10,12 +10,16 @@ describe('DPS meter sources', function()
     local original, completed, hooks, specs
     before_each(function()
         meters:Stop()
-        original = { recount = Recount, skada = Skada, hook = hooksecurefunc, raid = GetNumRaidMembers,
+        original = { recount = Recount, skada = Skada, details = Details, metadata = GetAddOnMetadata, debug = addon.Debug, hook = hooksecurefunc, raid = GetNumRaidMembers,
             guid = UnitGUID, class = UnitClass, spec = addon.GetUnitSpec, db = addon.db,
             active = awards.active, instance = addon.currentInstanceId }
         completed, hooks = {}, 0
         specs = { raid1 = 72, raid2 = 71 }
-        _G.Skada = nil
+        _G.Skada, _G.Details = nil, nil
+        _G.GetAddOnMetadata = function(name, key)
+            local meter = _G[name]
+            return meter and ((key == "Version" or key == "X-Curse-Packaged-Version") and meter.version or nil)
+        end
         _G.GetNumRaidMembers = function() return 3 end
         _G.UnitGUID = function(unit) return 'guid-' .. unit end
         _G.UnitClass = function() return 'Воин', 'WARRIOR' end
@@ -35,7 +39,7 @@ describe('DPS meter sources', function()
             return { Name = name, GUID = 'guid-' .. unit, type = kind or 'Grouped', enClass = 'WARRIOR',
                 LastFightIn = number or 7, Fights = { CurrentFightData = { Damage = 2000000, ActiveTime = 100 } } }
         end
-        _G.Recount = {
+        _G.Recount = { version = "r1127",
             InCombat = true, InCombatT = 1000,
             db = { profile = { CurDataSet = 'OverallData' } },
             db2 = { FightNum = 7, combatants = {
@@ -68,6 +72,7 @@ describe('DPS meter sources', function()
     end)
     after_each(function()
         meters:Stop()
+        _G.Details, _G.GetAddOnMetadata, addon.Debug = original.details, original.metadata, original.debug
         _G.Recount, _G.Skada, _G.hooksecurefunc = original.recount, original.skada, original.hook
         _G.GetNumRaidMembers, _G.UnitGUID, _G.UnitClass = original.raid, original.guid, original.class
         addon.GetUnitSpec, addon.db, addon.currentInstanceId = original.spec, original.db, original.instance
@@ -103,7 +108,7 @@ describe('DPS meter sources', function()
 
     it('keeps individual ooze GUIDs in a completed Skada fight without a death callback', function()
         local set = { gotboss = 36678, success = true, starttime = 1000, endtime = 1180, players = {} }
-        _G.Skada = { current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
+        _G.Skada = { version = "1.8.78", actorPrototype = { GetDPS = function() end }, current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
         meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
         local expected = oozeEvents()
         meters:SkadaSetComplete('Skada_SetComplete', set)
@@ -151,7 +156,7 @@ describe('DPS meter sources', function()
 
     it('saves Skada gas targets at the kill and clears them for the next segment and on stop', function()
         local set = { gotboss = 36678, success = true, starttime = 1000, endtime = 1180, players = {} }
-        _G.Skada = { current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
+        _G.Skada = { version = "1.8.78", actorPrototype = { GetDPS = function() end }, current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
         meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
         meters:handleEvent(gasEvent('SPELL_AURA_APPLIED', 72833))
         meters:BossKilled(36678)
@@ -178,7 +183,7 @@ describe('DPS meter sources', function()
         Recount:ResetData()
         assert.is_nil(meters.gasTargets)
         local set = { gotboss = 36678, success = true, starttime = 1400, endtime = 1580, players = {} }
-        _G.Skada = { current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
+        _G.Skada = { version = "1.8.78", actorPrototype = { GetDPS = function() end }, current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
         meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
         meters:handleEvent(gasEvent('SPELL_AURA_APPLIED', 72833))
         meters:SkadaSetComplete('Skada_SetComplete', set)
@@ -186,7 +191,7 @@ describe('DPS meter sources', function()
     end)
 
     it('retains ownership of a pet summoned before Skada starts the fight', function()
-        _G.Skada = { current = {}, RegisterCallback = function() end, UnregisterCallback = function() end }
+        _G.Skada = { version = "1.8.78", actorPrototype = { GetDPS = function() end }, current = {}, RegisterCallback = function() end, UnregisterCallback = function() end }
         meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
         meters:handleEvent({ event = 'SPELL_SUMMON', sourceGUID = '0x0000000000000001',
             sourceName = 'Fury', destGUID = '0xF140000123000001' })
@@ -306,17 +311,18 @@ describe('DPS meter sources', function()
         assert.equals(1, #completed)
     end)
 
-    it('does not fall back to Recount when the selected Skada is absent', function()
+    it('falls back to Recount when the selected Skada is absent', function()
         meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
         meters:BossKilled(37813)
         Recount:LeaveCombat(1180)
         assert.is_false(meters:IsAvailable('Skada'))
-        assert.equals(0, #completed)
+        assert.equals('Recount', meters.source)
+        assert.equals(1, #completed)
     end)
 
     it('unregisters Skada when switching and ignores its late completion', function()
         local unregistered = 0
-        _G.Skada = {
+        _G.Skada = { version = "1.8.78", actorPrototype = { GetDPS = function() end },
             RegisterCallback = function() end,
             UnregisterCallback = function(target, event)
                 assert.equals(meters, target)
@@ -410,7 +416,7 @@ describe('DPS meter sources', function()
 
     it('matches alternate NPCs to the same complete Skada encounter', function()
         local set = { gotboss = 39863, starttime = 1000, endtime = 1180, players = {} }
-        _G.Skada = { current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
+        _G.Skada = { version = "1.8.78", actorPrototype = { GetDPS = function() end }, current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
         meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
         meters:BossKilled(40142)
         meters:SkadaSetComplete('Skada_SetComplete', set)
@@ -420,11 +426,153 @@ describe('DPS meter sources', function()
 
     it('uses the confirmed encounter when Skada identifies a vehicle instead of its commander', function()
         local set = { gotboss = true, success = true, starttime = 1000, endtime = 1180, players = {} }
-        _G.Skada = { current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
+        _G.Skada = { version = "1.8.78", actorPrototype = { GetDPS = function() end }, current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
         meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
         meters:BossKilled(36939)
         meters:SkadaSetComplete('Skada_SetComplete', set)
         assert.equals(36939, completed[1].boss)
+    end)
+
+    local function skada(version)
+        return { version = version or "1.8.78", actorPrototype = { GetDPS = function() end },
+            RegisterCallback = function() end, UnregisterCallback = function() end }
+    end
+
+    local function details()
+        local events, removals = {}, {}
+        local combat = {
+            GetActorList = function() return {
+                { nome = "Fury", classe = "WARRIOR", serial = "guid-raid1", grupo = true, total = 3600000 },
+                { nome = "Pet", grupo = true, owner = {}, total = 1000000 },
+                { nome = "Stranger", total = 9000000 }
+            } end,
+            GetCombatTime = function() return 180 end,
+            GetStartTime = function() return 1000 end,
+            GetEndTime = function() return 1180 end
+        }
+        local meter = { APIVersion = 140, current = combat,
+            GetCurrentCombat = function(self) return self.current end,
+            RegisterEvent = function() end, UnregisterEvent = function() end,
+            CreateEventListener = function() return {
+                RegisterEvent = function(_, event, callback) events[event] = callback end,
+                UnregisterEvent = function(_, event) events[event] = nil; removals[#removals + 1] = event end
+            } end }
+        return meter, combat, events, removals
+    end
+
+    it('checks the Skada GetDPS revision boundary and missing APIs', function()
+        for _, version in ipairs({ "1.8.73.360", "1.8.73", "1.8.9", "1.7.99", "unknown" }) do
+            _G.Skada = skada(version)
+            assert.is_false(meters:IsAvailable("Skada"))
+        end
+        for _, version in ipairs({ "1.8.73.361", "1.8.74", "1.8.78", "1.8.87" }) do
+            _G.Skada = skada(version)
+            assert.is_true(meters:IsAvailable("Skada"))
+        end
+        Skada.actorPrototype = nil
+        local available, reason = meters:IsAvailable("Skada")
+        assert.is_false(available)
+        assert.equals("нет нужного API", reason)
+        _G.Skada = skada("1.8.73")
+        local previous = GetAddOnMetadata
+        _G.GetAddOnMetadata = function(name, key)
+            return key == "X-Revision" and "361" or previous(name, key)
+        end
+        assert.is_true(meters:IsAvailable("Skada"))
+    end)
+
+    it('checks Recount packaged revisions and its collection API', function()
+        for _, version in ipairs({ "r1126", "r900", "unknown" }) do
+            Recount.version = version
+            assert.is_false(meters:IsAvailable("Recount"))
+        end
+        for _, version in ipairs({ "r1127", "r1200", "v3.3g" }) do
+            Recount.version = version
+            assert.is_true(meters:IsAvailable("Recount"))
+        end
+        Recount.MergedPetDamageDPS = nil
+        assert.is_false(meters:IsAvailable("Recount"))
+    end)
+
+    it('supports the historical Recount v4.0.1 port only for interface 30300', function()
+        Recount.version = "v4.0.1 release"
+        assert.is_false(meters:IsAvailable("Recount"))
+        local previous = GetAddOnMetadata
+        _G.GetAddOnMetadata = function(name, key)
+            return key == "Interface" and "30300" or previous(name, key)
+        end
+        assert.is_true(meters:IsAvailable("Recount"))
+    end)
+
+    it('preserves a supported choice and falls back in Details Skada Recount order', function()
+        _G.Details = details()
+        _G.Skada = skada()
+        assert.equals("Recount", meters:ResolveSource("Recount"))
+        assert.equals("Skada", meters:ResolveSource("Skada"))
+        assert.equals("Details", meters:ResolveSource(nil))
+        Details.APIVersion = 139
+        assert.equals("Skada", meters:ResolveSource("Details"))
+        Skada.actorPrototype.GetDPS = nil
+        assert.equals("Recount", meters:ResolveSource("Details"))
+        Recount.LeaveCombat = nil
+        assert.equals("ErrorDPSCounter", meters:ResolveSource("Details"))
+        _G.Details, _G.Skada, _G.Recount = nil, nil, nil
+        assert.equals("ErrorDPSCounter", meters:ResolveSource(nil))
+    end)
+
+    it('logs every ErrorDPSCounter action without publishing results or installing hooks', function()
+        _G.Recount = nil
+        local messages = {}
+        addon.Debug = function(_, message) messages[#messages + 1] = message end
+        local before = hooks
+        meters:Start("Skada", function(fight) completed[#completed + 1] = fight end)
+        meters:handleEvent({ event = "SPELL_DAMAGE" })
+        meters:BossKilled(37813)
+        meters:SkadaSetComplete("Skada_SetComplete", {})
+        meters:RecountFightComplete({}, 1180)
+        meters:DetailsFightComplete({})
+        meters:Stop()
+        assert.equals(before, hooks)
+        assert.equals(0, #completed)
+        assert.equals(7, #messages)
+        for _, message in ipairs(messages) do assert.is_not_nil(message:find("неправильная версия", 1, true)) end
+    end)
+
+    it('collects a Details victory with pets merged and unregisters on source change', function()
+        local combat, events, removals
+        _G.Details, combat, events, removals = details()
+        meters:Start("Details", function(fight) completed[#completed + 1] = fight end)
+        local expected = oozeEvents()
+        meters:BossKilled(36678)
+        specs.raid1 = 71
+        events.COMBAT_PLAYER_LEAVE("COMBAT_PLAYER_LEAVE", combat)
+        assert.equals(1, #completed)
+        local fight = completed[1]
+        assert.equals("Details", fight.source)
+        assert.same(expected, fight.oozeDamage)
+        assert.same({ { name = "Fury", class = "WARRIOR", spec = 72, dps = 20000 } }, fight.players)
+        assert.equals(180, fight.endtime - fight.starttime)
+        events.COMBAT_PLAYER_LEAVE("COMBAT_PLAYER_LEAVE", combat)
+        assert.equals(1, #completed)
+        meters:Start("Recount", function() end)
+        assert.equals(3, #removals)
+        assert.same({}, events)
+    end)
+
+    it('ignores Details wipes, replaced segments and resets', function()
+        local combat, events
+        _G.Details, combat, events = details()
+        meters:Start("Details", function(fight) completed[#completed + 1] = fight end)
+        events.COMBAT_PLAYER_LEAVE("COMBAT_PLAYER_LEAVE", combat)
+        meters:BossKilled(37813)
+        events.COMBAT_PLAYER_LEAVE("COMBAT_PLAYER_LEAVE", {})
+        assert.equals(0, #completed)
+        for _, event in ipairs({ "DETAILS_DATA_RESET", "COMBAT_PLAYER_ENTER" }) do
+            meters:BossKilled(37813)
+            events[event](event)
+            events.COMBAT_PLAYER_LEAVE("COMBAT_PLAYER_LEAVE", combat)
+        end
+        assert.equals(0, #completed)
     end)
 
 end)

@@ -8,6 +8,23 @@ local GAS_BLOAT = { [70672] = true, [72455] = true, [72832] = true, [72833] = tr
 local DAMAGE_EVENTS = { SWING_DAMAGE = true, RANGE_DAMAGE = true, SPELL_DAMAGE = true,
     SPELL_PERIODIC_DAMAGE = true, DAMAGE_SHIELD = true }
 
+-- Supported API baselines, verified against the upstream source snapshots.
+-- Skada 1.8.73 r361 introduced actorPrototype:GetDPS (r360 has no method).
+-- Recount r1127 is the verified 3.3.5a baseline (X-Curse-Packaged-Version).
+-- Details-WotLK exposes its plugin API version independently of its build number.
+DPSMeters.sources = { "Details", "Skada", "Recount" }
+DPSMeters.requirements = "Поддерживаемые версии для WoW 3.3.5a:\nSkada: 1.8.73 (r361) и новее.\nRecount: r1127+ или v3.3 / v4.0.1.\nDetails: API 140 и новее."
+
+local ErrorDPSCounter = {}
+function ErrorDPSCounter:Report(action)
+    RLHelper:Debug("ErrorDPSCounter: " .. action ..
+        ": нет совместимого DPS-аддона (не установлен или неправильная версия). " .. DPSMeters.requirements)
+end
+
+local function metadata(source, key)
+    return GetAddOnMetadata and GetAddOnMetadata(source, key)
+end
+
 DPSMeters.receivesCombatEvents = true
 DPSMeters.zoneGateInstanceId = RLHelperBossIds.INSTANCES.ICECROWN_CITADEL
 
@@ -17,9 +34,11 @@ end
 
 -- Meter totals merge enemies by name. Keep separate GUIDs for repeated ooze spawns.
 function DPSMeters:handleEvent(event)
+    if self.source == "ErrorDPSCounter" then ErrorDPSCounter:Report(event.event); return end
     if not self.complete or RLHelper.currentInstanceId ~= self.zoneGateInstanceId then return end
     local segment, number
-    if self.source == "Skada" and Skada then segment = Skada.current
+    if self.source == "Details" and Details then segment = Details:GetCurrentCombat()
+    elseif self.source == "Skada" and Skada then segment = Skada.current
     elseif self.source == "Recount" and Recount and Recount.InCombat then
         segment, number = Recount.db2, Recount.db2.FightNum
     end
@@ -64,16 +83,64 @@ end
 -- Sources publish plain completed fights: source, boss, starttime, endtime,
 -- players = { { name, class, spec, dps } }. Award rules belong to the consumer.
 function DPSMeters:IsAvailable(source)
-    if source == "Skada" then
-        return Skada ~= nil and type(Skada.RegisterCallback) == "function"
+    local meter = _G[source]
+    if not meter then return false, "не загружен" end
+    local api, versionOK
+    if source == "Details" then
+        local combat = type(meter.GetCurrentCombat) == "function" and meter:GetCurrentCombat()
+        api = type(meter.CreateEventListener) == "function" and type(meter.RegisterEvent) == "function" and
+            type(meter.UnregisterEvent) == "function" and combat and
+            type(combat.GetActorList) == "function" and type(combat.GetCombatTime) == "function" and
+            type(combat.GetStartTime) == "function" and type(combat.GetEndTime) == "function"
+        versionOK = (tonumber(meter.APIVersion) or 0) >= 140
+    elseif source == "Skada" then
+        local version = metadata(source, "Version") or meter.version or ""
+        local major, minor, patch, revision = tostring(version):match("^(%d+)%.(%d+)%.(%d+)%.?(%d*)")
+        major, minor, patch = tonumber(major), tonumber(minor), tonumber(patch)
+        revision = tonumber(revision) or tonumber(metadata(source, "X-Revision")) or 0
+        versionOK = major and (major > 1 or (major == 1 and
+            (minor > 8 or (minor == 8 and (patch > 73 or (patch == 73 and revision >= 361))))))
+        api = type(meter.RegisterCallback) == "function" and type(meter.UnregisterCallback) == "function" and
+            meter.actorPrototype and type(meter.actorPrototype.GetDPS) == "function"
     elseif source == "Recount" then
-        return Recount ~= nil and type(Recount.LeaveCombat) == "function" and
-            type(Recount.MergedPetDamageDPS) == "function" and Recount.db2 ~= nil
+        local version = metadata(source, "X-Curse-Packaged-Version") or metadata(source, "Version") or ""
+        local revision = tonumber(tostring(version):match("^[rR](%d+)"))
+        local major, minor, patch = tostring(version):match("^[vV]?(%d+)%.(%d+)%.?(%d*)")
+        -- Historical release names and 30300 ports must still expose the collection API.
+        major, minor, patch = tonumber(major), tonumber(minor), tonumber(patch)
+        versionOK = (revision and revision >= 1127) or (major == 3 and minor == 3) or
+            (major == 4 and minor == 0 and patch == 1 and tostring(metadata(source, "Interface")) == "30300")
+        api = type(meter.LeaveCombat) == "function" and type(meter.MergedPetDamageDPS) == "function" and
+            type(meter.db2) == "table" and type(meter.db2.combatants) == "table" and
+            type(meter.db2.FightNum) == "number"
     end
-    return false
+    if not versionOK then return false, "неподходящая версия" end
+    if not api then return false, "нет нужного API" end
+    return true
+end
+
+function DPSMeters:ResolveSource(source)
+    if self:IsAvailable(source) then return source end
+    for _, candidate in ipairs(self.sources) do
+        if self:IsAvailable(candidate) then return candidate end
+    end
+    return "ErrorDPSCounter"
+end
+
+function DPSMeters:GetSourceText(source)
+    if source == "ErrorDPSCounter" then return "|cffff3333Нет источника DPS|r" end
+    local available = self:IsAvailable(source)
+    return available and source or ("|cffff3333" .. source .. "|r")
 end
 
 function DPSMeters:Stop()
+    if self.source == "ErrorDPSCounter" then ErrorDPSCounter:Report("Stop") end
+    if self.detailsListener then
+        for _, event in ipairs({ "COMBAT_PLAYER_LEAVE", "COMBAT_PLAYER_ENTER", "DETAILS_DATA_RESET" }) do
+            self.detailsListener:UnregisterEvent(event)
+        end
+        self.detailsListener = nil
+    end
     if self.skada then
         self.skada.UnregisterCallback(self, "Skada_SetComplete")
         self.skada = nil
@@ -88,9 +155,10 @@ end
 
 function DPSMeters:Start(source, complete)
     self:Stop()
-    self.source, self.complete = source, complete
+    self.source, self.complete = self:ResolveSource(source), complete
+    source = self.source
+    if source == "ErrorDPSCounter" then ErrorDPSCounter:Report("Start"); return end
     self:RegisterMessage("COMBAT_BOSS_DEFEATED", "SkadaSetComplete")
-    if not self:IsAvailable(source) then return end
     if DBM and type(DBM.RegisterCallback) == "function" and type(DBM.UnregisterCallback) == "function" then
         self.dbmKill = self.dbmKill or function(_, mod)
             local npc = mod and (mod.creatureId or (mod.combatInfo and mod.combatInfo.mob))
@@ -100,7 +168,15 @@ function DPSMeters:Start(source, complete)
         self.dbm = DBM
         DBM:RegisterCallback("DBM_Kill", self.dbmKill)
     end
-    if source == "Skada" then
+    if source == "Details" then
+        self.detailsListener = Details:CreateEventListener()
+        self.detailsListener:RegisterEvent("COMBAT_PLAYER_LEAVE", function(_, combat) self:DetailsFightComplete(combat) end)
+        for _, event in ipairs({ "COMBAT_PLAYER_ENTER", "DETAILS_DATA_RESET" }) do
+            self.detailsListener:RegisterEvent(event, function()
+                self.killed, self.oozeSegment, self.oozeDamage, self.gasTargets, self.petOwners = nil, nil, nil, nil, nil
+            end)
+        end
+    elseif source == "Skada" then
         self.skada = Skada
         Skada.RegisterCallback(self, "Skada_SetComplete", "SkadaSetComplete")
     elseif self.hookedRecount ~= Recount then
@@ -119,7 +195,21 @@ function DPSMeters:Start(source, complete)
 end
 
 function DPSMeters:BossKilled(boss)
-    if self.source == "Skada" and Skada then
+    if self.source == "ErrorDPSCounter" then ErrorDPSCounter:Report("BossKilled"); return end
+    if self.source == "Details" and Details then
+        local combat, specs = Details:GetCurrentCombat(), {}
+        for i = 1, GetNumRaidMembers() do
+            local unit = "raid" .. i
+            local guid = UnitGUID(unit)
+            if guid then
+                local _, class = UnitClass(unit)
+                specs[guid] = RLHelper.GetUnitSpec(unit, class)
+            end
+        end
+        self.killed = { boss = boss, set = combat, specs = specs,
+            oozeDamage = boss == PUTRICIDE and self.oozeSegment == combat and self.oozeDamage or nil,
+            gasTargets = boss == PUTRICIDE and self.oozeSegment == combat and self.gasTargets or nil }
+    elseif self.source == "Skada" and Skada then
         self.killed = { boss = boss, set = Skada.current,
             oozeDamage = boss == PUTRICIDE and self.oozeSegment == Skada.current and self.oozeDamage or nil,
             gasTargets = boss == PUTRICIDE and self.oozeSegment == Skada.current and self.gasTargets or nil }
@@ -144,6 +234,7 @@ function DPSMeters:BossKilled(boss)
 end
 
 function DPSMeters:SkadaSetComplete(_, set)
+    if self.source == "ErrorDPSCounter" then ErrorDPSCounter:Report("SkadaSetComplete"); return end
     local encounters = RLHelperBossIds.DPS_ENCOUNTER_BY_NPC
     local killedEncounter = self.killed and encounters[self.killed.boss]
     local setEncounter = set and encounters[set.gotboss]
@@ -173,6 +264,7 @@ function DPSMeters:SkadaSetComplete(_, set)
 end
 
 function DPSMeters:RecountFightComplete(recount, finish)
+    if self.source == "ErrorDPSCounter" then ErrorDPSCounter:Report("RecountFightComplete"); return end
     if self.source ~= "Recount" or not self.complete or recount ~= Recount then return end
     local killed = self.killed
     self.killed = nil
@@ -188,6 +280,28 @@ function DPSMeters:RecountFightComplete(recount, finish)
             local _, dps = recount:MergedPetDamageDPS(player, "LastFightData")
             fight.players[#fight.players + 1] = { name = player.Name or name, class = player.enClass,
                 spec = killed.specs[player.GUID], dps = dps }
+        end
+    end
+    self.complete(fight)
+end
+
+function DPSMeters:DetailsFightComplete(combat)
+    if self.source == "ErrorDPSCounter" then ErrorDPSCounter:Report("DetailsFightComplete"); return end
+    if self.source ~= "Details" or not self.complete then return end
+    local killed = self.killed
+    self.killed = nil
+    if not combat or not killed or killed.set ~= combat or not combat:GetEndTime() then return end
+    local duration = combat:GetCombatTime()
+    if duration <= 0 then return end
+    -- Details uses GetTime() for segment bounds; persist epoch timestamps like the other sources.
+    local finish = time() - (GetTime() - combat:GetEndTime())
+    local fight = { source = "Details", boss = killed.boss, starttime = finish - duration,
+        endtime = finish, players = {}, oozeDamage = killed.oozeDamage, gasTargets = killed.gasTargets }
+    for _, player in ipairs(combat:GetActorList(1)) do
+        -- Group actors already include their pets' damage in total.
+        if player.grupo and not player.owner then
+            fight.players[#fight.players + 1] = { name = player.nome, class = player.classe,
+                spec = killed.specs[player.serial] or player.spec, dps = player.total / duration }
         end
     end
     self.complete(fight)

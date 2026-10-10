@@ -15,7 +15,7 @@ describe('EP awards', function()
         original = { db = addon.db, instance = addon.currentInstanceId, show = awards.ShowReminder,
             getAddon = mocks.GetAddon, time = time, date = date, leader = IsRaidLeader,
             raid = GetNumRaidMembers, createFrame = CreateFrame, categories = InterfaceOptions_AddCategory,
-            skada = _G.Skada, main = addon.mainFrame, themeButtons = addon.themeButtons, print = addon.Print }
+            skada = _G.Skada, main = addon.mainFrame, themeButtons = addon.themeButtons, print = addon.Print, metadata = GetAddOnMetadata }
         now = at(27, 19, 0)
         _G.time = function(value) return value and os.time(value) or now end
         _G.date = function(format, value) return os.date(format, value or now) end
@@ -25,7 +25,11 @@ describe('EP awards', function()
         local settings = awards:GetSettings()
         settings.amounts = { attendance = 1000, icc = 2000, rs = 1500 }
         shown, calls = {}, {}
-        _G.Skada = nil
+        _G.GetAddOnMetadata = function(name, key)
+            return name == "Skada" and key == "Version" and "1.8.78" or nil
+        end
+        _G.Skada = { actorPrototype = { GetDPS = function() end },
+            RegisterCallback = function() end, UnregisterCallback = function() end }
         meters:Stop()
         awards.active = nil
         awards.dpsWindow = nil
@@ -56,7 +60,7 @@ describe('EP awards', function()
         _G.time, _G.date, _G.IsRaidLeader, _G.GetNumRaidMembers = original.time, original.date, original.leader, original.raid
         awards.window, awards.popups, awards.pending, awards.callbackSource = nil, nil, nil, nil
         addon.modules.EPAwards = nil
-        _G.Skada = original.skada
+        _G.Skada, _G.GetAddOnMetadata = original.skada, original.metadata
         awards.active = nil
         awards.dpsWindow = nil
         awards.individualCallbackSource, awards.pendingIndividual = nil, nil
@@ -224,7 +228,7 @@ describe('EP awards', function()
         return frames
     end
 
-    it('selects a persistent DPS source in shared settings and labels an unavailable addon', function()
+    it('shows incompatible sources in red and requirements below the selector', function()
         local frames = installFrames()
         awards:CreateSettings({}, {})
         local dropdown
@@ -232,27 +236,60 @@ describe('EP awards', function()
             if frame.name == 'RLHelperDPSSourceDropdown' then dropdown = frame end
         end
         assert.equals('Skada', awards:GetSettings().dpsSource)
-        assert.equals('Skada (не загружен)', dropdown.text)
+        assert.equals('Skada', dropdown.text)
         local addButton, choices = UIDropDownMenu_AddButton, {}
         _G.UIDropDownMenu_AddButton = function(info) choices[#choices + 1] = info end
         dropdown.initialize()
         _G.UIDropDownMenu_AddButton = addButton
-        assert.equals(2, #choices)
-        assert.equals('Skada', choices[1].value)
-        assert.equals('Recount', choices[2].value)
-        assert.is_true(choices[1].checked)
-        choices[2].func()
-        assert.equals('Recount', awards:GetSettings().dpsSource)
+        assert.equals(3, #choices)
+        assert.equals('Details', choices[1].value)
+        assert.equals('Skada', choices[2].value)
+        assert.equals('Recount', choices[3].value)
+        assert.is_true(choices[2].checked)
+        assert.is_true(choices[1].disabled)
+        assert.equals('|cffff3333Details|r', choices[1].text)
+        assert.is_false(choices[2].disabled)
+        assert.is_truthy(awards.options.sourceHelp.text:find('Skada: 1.8.73 (r361)', 1, true))
+        assert.is_truthy(awards.options.sourceHelp.text:find('Recount: r1127', 1, true))
+        assert.is_true(16 + awards.options.sourceHelp.width <= 375 - 10)
+        _G.Skada = nil
+        awards:GetSettings().dpsSource = 'Skada'
+        awards:OnEnable()
+        assert.equals('ErrorDPSCounter', awards:GetSettings().dpsSource)
         awards.options.scripts.OnShow()
-        assert.is_truthy(dropdown.text:find('Recount', 1, true))
-        -- Saved selections survive creation of a fresh settings panel.
-        local newFrames = installFrames()
-        awards:CreateSettings({}, {})
-        for _, frame in ipairs(newFrames) do
-            if frame.name == 'RLHelperDPSSourceDropdown' then
-                assert.is_truthy(frame.text:find('Recount', 1, true))
-            end
+        assert.equals('|cffff3333Нет источника DPS|r', dropdown.text)
+    end)
+
+    it('sizes the source row and help from the live scroll viewport width', function()
+        local frames = installFrames()
+        local viewport = { GetWidth = function() return 345 end }
+        awards:CreateSettings({ GetParent = function() return viewport end }, {})
+        local dropdown
+        for _, frame in ipairs(frames) do
+            if frame.name == 'RLHelperDPSSourceDropdown' then dropdown = frame end
         end
+        assert.equals(16 + 134 + dropdown.dropdownWidth + 50, 345 - 10)
+        assert.equals(345 - 16 - 10, awards.options.sourceHelp.width)
+    end)
+
+    it('uses a visible width before the category opens and remeasures on show', function()
+        local frames = installFrames()
+        local width = 0
+        local viewport = { GetWidth = function() return width end }
+        awards:CreateSettings({ GetParent = function() return viewport end }, {})
+        local dropdown
+        for _, frame in ipairs(frames) do
+            if frame.name == 'RLHelperDPSSourceDropdown' then dropdown = frame end
+        end
+        assert.equals(165, dropdown.dropdownWidth)
+        assert.equals(349, awards.options.sourceHelp.width)
+        width = 375
+        awards.options.scripts.OnShow()
+        assert.equals(165, dropdown.dropdownWidth)
+        width = 345
+        awards.options.scripts.OnShow()
+        assert.equals(135, dropdown.dropdownWidth)
+        assert.equals(319, awards.options.sourceHelp.width)
     end)
 
     it('creates the compact icon, movable reminder and shared manual award status', function()
@@ -386,6 +423,7 @@ describe('EP awards', function()
                 names[f.name] = true
                 count = count + 1
                 assert.equals(90, f.width)
+
             end
         end
         assert.equals(38, count)
@@ -445,7 +483,8 @@ describe('EP awards', function()
             players = { player('Fury', 72, 10000), player('Arms', 71, 9900),
                 player('Below', 72, 9899.9), player('NoThreshold', 73, 20000),
                 player('Unknown', nil, 20000), player('Unholy', 252, 12000, 'DEATHKNIGHT') } }
-        _G.Skada = { current = set }
+        _G.Skada = { current = set, actorPrototype = { GetDPS = function() end },
+            RegisterCallback = function() end, UnregisterCallback = function() end }
         awards:GetSettings().dpsBosses[37813] = { [71] = 10000, [72] = 10000, [252] = 12500 }
         return set
     end

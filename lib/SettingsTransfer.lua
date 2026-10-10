@@ -45,7 +45,7 @@ local function valid(value, descriptor)
     end
     if type(value) ~= "string" or #value > 4096 or value:find("%c") then return false end
     if kind == "theme" then return value == "current" or value == "minimal" end
-    if kind == "source" then return value == "Skada" or value == "Recount" end
+    if kind == "source" then return value == "Details" or value == "Skada" or value == "Recount" or value == "ErrorDPSCounter" end
     if kind == "point" then return points[value] == true end
     if kind == "time" then
         local h, m = value:match("^(%d%d):(%d%d)$")
@@ -191,7 +191,7 @@ function Transfer.Decode(text)
     end
     if profile.epAwards then
         local ep = profile.epAwards
-        ep.rt, ep.dpsSource = ep.rt or "19:00", ep.dpsSource or "Skada"
+        ep.rt, ep.dpsSource = ep.rt or "19:00", ep.dpsSource or "Details"
         ep.amounts, ep.reminders = ep.amounts or {}, ep.reminders or {}
         if not ep.dpsBosses then ep.saurfangThresholds = ep.saurfangThresholds or {} end
     end

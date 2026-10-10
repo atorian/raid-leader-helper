@@ -127,6 +127,64 @@ describe('DPS meter sources', function()
         assert.same({ ['0xF130009341000004'] = {} }, completed[1].oozeDamage)
     end)
 
+    local function gasEvent(kind, spell, name)
+        return { event = kind, spellId = spell, sourceGUID = '0xF1300092BA000004',
+            destGUID = '0x0000000000000001', destName = name or 'Fury' }
+    end
+
+    it('counts gas targeting applications across difficulties but ignores ticks, stacks and other gas', function()
+        for _, spell in ipairs({ 70672, 72455, 72832, 72833 }) do
+            meters:handleEvent(gasEvent('SPELL_AURA_APPLIED', spell))
+            for _, kind in ipairs({ 'SPELL_AURA_REFRESH', 'SPELL_AURA_APPLIED_DOSE',
+                'SPELL_AURA_REMOVED_DOSE', 'SPELL_PERIODIC_DAMAGE', 'SPELL_AURA_REMOVED' }) do
+                meters:handleEvent(gasEvent(kind, spell))
+            end
+        end
+        meters:handleEvent(gasEvent('SPELL_AURA_APPLIED', 72833, 'Arms'))
+        meters:handleEvent(gasEvent('SPELL_AURA_APPLIED', 72553)) -- Festergut.
+        meters:handleEvent(gasEvent('SPELL_AURA_APPLIED', 71278)) -- Choking Gas.
+        meters:handleEvent(gasEvent('SPELL_AURA_APPLIED', 72860)) -- Cloud self-buff.
+        meters:BossKilled(36678)
+        Recount:LeaveCombat(1180)
+        assert.same({ Fury = 4, Arms = 1 }, completed[1].gasTargets)
+    end)
+
+    it('saves Skada gas targets at the kill and clears them for the next segment and on stop', function()
+        local set = { gotboss = 36678, success = true, starttime = 1000, endtime = 1180, players = {} }
+        _G.Skada = { current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
+        meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
+        meters:handleEvent(gasEvent('SPELL_AURA_APPLIED', 72833))
+        meters:BossKilled(36678)
+        Skada.current = {}
+        meters:handleEvent(gasEvent('SPELL_AURA_APPLIED', 72833, 'Arms'))
+        Skada.last = set
+        meters:SkadaSetComplete('Skada_SetComplete', set)
+        assert.same({ Fury = 1 }, completed[1].gasTargets)
+        assert.same({ Arms = 1 }, meters.gasTargets)
+        meters:Stop()
+        assert.is_nil(meters.gasTargets)
+    end)
+
+    it('saves Skada gas targets without a kill callback and discards Recount wipe and reset targets', function()
+        meters:handleEvent(gasEvent('SPELL_AURA_APPLIED', 72833))
+        Recount:LeaveCombat(1180)
+        Recount.InCombat, Recount.InCombatT = true, 1200
+        meters:handleEvent({ event = 'UNIT_DIED', destGUID = '0xF130009341000001' })
+        meters:BossKilled(36678)
+        Recount:LeaveCombat(1380)
+        assert.same({}, completed[1].gasTargets)
+        Recount.InCombat = true
+        meters:handleEvent(gasEvent('SPELL_AURA_APPLIED', 72833))
+        Recount:ResetData()
+        assert.is_nil(meters.gasTargets)
+        local set = { gotboss = 36678, success = true, starttime = 1400, endtime = 1580, players = {} }
+        _G.Skada = { current = set, RegisterCallback = function() end, UnregisterCallback = function() end }
+        meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
+        meters:handleEvent(gasEvent('SPELL_AURA_APPLIED', 72833))
+        meters:SkadaSetComplete('Skada_SetComplete', set)
+        assert.same({ Fury = 1 }, completed[2].gasTargets)
+    end)
+
     it('retains ownership of a pet summoned before Skada starts the fight', function()
         _G.Skada = { current = {}, RegisterCallback = function() end, UnregisterCallback = function() end }
         meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)

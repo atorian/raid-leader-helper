@@ -837,7 +837,7 @@ describe('EP awards', function()
         return fight
     end
 
-    it('requires damage to every ooze, regardless of class, spec, boss DPS or total add damage', function()
+    it('requires total ooze damage, regardless of its distribution, class, spec or boss DPS', function()
         installFrames()
         individualEPGP()
         awards:DPSFightComplete(putricideFight())
@@ -847,18 +847,18 @@ describe('EP awards', function()
         assert.equals(4, snapshot.oozeCount)
         local players = {}
         for _, player in ipairs(snapshot.players) do players[player.name] = player end
-        assert.equals(100000, players.All.oozeMin)
-        assert.equals(99999, players.Uneven.oozeMin)
-        assert.equals(0, players.Skipped.oozeMin)
+        assert.equals(400000, players.All.oozeTotal)
+        assert.equals(699999, players.Uneven.oozeTotal)
+        assert.equals(600000, players.Skipped.oozeTotal)
         awards:ShowDPSWindow(36678)
-        assert.same({ All = true, NoSpec = true }, awards.dpsWindow.selected)
-        assert.equals('Мин. урон', awards.dpsWindow.valueHeader.text)
+        assert.same({ All = true, NoSpec = true, Uneven = true, Skipped = true }, awards.dpsWindow.selected)
+        assert.equals('Общий урон', awards.dpsWindow.valueHeader.text)
         assert.is_false(awards.dpsWindow.plusButton:IsShown())
         assert.is_true(awards:AwardDPS(snapshot, { All = true, NoSpec = true, Uneven = true, Skipped = true }, -999999))
-        assert.equals(2, #calls)
+        assert.equals(4, #calls)
         local names = {}
         for _, call in ipairs(calls) do names[call[1]] = call[3] end
-        assert.same({ All = 500, NoSpec = 500 }, names)
+        assert.same({ All = 500, NoSpec = 500, Uneven = 500, Skipped = 500 }, names)
     end)
 
     it('freezes the chosen ooze condition, threshold and per-spawn damage for later awards', function()
@@ -872,14 +872,78 @@ describe('EP awards', function()
         awards:GetSettings().putricideMode = 'boss'
         awards:GetSettings().putricideOozeDamage = 1
         for _, damage in pairs(fight.oozeDamage) do damage.All = 999999 end
-        assert.equals(100000, snapshot.players[1].oozeMin)
+        local players = {}
+        for _, player in ipairs(snapshot.players) do players[player.name] = player end
+        assert.equals(400000, players.All.oozeTotal)
         _G.Skada = nil
         now = at(28, 20, 0)
         awards:GetState()
         awards:ShowDPSWindow(36678)
-        assert.equals('Минимум урона каждому слизню: 120000', awards.dpsWindow.adjustment.text)
+        assert.equals('Урон на призыв: 120000. Цель газа: -100000.', awards.dpsWindow.adjustment.text)
         assert.is_false(awards:AwardDPS(snapshot, { All = true }, -999999))
         assert.equals(0, #calls)
+    end)
+
+    it('reduces each player total threshold by 100000 per gas targeting and shows it in the row', function()
+        installFrames()
+        individualEPGP()
+        local fight = putricideFight()
+        fight.gasTargets = { All = 1, NoSpec = 1, Skipped = 2 }
+        for _, damage in pairs(fight.oozeDamage) do
+            damage.All, damage.NoSpec = 75000, 75000
+        end
+        fight.oozeDamage['0xF1300092BA000004'].NoSpec = 74999
+        awards:DPSFightComplete(fight)
+        local snapshot = awards:GetDPSResults()[36678]
+        fight.gasTargets.All = 99
+        awards:GetSettings().putricideOozeDamage = 999999
+        _G.Skada = nil
+        awards:ShowDPSWindow(36678)
+        assert.same({ All = true, Uneven = true, Skipped = true }, awards.dpsWindow.selected)
+        local rows = {}
+        for _, row in ipairs(awards.dpsWindow.rows) do rows[row.player.name] = row end
+        assert.equals('300000', rows.All.cells[3].text)
+        assert.equals('300000', rows.All.cells[4].text)
+        assert.equals('400000', rows.Uneven.cells[4].text)
+        assert.equals('200000', rows.Skipped.cells[4].text)
+        assert.equals(1, rows.All.player.gasTargets)
+        assert.is_false(awards:AwardDPS(snapshot, { NoSpec = true }))
+        assert.is_true(awards:AwardDPS(snapshot, { All = true }))
+        assert.equals(1, #calls)
+    end)
+
+    it('clamps gas reductions at zero without enabling disabled or unobserved ooze awards', function()
+        installFrames()
+        individualEPGP()
+        local fight = putricideFight()
+        fight.gasTargets = { All = 5 }
+        for _, damage in pairs(fight.oozeDamage) do damage.All = 0 end
+        awards:DPSFightComplete(fight)
+        awards:ShowDPSWindow(36678)
+        local row
+        for _, candidate in ipairs(awards.dpsWindow.rows) do
+            if candidate.player.name == 'All' then row = candidate end
+        end
+        assert.equals('0', row.cells[4].text)
+        assert.is_true(awards:AwardDPS(awards:GetDPSResults()[36678], { All = true }))
+        for _, disabled in ipairs({ false, true }) do
+            awards:GetDPSResults()[36678] = nil
+            if disabled then awards:GetSettings().putricideOozeDamage = 0 else fight.oozeDamage = nil end
+            awards:DPSFightComplete(fight)
+            assert.is_false(awards:AwardDPS(awards:GetDPSResults()[36678], { All = true }))
+        end
+        assert.equals(1, #calls)
+    end)
+
+    it('shows total damage from saved per-ooze results that predate gas target tracking', function()
+        installFrames()
+        local snapshot = { boss = 36678, source = 'Skada', mode = 'ooze', oozeCount = 4,
+            oozeThreshold = 100000, endtime = now, players = { { name = 'Old', class = 'HUNTER',
+                oozeMin = 0, oozeDamage = { a = 400000, b = 0, c = 0, d = 0 } } } }
+        awards:GetDPSResults()[36678] = snapshot
+        awards:ShowDPSWindow(36678)
+        assert.equals('400000', awards.dpsWindow.rows[1].cells[3].text)
+        assert.equals('400000', awards.dpsWindow.rows[1].cells[4].text)
     end)
 
     it('never qualifies an ooze award with missing data or a disabled damage threshold', function()

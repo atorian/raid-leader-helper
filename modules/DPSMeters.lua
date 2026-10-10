@@ -3,6 +3,8 @@ local DPSMeters = RLHelper:NewModule("DPSMeters", "AceEvent-3.0")
 local PUTRICIDE = RLHelperBossIds.NPCS.PROFESSOR_PUTRICIDE
 -- Неустойчивый слизнюк and Облако газа, checked on wotlk.ezhead.org.
 local OOZE_NPCS = { [37697] = true, [37562] = true }
+-- Gas Cloud target debuffs, checked on wotlk.ezhead.org.
+local GAS_BLOAT = { [70672] = true, [72455] = true, [72832] = true, [72833] = true }
 local DAMAGE_EVENTS = { SWING_DAMAGE = true, RANGE_DAMAGE = true, SPELL_DAMAGE = true,
     SPELL_PERIODIC_DAMAGE = true, DAMAGE_SHIELD = true }
 
@@ -24,11 +26,15 @@ function DPSMeters:handleEvent(event)
     if not segment then return end
     if self.oozeSegment ~= segment or self.oozeNumber ~= number then
         self.oozeSegment, self.oozeNumber = segment, number
-        self.oozeDamage = {}
+        self.oozeDamage, self.gasTargets = {}, {}
         self.petOwners = self.petOwners or {}
     end
     for _, guid in pairs({ event.sourceGUID, event.destGUID }) do
         if isOoze(guid) then self.oozeDamage[guid] = self.oozeDamage[guid] or {} end
+    end
+    if event.event == "SPELL_AURA_APPLIED" and GAS_BLOAT[event.spellId] and event.destName and
+        event.destGUID and event.destGUID:sub(1, 6) == "0x0000" then
+        self.gasTargets[event.destName] = (self.gasTargets[event.destName] or 0) + 1
     end
     if event.event ~= "SPELL_SUMMON" and not (DAMAGE_EVENTS[event.event] and isOoze(event.destGUID)) then return end
     local owners = self.petOwners
@@ -77,7 +83,7 @@ function DPSMeters:Stop()
         self.dbm = nil
     end
     self.source, self.complete, self.killed = nil, nil, nil
-    self.oozeSegment, self.oozeNumber, self.oozeDamage, self.petOwners = nil, nil, nil, nil
+    self.oozeSegment, self.oozeNumber, self.oozeDamage, self.gasTargets, self.petOwners = nil, nil, nil, nil, nil
 end
 
 function DPSMeters:Start(source, complete)
@@ -104,7 +110,7 @@ function DPSMeters:Start(source, complete)
         if type(recount.ResetData) == "function" then
             hooksecurefunc(recount, "ResetData", function()
                 if self.source == "Recount" then
-                    self.killed, self.oozeSegment, self.oozeDamage, self.petOwners = nil, nil, nil, nil
+                    self.killed, self.oozeSegment, self.oozeDamage, self.gasTargets, self.petOwners = nil, nil, nil, nil, nil
                 end
             end)
         end
@@ -115,7 +121,8 @@ end
 function DPSMeters:BossKilled(boss)
     if self.source == "Skada" and Skada then
         self.killed = { boss = boss, set = Skada.current,
-            oozeDamage = boss == PUTRICIDE and self.oozeSegment == Skada.current and self.oozeDamage or nil }
+            oozeDamage = boss == PUTRICIDE and self.oozeSegment == Skada.current and self.oozeDamage or nil,
+            gasTargets = boss == PUTRICIDE and self.oozeSegment == Skada.current and self.gasTargets or nil }
     elseif self.source == "Recount" and self:IsAvailable("Recount") and Recount.InCombat then
         local specs = {}
         -- Freeze specs at the kill, before players can change talents after combat.
@@ -130,7 +137,9 @@ function DPSMeters:BossKilled(boss)
         self.killed = { boss = boss, db = Recount.db2, number = Recount.db2.FightNum,
             starttime = Recount.InCombatT, specs = specs,
             oozeDamage = boss == PUTRICIDE and self.oozeSegment == Recount.db2 and
-                self.oozeNumber == Recount.db2.FightNum and self.oozeDamage or nil }
+                self.oozeNumber == Recount.db2.FightNum and self.oozeDamage or nil,
+            gasTargets = boss == PUTRICIDE and self.oozeSegment == Recount.db2 and
+                self.oozeNumber == Recount.db2.FightNum and self.gasTargets or nil }
     end
 end
 
@@ -152,6 +161,8 @@ function DPSMeters:SkadaSetComplete(_, set)
     if boss == PUTRICIDE then
         fight.oozeDamage = confirmedKill and self.killed.oozeDamage or
             (self.oozeSegment == set and self.oozeDamage or nil)
+        fight.gasTargets = confirmedKill and self.killed.gasTargets or
+            (self.oozeSegment == set and self.gasTargets or nil)
     end
     for _, player in ipairs(set.players or {}) do
         fight.players[#fight.players + 1] = { name = player.name, class = player.class, spec = player.spec,
@@ -170,7 +181,7 @@ function DPSMeters:RecountFightComplete(recount, finish)
     if not killed or killed.db ~= recount.db2 or killed.starttime ~= recount.InCombatT or
         recount.db2.FightNum ~= killed.number + 1 or recount.InCombat then return end
     local fight = { source = "Recount", boss = killed.boss, starttime = killed.starttime,
-        endtime = finish, players = {}, oozeDamage = killed.oozeDamage }
+        endtime = finish, players = {}, oozeDamage = killed.oozeDamage, gasTargets = killed.gasTargets }
     for name, player in pairs(recount.db2.combatants) do
         if (player.type == "Self" or player.type == "Grouped") and player.LastFightIn == killed.number and
             player.Fights and player.Fights.LastFightData then

@@ -128,3 +128,7 @@
 - Keep mass EP award labels minimal: «Приход», «ЦЛК», «РС», «ИКВ», as requested on 2026-10-10. Settings show only the label; reminders show the label and amount. Do not expand them into attendance or raid-completion sentences.
 
 - When removing a feature, delete its obsolete tests instead of adding standalone tests for absent controls or trivial visibility setters. Fold necessary saved-data or import compatibility checks into existing tests; keep test changes proportional to the removal. The user requested fewer tests after removing group-only display on 2026-10-10.
+
+- Mechanic death rows must always identify the dead target player, even when their class is unknown. Never fall back to the damage source name (e.g. «Падение метеора») because class resolution failed; check rendered live and saved records and Journal.Actor used by secure targeting.
+
+- Halion FIRST_TWILIGHT_ENTRY from a group pet must name its owner from the GUID roster (raidpetN/partypetN/pet → raidN/partyN/player), persisting the owner GUID/name/class. An unresolved pet must not consume the first-entry slot. Known controlled players remain players even with TYPE_PET flags; verify through Core and saved history.

@@ -363,6 +363,54 @@ describe("Боевая система", function()
         assert.are.same({ RLHelperJournal.Format(entry) }, displayedMessages)
     end)
 
+    it("attributes a pet's first Twilight entry to its owner through Core and saved history", function()
+        finally(function() M:ClearRaidRoster() end)
+        RLHelper.currentInstanceId = 724
+        HalionTracker:OnInitialize()
+        HalionTracker:reset()
+        setBossModules({ HalionTracker })
+        M.raidSize = 1
+        M:SetUnitGUID("raid1", "twilight-dk")
+        M:SetUnitName("raid1", "ВладелецДК")
+        M:SetRaidRosterInfo(1, "ВладелецДК", 1, "Death Knight", "DEATHKNIGHT")
+        local hit = { Builder:New():FromEnemy("Халион"):ToPet("Хребторез")
+            :SpellDamage(75483, "Пелена Тени", 1000):Build() }
+        M:SetUnitGUID("raidpet1", hit[7])
+        RLHelper:RAID_ROSTER_UPDATE()
+
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(hit))
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Халион"):ToPlayer("Другой")
+            :SpellDamage(75483, "Пелена Тени", 1000):Build())
+
+        assert.are.equal(1, #RLHelper.currentCombat.events)
+        local entry = RLHelper.currentCombat.events[1]
+        assert.are.equal('FIRST_TWILIGHT_ENTRY', entry.kind)
+        assert.are.same({ guid = "twilight-dk", name = "ВладелецДК", class = "DEATHKNIGHT" }, entry.target)
+        assert.is_nil(RLHelperJournal.Format(entry):find('Хребторез', 1, true))
+        assert.is_truthy(RLHelperJournal.Format(entry):find('Первый вход во тьму : ВладелецДК', 1, true))
+        RLHelper:SaveCombatToProfile(RLHelper.currentCombat)
+        local saved = RLHelper.combatHistory[1].events[1]
+        assert.are.same(entry.target, saved.target)
+        assert.are.equal(RLHelperJournal.Format(entry), RLHelperJournal.Format(saved))
+    end)
+
+    it("skips an unowned pet without consuming the first controlled player's Twilight entry", function()
+        RLHelper.currentInstanceId = 724
+        HalionTracker:OnInitialize()
+        HalionTracker:reset()
+        setBossModules({ HalionTracker })
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Халион"):ToPet("Неизвестный пэт")
+            :SpellDamage(75483, "Пелена Тени", 1000):Build())
+        assert.are.equal(0, #RLHelper.currentCombat.events)
+        local hit = { Builder:New():FromEnemy("Халион"):ToPlayer("КонтролируемыйДК")
+            :SpellDamage(75483, "Пелена Тени", 1000):Build() }
+        RLHelper.groupMembers[hit[7]] = "raid1"
+        hit[9] = 0x1248
+        RLHelper:COMBAT_LOG_EVENT_UNFILTERED(unpack(hit))
+        assert.are.equal(1, #RLHelper.currentCombat.events)
+        assert.are.equal('КонтролируемыйДК', RLHelper.currentCombat.events[1].target.name)
+    end)
+
     it("не завершает бой сразу по PLAYER_REGEN_ENABLED", function()
         RLHelper:COMBAT_LOG_EVENT_UNFILTERED(Builder:New():FromEnemy("Леди Смертный Шепот"):ToPlayer("Игрок1"):Damage(100):Build())
         RLHelper:PLAYER_REGEN_ENABLED()

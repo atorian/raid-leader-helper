@@ -194,7 +194,7 @@ function Journal.Visible(entry, view)
 end
 
 function Journal.Actor(entry)
-    if entry.kind == "TRAMPLE_HIT" then return entry.target or entry.source end
+    if entry.kind == "TRAMPLE_HIT" or entry.kind == "MECHANIC_DEATH" then return entry.target or entry.source end
     return playerTargetKinds[entry.kind] and entry.target and entry.target.class and entry.target or entry.source
 end
 

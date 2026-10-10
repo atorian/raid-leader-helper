@@ -1027,11 +1027,16 @@ describe('Structured journal', function()
             [75879] = 'Умер от метеорита', [75949] = 'Умер в луже',
             [77844] = 'Умер в лезвиях', [77845] = 'Умер в лезвиях', [77846] = 'Умер в лезвиях',
         }) do
-            local entry = Journal.Create('MECHANIC_DEATH', event('UNIT_DIED', id), 'TACTIC_VIOLATION')
+            local entry = Journal.Create('MECHANIC_DEATH',
+                event('UNIT_DIED', id, 'Падение метеора', 'UnknownClassRaider'), 'TACTIC_VIOLATION')
+            assert.is_nil(entry.target.class)
             assert.are.equal(reason, entry.text)
             entry.text = 'Смерть после попадания механики' -- Previously saved records.
             for _, record in ipairs({ entry, Journal.Copy(entry) }) do
+                assert.are.equal(record.target, Journal.Actor(record))
                 local text = Journal.Format(record, true)
+                assert.is_truthy(text:find('UnknownClassRaider', 1, true))
+                assert.is_nil(text:find('Падение метеора', 1, true))
                 local skull = assert(text:find('UI-RaidTargetingIcon_8:24:24:0:-2|t', 1, true))
                 local cause = assert(text:find(reason .. ' |TCause' .. id .. ':24:24:0:-2|t', 1, true))
                 assert.is_true(skull < cause)

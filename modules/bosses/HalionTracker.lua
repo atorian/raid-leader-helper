@@ -36,6 +36,7 @@ local BLOODLUST = 2825
 local MAX_DMG_EVENTS_PER_PLAYER = 10
 local DEATH_CHECK_INTERVAL = 0.2
 local DEATH_CHECK_DURATION = 3
+local COMBATLOG_OBJECT_TYPE_PET_FLAG = COMBATLOG_OBJECT_TYPE_PET or 0x00001000
 -- DBM-RS: first cutters end 30/35 + 5 + 10 seconds after the phase-two yell.
 local PHASE_TWO_ENTRY_TIMER_DURATION = 15
 -- 74792 - metka
@@ -445,8 +446,17 @@ end
 
 function HalionTracker:isFirstInDarkness(event, log)
     if not self.firstEntered and event.spellId >= pelena10 and event.spellId <= pelena25hm then
+        local unit = (self.context or RLHelper).groupMembers[event.destGUID]
+        local fields
+        if type(unit) == "string" and unit:find("pet") then
+            local ownerUnit = unit == "pet" and "player" or unit:gsub("pet", "")
+            if not UnitExists(ownerUnit) then return end
+            fields = { target = RLHelperJournal.Entity(UnitGUID(ownerUnit), UnitName(ownerUnit)) }
+        elseif not unit and bit.band(event.destFlags or 0, COMBATLOG_OBJECT_TYPE_PET_FLAG) > 0 then
+            return
+        end
         self.firstEntered = true
-        RLHelperJournal.Log(log, "FIRST_TWILIGHT_ENTRY", event)
+        RLHelperJournal.Log(log, "FIRST_TWILIGHT_ENTRY", event, nil, fields)
     end
 end
 

@@ -409,7 +409,7 @@ describe('EP awards', function()
         assert.equals(145, awards.window.height)
     end)
 
-    it('gives template inputs unique names and explicit widths in the shared settings section', function()
+    it('fits shared settings text and uniquely named inputs within the visible viewport', function()
         local frames = installFrames()
         local parent, anchor = {}, {}
         awards:CreateSettings(parent, anchor)
@@ -423,7 +423,14 @@ describe('EP awards', function()
                 names[f.name] = true
                 count = count + 1
                 assert.equals(90, f.width)
-
+                assert.is_true(16 + f.point[2] + f.width + 5 <= 375 - 10)
+            elseif f.kind == 'FontString' and f.parent == awards.options then
+                if f.text == 'Галочка — показывать начисление и напоминание. 0 ЕП — отключить.' then
+                    assert.is_number(f.width)
+                end
+                if f.width then
+                    assert.is_true(16 + f.point[2] + f.width <= 375 - 10, f.text)
+                end
             end
         end
         assert.equals(38, count)
@@ -1030,6 +1037,11 @@ describe('EP awards', function()
             if choice.text:find('Мерзоцид', 1, true) then choice.func(); break end
         end
         assert.is_true(mode:IsShown())
+        -- The viewport is 375px; the EP block begins 16px in, with a 10px right margin.
+        -- WoW 3.3.5a adds 50px around the configured dropdown width.
+        for _, dropdown in ipairs({ mode, named.RLHelperDPSSourceDropdown }) do
+            assert.is_true(16 + dropdown.point[2] + dropdown.dropdownWidth + 50 <= 375 - 10)
+        end
         assert.is_true(fury:IsShown())
         assert.is_false(damage:IsShown())
         choices(mode)[2].func()

@@ -117,7 +117,7 @@
 
 - Boss DPS settings extend the existing per-specialization Saurfang thresholds. When adding configurable bosses, preserve spec-specific values, existing Saurfang settings/results, and avoid assuming one shared DPS threshold per boss. The user chose per-spec thresholds on 2026-10-06.
 
-- Keep the DPS boss dropdown compact (220px) and place Add/Remove immediately beside it (x=247). The 275px dropdown pushed the action buttons beyond the visible settings area in the user’s 2026-10-06 screenshot; verify the whole row in the client, not only the nominal content width.
+- Prevent settings clipping by recording the general window geometry, not widget-specific maximums. The user explicitly corrected the dropdown-only rule on 2026-10-06. Stock WoW 3.3.5a settings are 648px overall, 413px for the addon category, and 375px for RLHelper’s scroll viewport; reserve 10px at the right and subtract all ancestor offsets (the current EP block starts at x=16). Fit every complete row into this budget using actual template widths, labels, arrows, borders and gaps. A nominal 440px scroll child is not visible width; check the client. Keep this geometry in project AGENTS.md.
 
 - For Putricide EP rewards, do not assume the existing spec DPS threshold and the per-ooze damage threshold are cumulative requirements. The user corrected this: there is one DPS award with a choice of threshold, boss DPS or total damage to oozes. The RL explicitly selects the condition in settings; do not use AND/OR eligibility or create a second award.
 
@@ -125,6 +125,6 @@
 
 - Anchored InterfaceOptions category panels can report zero viewport width during addon initialization. Measure scrollFrame:GetWidth() again on settings OnShow; use the documented 375px viewport only until the anchored width becomes positive. Test creation at width 0 followed by opening/resizing. On 2026-10-10 the user screenshot showed only the DPS selector’s left border after an initialization-time width calculation.
 
-- When removing a feature, delete its obsolete tests instead of adding standalone tests for absent controls or trivial visibility setters. Fold necessary saved-data or import compatibility checks into existing tests; keep test changes proportional to the removal. The user requested fewer tests after removing group-only display on 2026-10-10.
-
 - Keep mass EP award labels minimal: «Приход», «ЦЛК», «РС», «ИКВ», as requested on 2026-10-10. Settings show only the label; reminders show the label and amount. Do not expand them into attendance or raid-completion sentences.
+
+- When removing a feature, delete its obsolete tests instead of adding standalone tests for absent controls or trivial visibility setters. Fold necessary saved-data or import compatibility checks into existing tests; keep test changes proportional to the removal. The user requested fewer tests after removing group-only display on 2026-10-10.

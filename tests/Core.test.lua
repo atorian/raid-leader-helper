@@ -1008,6 +1008,18 @@ describe("RLHelper settings helpers", function()
         assert.are.equal(0, framesByName.RLHelperPullCancelEditBox.points[1][4])
         assert.are.equal(0, framesByName.RLHelperDiscordLinkEditBox.points[1][4])
 
+        -- The stock viewport is 375px wide; reserve 10px at its right edge.
+        -- Main controls start at x=12; InputBoxTemplate borders extend another 5px.
+        for _, name in ipairs({ "RLHelperPullCancelEditBox", "RLHelperDiscordLinkEditBox",
+            "RLHelperSettingsTransferEditBox" }) do
+            assert.is_true(12 + framesByName[name].width + 5 <= 375 - 10, name)
+        end
+        for _, frame in ipairs(ui.frames) do
+            if frame.parent == contentFrame and frame.kind == "FontString" and frame.width then
+                assert.is_true(12 + frame.width <= 375 - 10, frame.text or "Transfer status")
+            end
+        end
+
         for _, amount in ipairs({ 100, 200, 250, 500, 1000 }) do
             local label = labelsByText[amount .. " GP"]
             local editBox = framesByName["RLHelperGPAwardReason" .. amount .. "EditBox"]
@@ -1015,7 +1027,7 @@ describe("RLHelper settings helpers", function()
             assert.are.equal(amount == 100 and 4 or 0, label.points[1][4])
             assert.are.same({ "LEFT", label, "LEFT", 78, 0 }, editBox.points[1])
             assert.are.equal(260, editBox.width)
-            assert.is_true(editBox.points[1][4] + editBox.width <= contentFrame.width - 24)
+            assert.is_true(16 + editBox.points[1][4] + editBox.width + 5 <= 375 - 10)
         end
     end)
 

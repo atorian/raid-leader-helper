@@ -53,6 +53,22 @@ For successful dispels in these logs, use `SPELL_DISPEL`. Example shape:
 `SPELL_DISPEL,sourceGUID,sourceName,sourceFlags,destGUID,destName,destFlags,spellId,spellName,spellSchool,extraSpellId,extraSpellName,extraSpellSchool,auraType`.
 
 
+## Settings Window Geometry
+
+Use the **visible settings area** as the width budget for every element and complete row, including labels, inputs, buttons, tables and their gaps. Do not prescribe separate maximum widths for individual widget types.
+
+Standard WoW 3.3.5a geometry (UI coordinate units, before UI scaling):
+- Entire `InterfaceOptionsFrame`: **648px wide**; this includes the category list on the left.
+- Addon category panel (`InterfaceOptionsFramePanelContainer`): **413px wide** = 648 - 22 (outer left inset) - 175 (category list) - 16 (gap) - 22 (outer right inset).
+- RLHelper scroll viewport: **375px wide** = 413 - 8 (left inset) - 30 (right inset including scrollbar clearance). This is the maximum visible content width, not the scroll child's nominal 440px width.
+- Reserve 10px at the viewport's right edge: the complete row must end at or before **x = 365**, measured from the viewport's left edge. Subtract every ancestor's horizontal inset. For example, the current EP settings block begins at x = 16, leaving 359px visible or 349px with the right margin.
+
+Before placing anything, compute `availableWidth = viewportWidth - ancestorInsets - rowX - rightMargin`. Include each element's actual rendered width, template borders, arrow, labels and gaps; do not compare only the width argument passed to a helper. Obtain the actual viewport's width with `scrollFrame:GetWidth()` when calculating layout in code. The non-scrolling «РС Бурст» category uses its own panel width and insets; the separate 700px award window is a different layout.
+
+Verify complete rows in the client after layout changes. Lua mocks and the wider scroll child do not establish that controls are visible. If the client or another addon changes the window geometry, measure the live viewport rather than silently increasing this budget.
+
+Source: [WoW 3.3.5a InterfaceOptionsFrame.xml](https://github.com/wowgaming/3.3.5-interface-files/blob/main/InterfaceOptionsFrame.xml) and the RLHelper scroll anchors in `Core.lua`.
+
 ## Solutions
 
 Prefer Architecturally correct solutions, which keep modules cohesive and reduce coupling.

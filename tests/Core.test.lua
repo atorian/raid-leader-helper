@@ -1160,6 +1160,8 @@ describe("RLHelper main frame raid check button", function()
     local originalUnitIsGroupLeader
     local originalUnitIsGroupAssistant
     local originalDb
+    local originalSlashCmdList
+    local originalToggleDropDownMenu
     local frames
     local printedMessages
 
@@ -1182,6 +1184,8 @@ describe("RLHelper main frame raid check button", function()
         originalUnitIsGroupLeader = _G.UnitIsGroupLeader
         originalUnitIsGroupAssistant = _G.UnitIsGroupAssistant
         originalDb = RLHelper.db
+        originalSlashCmdList = _G.SlashCmdList
+        originalToggleDropDownMenu = _G.ToggleDropDownMenu
         ui = mockFrames()
         newFrame, frames = ui.newFrame, ui.frames
         printedMessages = {}
@@ -1240,6 +1244,8 @@ describe("RLHelper main frame raid check button", function()
         RLHelper.LayoutMainFrame = originalLayoutMainFrame
         RLHelper.SendMessage = originalSendMessage
         RLHelper.db = originalDb
+        _G.SlashCmdList = originalSlashCmdList
+        _G.ToggleDropDownMenu = originalToggleDropDownMenu
     end)
 
     it("adds Raid Check before pull buttons and hides cleanup", function()
@@ -1261,13 +1267,67 @@ describe("RLHelper main frame raid check button", function()
         assert.are.same({ "LEFT", RLHelper.mainFrame.pullButtons[3], "RIGHT", 4, 0 }, RLHelper.mainFrame.combatListButton.points[1])
         assert.equals(18, RLHelper.mainFrame.combatListButton.width)
         assert.equals(18, RLHelper.mainFrame.combatListButton.height)
-        assert.are.same({ "LEFT", RLHelper.mainFrame.combatListButton, "RIGHT", 4, 0 }, RLHelper.mainFrame.discordButton.points[1])
+        assert.are.same({ "LEFT", RLHelper.mainFrame.combatListButton, "RIGHT", 4, 0 }, RLHelper.mainFrame.breakButton.points[1])
+        assert.equals(18, RLHelper.mainFrame.breakButton.width)
+        assert.equals(18, RLHelper.mainFrame.breakButton.height)
+        assert.equals("Interface\\Icons\\INV_Misc_PocketWatch_01", RLHelper.mainFrame.breakButton:GetNormalTexture():GetTexture())
+        assert.are.same({ "LEFT", RLHelper.mainFrame.breakButton, "RIGHT", 4, 0 }, RLHelper.mainFrame.discordButton.points[1])
         assert.equals(18, RLHelper.mainFrame.discordButton.width)
         assert.equals(18, RLHelper.mainFrame.discordButton.height)
         assert.equals("Interface\\FriendsFrame\\UI-Toast-ChatInviteIcon", RLHelper.mainFrame.discordButton:GetNormalTexture():GetTexture())
         assert.is_false(RLHelper.mainFrame.discordButton.visible)
         assert.is_false(RLHelper.mainFrame.combatListFrame.visible)
         assert.is_false(RLHelper.mainFrame.combatListClickCatcher.visible)
+    end)
+
+    it("opens the break menu from the clock and starts each DBM duration in minutes", function()
+        local menuItems, commands, openedMenu = {}, {}, nil
+        _G.UIDropDownMenu_AddButton = function(info)
+            table.insert(menuItems, info)
+        end
+        _G.ToggleDropDownMenu = function(level, value, dropdown, anchor)
+            openedMenu = { level = level, dropdown = dropdown, anchor = anchor }
+            dropdown.initialize()
+        end
+        _G.SlashCmdList = {
+            DEADLYBOSSMODSBREAK = function(value)
+                table.insert(commands, value)
+            end,
+            DEADLYBOSSMODSPULL = function()
+                error("Break must not start a pull")
+            end
+        }
+        RLHelper:CreateMainFrame()
+        local frame = RLHelper.mainFrame
+        frame:Show()
+        local currentCombat, combatHistory = RLHelper.currentCombat, RLHelper.combatHistory
+
+        frame.breakButton.scripts.OnClick()
+
+        assert.are.same({ level = 1, dropdown = frame.breakDropdown, anchor = frame.breakButton }, openedMenu)
+        assert.equals(3, #menuItems)
+        for index, duration in ipairs({ 2, 10, 15 }) do
+            assert.equals(duration .. " мин", menuItems[index].text)
+            assert.is_true(menuItems[index].notCheckable)
+            menuItems[index].func()
+        end
+        assert.are.same({ "2", "10", "15" }, commands)
+        assert.equals(currentCombat, RLHelper.currentCombat)
+        assert.equals(combatHistory, RLHelper.combatHistory)
+        assert.is_true(frame.visible)
+        assert.is_true(frame.pullButtons[2].visible)
+    end)
+
+    it("does nothing when the DBM break command is unavailable", function()
+        _G.SlashCmdList = {}
+        assert.is_false(RLHelper:StartDBMBreakCommand(10))
+    end)
+
+    it("contains errors from the DBM break command", function()
+        _G.SlashCmdList = {
+            DEADLYBOSSMODSBREAK = function() error("DBM unavailable") end
+        }
+        assert.is_false(RLHelper:StartDBMBreakCommand(15))
     end)
 
     it("shows the Discord button when a link is configured", function()

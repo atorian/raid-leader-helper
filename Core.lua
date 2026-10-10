@@ -1296,6 +1296,23 @@ function RLHelper:StartDBMPullCommand(duration)
     return self:InvokeDBMPullCommand(duration)
 end
 
+function RLHelper:StartDBMBreakCommand(duration)
+    local slashCmdList = _G.SlashCmdList or SlashCmdList
+    local breakCommand = slashCmdList and slashCmdList["DEADLYBOSSMODSBREAK"]
+
+    if type(breakCommand) == "function" then
+        local ok, err = pcall(breakCommand, tostring(duration))
+        if not ok then
+            self:Debug("DBM break command failed:", err)
+            return false
+        end
+
+        return true
+    end
+
+    return false
+end
+
 function RLHelper:BeginPullCountdown(duration)
     local timerApi = self.C_Timer or C_Timer
     self:CancelPullResetTimer()
@@ -1881,9 +1898,39 @@ function RLHelper:CreateMainFrame()
         RLHelper:ToggleCombatListOverlay()
     end)
 
+    frame.breakDropdown = CreateFrame("Frame", "RLHelperBreakDropdown", frame, "UIDropDownMenuTemplate")
+    frame.breakDropdown:Hide()
+    UIDropDownMenu_Initialize(frame.breakDropdown, function()
+        for _, duration in ipairs({ 2, 10, 15 }) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = duration .. " мин"
+            info.notCheckable = true
+            info.func = function()
+                RLHelper:StartDBMBreakCommand(duration)
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end, "MENU")
+
+    frame.breakButton = CreateFrame("Button", nil, buttonContainer)
+    frame.breakButton:SetSize(18, 18)
+    frame.breakButton:SetPoint("LEFT", frame.combatListButton, "RIGHT", 4, 0)
+    frame.breakButton:SetNormalTexture("Interface\\Icons\\INV_Misc_PocketWatch_01")
+    frame.breakButton:SetPushedTexture("Interface\\Icons\\INV_Misc_PocketWatch_01")
+    frame.breakButton:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    frame.breakButton:SetScript("OnClick", function()
+        ToggleDropDownMenu(1, nil, frame.breakDropdown, frame.breakButton, 0, 0)
+    end)
+    frame.breakButton:SetScript("OnEnter", function(button)
+        GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Перерыв")
+        GameTooltip:Show()
+    end)
+    frame.breakButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
     frame.discordButton = CreateFrame("Button", nil, buttonContainer)
     frame.discordButton:SetSize(18, 18)
-    frame.discordButton:SetPoint("LEFT", frame.combatListButton, "RIGHT", 4, 0)
+    frame.discordButton:SetPoint("LEFT", frame.breakButton, "RIGHT", 4, 0)
     frame.discordButton:SetNormalTexture("Interface\\FriendsFrame\\UI-Toast-ChatInviteIcon")
     frame.discordButton:SetPushedTexture("Interface\\FriendsFrame\\UI-Toast-ChatInviteIcon")
     frame.discordButton:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")

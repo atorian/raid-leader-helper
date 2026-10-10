@@ -126,3 +126,5 @@
 - Anchored InterfaceOptions category panels can report zero viewport width during addon initialization. Measure scrollFrame:GetWidth() again on settings OnShow; use the documented 375px viewport only until the anchored width becomes positive. Test creation at width 0 followed by opening/resizing. On 2026-10-10 the user screenshot showed only the DPS selector’s left border after an initialization-time width calculation.
 
 - When removing a feature, delete its obsolete tests instead of adding standalone tests for absent controls or trivial visibility setters. Fold necessary saved-data or import compatibility checks into existing tests; keep test changes proportional to the removal. The user requested fewer tests after removing group-only display on 2026-10-10.
+
+- Keep mass EP award labels minimal: «Приход», «ЦЛК», «РС», «ИКВ», as requested on 2026-10-10. Settings show only the label; reminders show the label and amount. Do not expand them into attendance or raid-completion sentences.

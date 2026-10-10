@@ -5,12 +5,12 @@ local SAURFANG = BossIds.NPCS.DEATHBRINGER_SAURFANG
 local PUTRICIDE = BossIds.NPCS.PROFESSOR_PUTRICIDE
 local DPSMeters = RLHelper:GetModule("DPSMeters")
 local REWARDS = {
-    { key = "attendance", name = "Приход вовремя", defaultAmount = 1000, reason = "за приход" },
-    { key = "icc", name = "ЦЛК", defaultAmount = 7000, reason = "за прохождение ЦЛК", instance = BossIds.INSTANCES.ICECROWN_CITADEL,
+    { key = "attendance", name = "Приход", defaultAmount = 1000 },
+    { key = "icc", name = "ЦЛК", defaultAmount = 7000, instance = BossIds.INSTANCES.ICECROWN_CITADEL,
         bosses = { [BossIds.NPCS.THE_LICH_KING] = true } },
-    { key = "rs", name = "РС", defaultAmount = 3000, reason = "за прохождение РС", instance = BossIds.INSTANCES.RUBY_SANCTUM,
+    { key = "rs", name = "РС", defaultAmount = 3000, instance = BossIds.INSTANCES.RUBY_SANCTUM,
         bosses = { [BossIds.NPCS.HALION] = true, [BossIds.NPCS.HALION_TWILIGHT] = true } },
-    { key = "toc", name = "ИВК", defaultAmount = 2000, reason = "за прохождение ИВК",
+    { key = "toc", name = "ИКВ", defaultAmount = 2000,
         instance = BossIds.INSTANCES.TRIAL_OF_THE_CRUSADER,
         bosses = { [BossIds.NPCS.ANUBARAK] = true, [BossIds.NPCS.ANUBARAK_ALT_1] = true,
             [BossIds.NPCS.ANUBARAK_ALT_2] = true } }
@@ -476,7 +476,7 @@ function EPAwards:ShowReminder(key)
         button:SetPoint("BOTTOM", 0, 12)
         self.popups[key] = popup
     end
-    popup.message:SetText("Время начислить " .. self:GetAmount(key) .. " ЕП " .. getReward(key).reason .. ".")
+    popup.message:SetText(getReward(key).name .. " — " .. self:GetAmount(key) .. " ЕП")
     popup:Show()
 end
 
@@ -756,7 +756,7 @@ function EPAwards:CreateSettings(parent, anchor)
     end)
     for index, reward in ipairs(REWARDS) do
         local key = reward.key
-        local edit = input(key, reward.name .. " (ЕП)", -98 - (index - 1) * 34,
+        local edit = input(key, reward.name, -98 - (index - 1) * 34,
             function() return self:GetAmount(key) end, function(value)
                 local amount = tonumber(value)
                 if amount and amount >= 0 and amount <= 99999 and amount == math.floor(amount) then

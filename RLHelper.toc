@@ -3,7 +3,7 @@
 ## Notes: Quick access to RL controls
 ## Notes-ruRU: Поддержка РЛ. DPS (необязательно): Details API 140+, Skada 1.8.73 r361+, Recount r1127+ / v3.3 / v4.0.1 для 3.3.5a.
 ## Author: Atorian
-## Version: 0.6.2
+## Version: 0.7.0
 ## SavedVariables: RLHelperDB
 ## Dependencies: DBM-Core
 ## OptionalDeps: EPGP, Details, Skada, Recount

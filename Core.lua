@@ -187,7 +187,6 @@ local defaults = {
         discordLink = "",
         gpAwardButtonsEnabled = false,
         gpAwardReasons = DEFAULT_GP_AWARD_REASONS,
-        displayOnlyInGroup = false,
         bossOnlyHistory = false,
         igor = false,
         halionBurstPull = false,
@@ -242,22 +241,6 @@ local function trimText(value)
     return value:match("^%s*(.-)%s*$") or ""
 end
 
-function RLHelper:IsInGroup()
-    if type(GetRealNumRaidMembers) == "function" and GetRealNumRaidMembers() > 0 then
-        return true
-    end
-
-    if type(GetRealNumPartyMembers) == "function" and GetRealNumPartyMembers() > 0 then
-        return true
-    end
-
-    if type(GetNumRaidMembers) == "function" and GetNumRaidMembers() > 0 then
-        return true
-    end
-
-    return type(GetNumPartyMembers) == "function" and GetNumPartyMembers() > 0
-end
-
 -- Combat-log affiliation/reaction changes when the observer is mind-controlled.
 -- Keep group identity separate from those flags and from per-combat state.
 function RLHelper:RefreshGroupRoster()
@@ -299,10 +282,6 @@ end
 function RLHelper:IsAssignedTank(guid)
     local assignment = self.groupAssignments[guid]
     return assignment == "MAINTANK" or assignment == "MAINASSIST"
-end
-
-function RLHelper:ShouldShowMainFrame()
-    return not (self.db and self.db.profile and self.db.profile.displayOnlyInGroup) or self:IsInGroup()
 end
 
 function RLHelper:IsHalionBurstPullEnabled()
@@ -362,18 +341,6 @@ function RLHelper:RefreshGPAwardButtons()
     end
     local epAwards = self:GetModule("EPAwards", true)
     if epAwards then epAwards:RefreshEnabledState() end
-end
-
-function RLHelper:RefreshMainFrameVisibility()
-    if not self.mainFrame or not (self.db and self.db.profile and self.db.profile.displayOnlyInGroup) then
-        return
-    end
-
-    if self:IsInGroup() then
-        self.mainFrame:Show()
-    else
-        self.mainFrame:Hide()
-    end
 end
 
 function RLHelper:SetMainFrameVisible(visible)
@@ -492,6 +459,10 @@ function RLHelper:OnInitialize()
     self.enemyEvents = self.enemyEvents or {}
 
     self.db = LibStub("AceDB-3.0"):New("RLHelperDB", defaults, true)
+    self.db.profile.displayOnlyInGroup = nil
+    for _, profile in pairs(self.db.sv and self.db.sv.profiles or {}) do
+        profile.displayOnlyInGroup = nil
+    end
 
     self:InitializeJournal()
 
@@ -502,7 +473,6 @@ function RLHelper:OnInitialize()
     self:CreateMinimapButton()
 
     self.mainFrame:Show()
-    self:RefreshMainFrameVisibility()
 
     self:Debug("RL Быдло: Аддон включен")
 end
@@ -543,7 +513,6 @@ function RLHelper:OnEnable()
     self:RegisterEvent("UNIT_PET", "RefreshGroupRoster")
     self:RefreshGroupRoster()
     self:UpdateZoneContext()
-    self:RefreshMainFrameVisibility()
 end
 
 local function isEnemy(flags, guid)
@@ -911,12 +880,10 @@ end
 
 function RLHelper:PARTY_MEMBERS_CHANGED()
     self:RefreshGroupRoster()
-    self:RefreshMainFrameVisibility()
 end
 
 function RLHelper:RAID_ROSTER_UPDATE()
     self:RefreshGroupRoster()
-    self:RefreshMainFrameVisibility()
 end
 
 function RLHelper:ShouldDispatchCombatEventToModule(module)
@@ -2106,7 +2073,6 @@ function RLHelper:ImportSettings(text)
     self:SetTheme(self.db.profile.theme)
     self:MinimizeWindow()
     self:RefreshDiscordButton()
-    self:RefreshMainFrameVisibility()
     self:RefreshGPAwardButtons()
     local epAwards = self:GetModule("EPAwards", true)
     if epAwards then
@@ -2199,18 +2165,9 @@ function RLHelper:CreateOptionsPanel()
         RLHelper:RefreshDiscordButton()
     end)
 
-    local displayOnlyInGroup = CreateFrame("CheckButton", "RLHelperDisplayOnlyInGroupCheckButton", content,
-        "InterfaceOptionsCheckButtonTemplate")
-    displayOnlyInGroup:SetPoint("TOPLEFT", discordEditBox, "BOTTOMLEFT", -4, -18)
-    _G[displayOnlyInGroup:GetName() .. "Text"]:SetText("Показывать только в группе")
-    displayOnlyInGroup:SetScript("OnClick", function(self)
-        RLHelper.db.profile.displayOnlyInGroup = self:GetChecked() and true or false
-        RLHelper:RefreshMainFrameVisibility()
-    end)
-
     local bossOnlyHistory = CreateFrame("CheckButton", "RLHelperBossOnlyHistoryCheckButton", content,
         "InterfaceOptionsCheckButtonTemplate")
-    bossOnlyHistory:SetPoint("TOPLEFT", displayOnlyInGroup, "BOTTOMLEFT", 0, -8)
+    bossOnlyHistory:SetPoint("TOPLEFT", discordEditBox, "BOTTOMLEFT", -4, -18)
     _G[bossOnlyHistory:GetName() .. "Text"]:SetText("Оставлять бои только с боссами")
     bossOnlyHistory:SetScript("OnClick", function(self)
         RLHelper.db.profile.bossOnlyHistory = self:GetChecked() and true or false
@@ -2330,7 +2287,6 @@ function RLHelper:CreateOptionsPanel()
         UIDropDownMenu_SetText(themeDropdown, themeLabels[UITheme.GetName(RLHelper)])
         cancelEditBox:SetText(RLHelper.db.profile.pullCancelMessage or "")
         discordEditBox:SetText(RLHelper.db.profile.discordLink or "")
-        displayOnlyInGroup:SetChecked(RLHelper.db.profile.displayOnlyInGroup)
         bossOnlyHistory:SetChecked(RLHelper.db.profile.bossOnlyHistory)
         igor:SetChecked(RLHelper.db.profile.igor)
     end

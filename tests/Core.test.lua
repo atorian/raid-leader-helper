@@ -784,6 +784,7 @@ describe("RLHelper settings helpers", function()
         RLHelper.RegisterChatCommand = originalRegisterChatCommand
         RLHelper.mainFrame = originalMainFrame
 
+        assert.is_nil(RLHelper.db.profile.displayOnlyInGroup)
         assert.is_nil(journalV2)
         assert.are.equal(2, journalStore.schemaVersion)
         assert.is_false(gpAwardButtonsEnabled)
@@ -951,13 +952,11 @@ describe("RLHelper settings helpers", function()
         assert.is_nil(table.concat(texts, " "):find("Pull Cancel", 1, true))
         assert.is_nil(table.concat(texts, " "):find("Display only", 1, true))
         assert.is_true(table.concat(texts, " "):find("Текст сообщения отмены пула", 1, true) ~= nil)
-        assert.is_true(table.concat(texts, " "):find("Показывать только в группе", 1, true) ~= nil)
         assert.are.same({
             "RL Helper",
             "Тема оформления",
             "Текст сообщения отмены пула",
             "Ссылка Discord",
-            "Показывать только в группе",
             "Оставлять бои только с боссами",
             "Игорь",
             "РС Бурст",
@@ -1141,108 +1140,6 @@ describe("RLHelper settings helpers", function()
         assert.is_true(shown)
         assert.is_false(RLHelper.inCombat)
         assert.is_nil(RLHelper.combatEndRequestedAt)
-    end)
-
-    it("allows manual show outside a group when displayOnlyInGroup is enabled", function()
-        local shown = false
-        local hidden = false
-        local printedMessage
-        RLHelper.mainFrame = {
-            Hide = function()
-                hidden = true
-            end,
-            Show = function()
-                shown = true
-            end
-        }
-        RLHelper.Print = function(_, message)
-            printedMessage = message
-        end
-        _G.GetRealNumRaidMembers = function()
-            return 0
-        end
-        _G.GetRealNumPartyMembers = function()
-            return 0
-        end
-
-        RLHelper:SetMainFrameVisible(true)
-
-        assert.is_true(shown)
-        assert.is_false(hidden)
-        assert.is_nil(printedMessage)
-    end)
-
-    it("automatically hides the main frame outside a group when displayOnlyInGroup is enabled", function()
-        local shown = false
-        local hidden = false
-        RLHelper.mainFrame = {
-            Hide = function()
-                hidden = true
-            end,
-            Show = function()
-                shown = true
-            end
-        }
-        _G.GetRealNumRaidMembers = function()
-            return 0
-        end
-        _G.GetRealNumPartyMembers = function()
-            return 0
-        end
-
-        RLHelper:RefreshMainFrameVisibility()
-
-        assert.is_true(hidden)
-        assert.is_false(shown)
-    end)
-
-    it("automatically shows the main frame in a group when displayOnlyInGroup is enabled", function()
-        local shown = false
-        local hidden = false
-        RLHelper.mainFrame = {
-            Hide = function()
-                hidden = true
-            end,
-            Show = function()
-                shown = true
-            end
-        }
-        _G.GetRealNumRaidMembers = function()
-            return 1
-        end
-        _G.GetRealNumPartyMembers = function()
-            return 0
-        end
-
-        RLHelper:RefreshMainFrameVisibility()
-
-        assert.is_true(shown)
-        assert.is_false(hidden)
-    end)
-
-    it("does not force visibility when displayOnlyInGroup is disabled", function()
-        local shown = false
-        local hidden = false
-        RLHelper.db.profile.displayOnlyInGroup = false
-        RLHelper.mainFrame = {
-            Hide = function()
-                hidden = true
-            end,
-            Show = function()
-                shown = true
-            end
-        }
-        _G.GetRealNumRaidMembers = function()
-            return 1
-        end
-        _G.GetRealNumPartyMembers = function()
-            return 0
-        end
-
-        RLHelper:RefreshMainFrameVisibility()
-
-        assert.is_false(shown)
-        assert.is_false(hidden)
     end)
 end)
 

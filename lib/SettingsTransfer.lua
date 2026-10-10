@@ -9,6 +9,8 @@ for _, key in ipairs({ "enabled", "debug", "gpAwardButtonsEnabled", "displayOnly
     "bossOnlyHistory", "igor", "halionBurstPull", "halionBurstReset", "halionPhaseTwoEntryTimer" }) do
     field({key}, "boolean")
 end
+-- Keep the retired slot so RLH1/RLH2/RLH3 strings retain their field positions.
+fields[4].obsolete = true
 field({"theme"}, "theme")
 field({"pullCancelMessage"}, "string")
 field({"discordLink"}, "string")
@@ -65,7 +67,7 @@ function Transfer.Export(profile)
         local value
         local parent = profile
         for i = 1, #descriptor.path - 1 do parent = type(parent) == "table" and parent[descriptor.path[i]] or nil end
-        if type(parent) == "table" then value = parent[descriptor.path[#descriptor.path]] end
+        if not descriptor.obsolete and type(parent) == "table" then value = parent[descriptor.path[#descriptor.path]] end
         if not valid(value, descriptor) then return nil, "Недопустимое значение настройки." end
         tokens[#tokens + 1] = encode(value)
     end
@@ -134,7 +136,7 @@ function Transfer.Decode(text)
             value = token:sub(2):gsub("%x%x", function(hex) return string.char(tonumber(hex, 16)) end)
         elseif token ~= "-" then return nil, errorMessage end
         if not valid(value, descriptor) then return nil, errorMessage end
-        if value ~= nil then
+        if value ~= nil and not descriptor.obsolete then
             local parent = profile
             for i = 1, #descriptor.path - 1 do
                 local key = descriptor.path[i]

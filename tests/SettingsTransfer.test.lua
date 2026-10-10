@@ -8,7 +8,7 @@ describe('Account settings transfer', function()
         profile = {
             enabled = true, debug = false, theme = 'minimal', discordLink = 'https://discord.gg/test',
             pullCancelMessage = 'Галя, отмена! | 100% = "текст"', gpAwardButtonsEnabled = true,
-            displayOnlyInGroup = false, bossOnlyHistory = true, igor = false,
+            bossOnlyHistory = true, igor = false,
             halionBurstPull = true, halionBurstReset = false, halionPhaseTwoEntryTimer = true,
             minimap = { hide = false }, gpAwardReasons = { [100] = 'Причина | ; %' },
             savedPosition = { point = 'TOPLEFT', relativePoint = 'CENTER', x = -213.25,
@@ -22,6 +22,8 @@ describe('Account settings transfer', function()
         local text = assert(Transfer.Export(profile))
         assert.is_nil(text:find('[^%w|%.%+%-]'))
         assert.are.same(profile, Transfer.Decode(text))
+        local legacy = text:gsub('^(RLH1|[^|]+|[^|]+|[^|]+)|%-', '%1|b1')
+        assert.are.same(profile, Transfer.Decode(legacy))
         assert.are.same(profile, Transfer.Decode('  ' .. text:gsub('|', '|\n') .. '  '))
     end)
 
@@ -36,18 +38,21 @@ describe('Account settings transfer', function()
         profile.combatHistory = { 'secret history' }
         profile.combatHistoryV2 = { combats = {} }
         profile.journalV2 = true
+        profile.displayOnlyInGroup = true
         profile.otherAddonData = 'personal'
         local decoded = assert(Transfer.Decode(assert(Transfer.Export(profile))))
         assert.is_nil(decoded.combatHistory)
         assert.is_nil(decoded.combatHistoryV2)
         assert.is_nil(decoded.journalV2)
+        assert.is_nil(decoded.displayOnlyInGroup)
         assert.is_nil(decoded.otherAddonData)
     end)
 
     it('replaces previous overrides and preserves character and unrelated data', function()
         local imported = assert(Transfer.Decode(assert(Transfer.Export(profile))))
         local target = { theme = 'current', gpAwardReasons = {[200] = 'old'},
-            epAwards = {amounts = {rs = 9999}}, savedPosition = {x = 999}, unrelated = 'keep' }
+            epAwards = {amounts = {rs = 9999}}, savedPosition = {x = 999}, unrelated = 'keep',
+            displayOnlyInGroup = true }
         Transfer.Apply(target, imported)
         assert.are.equal('keep', target.unrelated)
         assert.is_nil(target.epAwards.amounts.rs)

@@ -5,6 +5,7 @@ local GetUnitIdFromGUID = RLHelper.GetUnitIdFromGUID
 local CombatFilters = RLHelperCombatFilters
 local BossIds = RLHelperBossIds
 local Journal = RLHelperJournal
+local JournalSync = RLHelperJournalSync
 local UITheme = {}
 RLHelper.UITheme = UITheme
 
@@ -488,6 +489,8 @@ function RLHelper:InitializeJournal()
     for _, character in pairs(self.db.sv and self.db.sv.char or {}) do
         character.combatHistory = nil
     end
+    if self.journalSync then self.journalSync:Reset() end
+    self.journalSync = JournalSync.New(self)
     self.journalView = "ALL"
     self.followNextCombat = false
     local store = self.db.char.combatHistoryV2
@@ -504,6 +507,7 @@ end
 function RLHelper:OnEnable()
     self:MinimizeWindow()
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    self:RegisterEvent("CHAT_MSG_ADDON")
     self:RegisterEvent("PLAYER_ENTERING_WORLD")
     self:RegisterEvent("PLAYER_REGEN_DISABLED")
     self:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -696,6 +700,7 @@ function RLHelper:StartCombat(reason)
     end
 
     self.inCombat = true
+    if self.journalSync then self.journalSync.startedAt = GetTime() end
     if not self.currentCombat.startTime then
         self.currentCombat.startTime = time()
     end
@@ -717,6 +722,7 @@ function RLHelper:ResetCombatState()
     self.combatEndRequestedAt = nil
     self.combatEndRequiresRegen = false
 
+    if self.journalSync then self.journalSync:Reset(true) end
     self.currentCombat = {
         startTime = nil,
         events = {},
@@ -754,6 +760,7 @@ function RLHelper:FinishCombat(reason)
     end
 
     self:ResetCombatState()
+    if combat and self.journalSync and self.journalSync.previous then self.journalSync.previous.combat = combat end
 
     if combat and self:ShouldSaveCombatToHistory(combat) then
         self:SaveCombatToProfile(combat)
@@ -1010,9 +1017,29 @@ function RLHelper:COMBAT_LOG_EVENT_UNFILTERED(event, ...)
     self:DispatchCombatEvent(eventData)
 end
 
-function RLHelper:OnCombatLogEvent(message)
+function RLHelper:CHAT_MSG_ADDON(_, prefix, message, channel, sender)
+    if self.journalSync then self.journalSync:Receive(prefix, message, channel, sender) end
+end
+
+function RLHelper:OnDisable()
+    if self.journalSync then self.journalSync:Reset() end
+end
+
+function RLHelper:OnCombatLogEvent(message, sender, token, observedAt, targetCombat, syncContext)
     assert(type(message) == "table" and message.kind and message.type, "Journal requires a structured event")
-    local combat = self.currentCombat
+    local wireMessage = message
+    local sync, syncRecord = self.journalSync
+    if sync and (sync:Enabled() or syncContext) then
+        message = Journal.Copy(message)
+        local fresh, changed
+        fresh, changed, syncRecord = sync:Observe(message, sender or UnitName("player"), token, observedAt, syncContext)
+        if not fresh then
+            if changed then self:RefreshSharedCombat(targetCombat or self.currentCombat) end
+            if changed and not sender then sync:Queue(wireMessage, syncRecord.observedAt) end
+            return
+        end
+    end
+    local combat = targetCombat or self.currentCombat
     combat.events = combat.events or {}
     if Journal.Update(combat.events, message) then
         if self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() then
@@ -1029,12 +1056,37 @@ function RLHelper:OnCombatLogEvent(message)
         return
     end
     local entry = Journal.Copy(message)
-    entry.seq = #combat.events + 1
-    table.insert(combat.events, entry)
+    local position = #combat.events + 1
+    if syncRecord then
+        while position > 1 and combat.events[position - 1].timestamp > entry.timestamp do position = position - 1 end
+    end
+    table.insert(combat.events, position, entry)
+    for index = position, #combat.events do combat.events[index].seq = index end
+    if syncRecord then
+        syncRecord.entry = entry
+        if not sender then sync:Queue(wireMessage, syncRecord.observedAt) end
+    end
+    if combat ~= self.currentCombat or position < #combat.events then self:RefreshSharedCombat(combat) return end
     if self.mainFrame and self.mainFrame.logText and self:IsDisplayingCurrentCombat() and
         Journal.Visible(entry, self.journalView) then
         self.mainFrame.logText:AddMessage(self:FormatJournalEntry(entry))
         self:RefreshJournalRows(combat)
+    end
+end
+
+-- Late packets can still complete the last fight after it has been saved.
+function RLHelper:RefreshSharedCombat(combat)
+    local store = self.db.char.combatHistoryV2
+    for index, saved in ipairs(store.combats) do
+        if combat.id and saved.id == combat.id then
+            store.combats[index] = Journal.Copy(combat)
+            self.combatHistory = Journal.Copy(store.combats)
+            break
+        end
+    end
+    if self.mainFrame and self.mainFrame.logText and
+        (self.displayedCombat == combat or (combat.id and self.displayedCombat and self.displayedCombat.id == combat.id)) then
+        self:DisplayCombat(combat)
     end
 end
 
@@ -1721,6 +1773,11 @@ function RLHelper:LayoutMainFrame()
     frame.logText:SetPoint("TOPLEFT", frame.journalFilters or frame.buttonContainer, "BOTTOMLEFT", 0, -8)
 
     local rightInset = -2
+    local hovered = frame.gpButtonsHovered == true
+    if frame.bottomPanel then
+        if hovered then frame.bottomPanel:Show()
+        else frame.bottomPanel:Hide() end
+    end
     if frame.bottomPanel then
         frame.logText:SetPoint("BOTTOMRIGHT", frame.bottomPanel, "TOPRIGHT", 0, 4)
     else
@@ -1738,6 +1795,10 @@ function RLHelper:LayoutMainFrame()
             frame.logText:SetPoint("TOPLEFT", frame.buttonContainer, "BOTTOMLEFT", 0, -8)
         end
     end
+    -- Keep filter visibility independent of hover, even in a short window.
+    if frame.bottomPanel and not hovered then
+        frame.logText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", rightInset, 8)
+    end
 end
 
 function RLHelper:SetMainFrameBottomPanel(panel)
@@ -1751,6 +1812,7 @@ end
 
 function RLHelper:CreateMainFrame()
     local frame = CreateFrame("Frame", "RLHelperMainFrame", UIParent)
+    frame.gpButtonsHovered = false
     frame:SetSize(300, 600)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
@@ -2054,6 +2116,15 @@ function RLHelper:CreateMainFrame()
     end)
 
     self.mainFrame = frame
+    -- Check the whole window, including child buttons and the secure row overlay.
+    -- Use the scroll frame so hover updates do not replace the drag watchdog.
+    frame.v2Scroll:SetScript("OnUpdate", function()
+        local hovered = MouseIsOver(frame) and true or false
+        if frame.gpButtonsHovered == hovered then return end
+        frame.gpButtonsHovered = hovered
+        RLHelper:LayoutMainFrame()
+        RLHelper:RefreshJournalRows(RLHelper.displayedCombat or RLHelper.currentCombat, true)
+    end)
     for _, button in ipairs({ frame.raidCheckBtn, pull15Btn, pull75Btn, frame.cancelBtn,
         frame.resetBtn }) do
         UITheme.RegisterButton(self, button)

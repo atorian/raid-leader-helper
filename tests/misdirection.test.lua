@@ -147,6 +147,100 @@ describe('Misdirection tracker', function()
         assert.spy(tracker.log).was_not_called()
     end)
 
+    it('preserves preparations and active transfers independently of combat finalization', function()
+        local oldSendMessage, oldRegisterMessage, oldLog, oldTime =
+            addon.SendMessage, tracker.RegisterMessage, tracker.log, _G.time
+        local oldDb, oldHistory = addon.db, addon.combatHistory
+        local callbacks = {}
+        tracker.RegisterMessage = function(_, message, method) callbacks[message] = method end
+        tracker:OnInitialize()
+        tracker.RegisterMessage = oldRegisterMessage
+        addon.SendMessage = function(_, message)
+            if callbacks[message] then tracker[callbacks[message]](tracker, message) end
+        end
+        local ok, err = pcall(function()
+            addon.db = { profile = {}, char = {
+                combatHistoryV2 = { schemaVersion = 2, nextCombatId = 1, combats = {} }
+            } }
+            local now = 100
+            _G.time = function() return now end
+            addon.IterateModules = function() return ipairs({ tracker }) end
+            local function dispatch(at, subevent, spellId, source, target, amount)
+                addon:COMBAT_LOG_EVENT_UNFILTERED('COMBAT_LOG_EVENT_UNFILTERED', at, subevent,
+                    source, source, 0x514, target, target, target == 'enemy' and 0xa48 or 0x514,
+                    spellId, 'spell', 1, amount)
+            end
+            -- Both preparations are logged while the previous fight is still open.
+            dispatch(100, 'SPELL_CAST_SUCCESS', 34477, 'hunter', 'tank')
+            dispatch(100, 'SPELL_CAST_SUCCESS', 57934, 'rogue', 'tank')
+            local previous = addon.currentCombat
+            now = 105
+            addon:FinishCombat('ticker')
+            assert.is_not_nil(tracker.journalPulls.hunter)
+            assert.is_not_nil(tracker.journalPulls.rogue)
+            local summaries = {}
+            for _, entry in ipairs(previous.events) do
+                if entry.kind == 'MISDIRECTION_SUMMARY' then summaries[#summaries + 1] = entry.amount end
+            end
+            assert.are.same({}, summaries)
+            now = 115
+            addon:PLAYER_REGEN_DISABLED()
+            dispatch(115, 'SPELL_DAMAGE', 53209, 'hunter', 'enemy', 1000)
+            dispatch(115, 'SPELL_DAMAGE', 51723, 'rogue', 'enemy', 2000)
+            dispatch(119, 'SPELL_AURA_REMOVED', 35079, 'hunter', 'hunter')
+            dispatch(121, 'SPELL_AURA_REMOVED', 59628, 'rogue', 'rogue')
+            local entries = addon.currentCombat.events
+            assert.are.equal(6, #entries)
+            assert.are.equal(100, entries[1].timestamp)
+            assert.are.equal(100, entries[3].timestamp)
+            assert.are.equal(1000, entries[5].amount)
+            assert.are.equal(2000, entries[6].amount)
+            assert.are.equal(entries[1].pullId, entries[2].pullId)
+            assert.are.equal(entries[1].pullId, entries[5].pullId)
+            assert.are.equal(entries[3].pullId, entries[4].pullId)
+            assert.are.equal(entries[3].pullId, entries[6].pullId)
+            assert.are_not.equal(entries[1].pullId, entries[3].pullId)
+
+            -- An already active transfer also survives saving and changing combat segments.
+            dispatch(122, 'SPELL_CAST_SUCCESS', 34477, 'hunter', 'tank')
+            dispatch(122.1, 'SPELL_AURA_APPLIED', 35079, 'hunter', 'hunter')
+            dispatch(122.1, 'SPELL_DAMAGE', 53209, 'hunter', 'enemy', 500)
+            local active = tracker.journalPulls.hunter
+            now = 123
+            addon:FinishCombat('ticker')
+            assert.are.equal(active, tracker.journalPulls.hunter)
+            assert.are.equal(500, active.totalDamage)
+            assert.are.equal('MISDIRECTION_DAMAGE', entries[#entries].kind)
+            now = 124
+            addon:PLAYER_REGEN_DISABLED()
+            dispatch(124, 'SPELL_DAMAGE', 53209, 'hunter', 'enemy', 600)
+            dispatch(126, 'SPELL_AURA_REMOVED', 35079, 'hunter', 'hunter')
+            entries = addon.currentCombat.events
+            assert.are.equal(3, #entries)
+            assert.are.equal(122, entries[1].timestamp)
+            assert.are.equal(active.entry.pullId, entries[3].pullId)
+            assert.are.equal(1100, entries[3].amount)
+            assert.is_nil(tracker.journalPulls.hunter)
+        end)
+        addon.SendMessage, tracker.RegisterMessage, tracker.log, _G.time =
+            oldSendMessage, oldRegisterMessage, oldLog, oldTime
+        addon.db, addon.combatHistory = oldDb, oldHistory
+        assert(ok, err)
+    end)
+
+    it('does not credit damage after an unused preparation has expired', function()
+        addon.inCombat = false
+        for _, ids in ipairs({ { 34477, 35079 }, { 57934, 59628 } }) do
+            tracker:reset()
+            tracker:handleEvent(event('SPELL_CAST_SUCCESS', ids[1], nil, 100, 'caster', 'tank'))
+            tracker:handleEvent(event('SPELL_AURA_APPLIED', ids[1], nil, 100.1, 'caster', 'caster'))
+            tracker:handleEvent(event('SPELL_AURA_REMOVED', ids[1], nil, 130.1, 'caster', 'caster'))
+            tracker:handleEvent(event('SPELL_DAMAGE', 51723, 9000, 132, 'caster'))
+            assert.is_nil(tracker.journalPulls.caster)
+        end
+        assert.spy(tracker.log).was_not_called()
+    end)
+
     it('keeps a precombat cast and emits it on the first hit through the dispatcher', function()
         addon.inCombat = false
         addon.IterateModules = function() return ipairs({ tracker }) end

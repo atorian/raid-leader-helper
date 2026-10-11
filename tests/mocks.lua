@@ -1,5 +1,6 @@
 local M = {}
 require('lib.Journal')
+require('lib.JournalSync')
 require('lib.SettingsTransfer')
 
 UIDropDownMenu_SetWidth = function(frame, width) frame.dropdownWidth = width end

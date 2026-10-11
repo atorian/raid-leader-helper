@@ -15,6 +15,101 @@ local DAMAGE_EVENTS = { SWING_DAMAGE = true, RANGE_DAMAGE = true, SPELL_DAMAGE =
 DPSMeters.sources = { "Details", "Skada", "Recount" }
 DPSMeters.requirements = "Поддерживаемые версии для WoW 3.3.5a:\nSkada: 1.8.73 (r361) и новее.\nRecount: r1127+ или v3.3 / v4.0.1.\nDetails: API 140 и новее."
 
+-- Talent-only abilities, checked against wotlk.ezhead.org; names match all ranks.
+local SPEC_SPELLS = {
+    WARRIOR = { {12294, 71}, {23881, 72}, {46968, 73}, {20243, 73} },
+    DEATHKNIGHT = { {55050, 250}, {49143, 251}, {49184, 251}, {55090, 252} },
+    DRUID = { {48505, 102}, {48438, 105}, {18562, 105} },
+    HUNTER = { {53209, 254}, {53301, 255} },
+    MAGE = { {44425, 62}, {44457, 63}, {44572, 64} },
+    PALADIN = { {20473, 65}, {53595, 66}, {53385, 70}, {35395, 70} },
+    ROGUE = { {1329, 259}, {51690, 260}, {16511, 261} },
+    PRIEST = { {47540, 256}, {34861, 257}, {34914, 258} },
+    SHAMAN = { {51490, 262}, {60103, 263}, {17364, 263}, {61295, 264} },
+    -- Immolation shares a name with ordinary Incinerate/infernal damage: require its ID.
+    WARLOCK = { {30108, 265}, {48181, 265}, {50590, 266, true}, {50796, 267}, {17962, 267} }
+}
+
+-- Repeated combinations of ordinary abilities can identify a rotation.
+-- Negative evidence needs a 30s segment and at least three events for each skill.
+-- Feral roles require two form attacks, with >=3 times the rival form's events.
+local CAT_ATTACKS = {5221, 1822, 1079, 22568, 33876}
+local BEAR_ATTACKS = {6807, 33745, 33878, 779}
+local SPEC_ROTATIONS = {
+    DRUID = {
+        {spec = 103, spells = CAT_ATTACKS, minSpells = 2, minCount = 2, rivals = BEAR_ATTACKS},
+        {spec = 104, spells = BEAR_ATTACKS, minSpells = 2, minCount = 2, rivals = CAT_ATTACKS}
+    },
+    HUNTER = {
+        {spec = 253, spells = {3044, 56641, 1978}, exclude = {53209, 53301}, minDuration = 30}
+    },
+    MAGE = {
+        {spec = 63, spells = {133, 11366}, exclude = {44425, 44572}, excludeRepeated = {30451, 116}, minDuration = 30},
+        {spec = 63, spells = {44614, 11366}, exclude = {44425, 44572}, excludeRepeated = {30451, 116}, minDuration = 30},
+        {spec = 62, spells = {30451, 5143}, exclude = {44457, 44572}, excludeRepeated = {11366, 116}, minDuration = 30},
+        {spec = 64, spells = {116, 30455}, exclude = {44425, 44457}, excludeRepeated = {30451, 11366, 44614}, minDuration = 30}
+    },
+    WARLOCK = {
+        {spec = 266, spells = {686, 29722, 6353}, exclude = {30108, 48181, 50796, 17962}, minDuration = 30}
+    }
+}
+
+local function specFromSpells(class, duration, ...)
+    local byId, byName, counts = {}, {}, {}
+    local function addSpell(id, exact)
+        byId[id] = id
+        local name = GetSpellInfo(id)
+        if name and not exact then byName[name] = id end
+    end
+    for _, rule in ipairs(SPEC_SPELLS[class] or {}) do addSpell(rule[1], rule[3]) end
+    for _, rotation in ipairs(SPEC_ROTATIONS[class] or {}) do
+        for _, list in ipairs({rotation.spells, rotation.exclude or {}, rotation.excludeRepeated or {}, rotation.rivals or {}}) do
+            for _, id in ipairs(list) do addSpell(id) end
+        end
+    end
+    for i = 1, select("#", ...) do
+        for key, spell in pairs(select(i, ...) or {}) do
+            local id = type(spell) == "table" and spell.id or type(key) == "number" and key
+            local name = id and GetSpellInfo(id) or key
+            local root = byId[id] or byName[name]
+            if root then
+                -- These are hits/ticks/misses, not casts; all three meters retain them.
+                local count = type(spell) == "table" and (spell.count or spell.counter) or nil
+                counts[root] = (counts[root] or 0) + (count or 1)
+            end
+        end
+    end
+    local candidates = {}
+    for _, rule in ipairs(SPEC_SPELLS[class] or {}) do
+        if (counts[rule[1]] or 0) > 0 then candidates[rule[2]] = true end
+    end
+    for _, rotation in ipairs(SPEC_ROTATIONS[class] or {}) do
+        local matched, total, rivalTotal, excluded = 0, 0, 0, false
+        for _, id in ipairs(rotation.spells) do
+            local count = counts[id] or 0
+            if count >= (rotation.minCount or 3) then matched = matched + 1 end
+            total = total + count
+        end
+        for _, id in ipairs(rotation.exclude or {}) do
+            if (counts[id] or 0) > 0 then excluded = true end
+        end
+        for _, id in ipairs(rotation.excludeRepeated or {}) do
+            if (counts[id] or 0) >= 3 then excluded = true end
+        end
+        for _, id in ipairs(rotation.rivals or {}) do rivalTotal = rivalTotal + (counts[id] or 0) end
+        if not excluded and matched >= (rotation.minSpells or #rotation.spells) and
+            (duration or 0) >= (rotation.minDuration or 0) and total >= 3 * rivalTotal then
+            candidates[rotation.spec] = true
+        end
+    end
+    local found
+    for spec in pairs(candidates) do
+        if found then return nil end
+        found = spec
+    end
+    return found
+end
+
 local ErrorDPSCounter = {}
 function ErrorDPSCounter:Report(action)
     RLHelper:Debug("ErrorDPSCounter: " .. action ..
@@ -197,16 +292,8 @@ end
 function DPSMeters:BossKilled(boss)
     if self.source == "ErrorDPSCounter" then ErrorDPSCounter:Report("BossKilled"); return end
     if self.source == "Details" and Details then
-        local combat, specs = Details:GetCurrentCombat(), {}
-        for i = 1, GetNumRaidMembers() do
-            local unit = "raid" .. i
-            local guid = UnitGUID(unit)
-            if guid then
-                local _, class = UnitClass(unit)
-                specs[guid] = RLHelper.GetUnitSpec(unit, class)
-            end
-        end
-        self.killed = { boss = boss, set = combat, specs = specs,
+        local combat = Details:GetCurrentCombat()
+        self.killed = { boss = boss, set = combat,
             oozeDamage = boss == PUTRICIDE and self.oozeSegment == combat and self.oozeDamage or nil,
             gasTargets = boss == PUTRICIDE and self.oozeSegment == combat and self.gasTargets or nil }
     elseif self.source == "Skada" and Skada then
@@ -214,18 +301,8 @@ function DPSMeters:BossKilled(boss)
             oozeDamage = boss == PUTRICIDE and self.oozeSegment == Skada.current and self.oozeDamage or nil,
             gasTargets = boss == PUTRICIDE and self.oozeSegment == Skada.current and self.gasTargets or nil }
     elseif self.source == "Recount" and self:IsAvailable("Recount") and Recount.InCombat then
-        local specs = {}
-        -- Freeze specs at the kill, before players can change talents after combat.
-        for i = 1, GetNumRaidMembers() do
-            local unit = "raid" .. i
-            local guid = UnitGUID(unit)
-            if guid then
-                local _, class = UnitClass(unit)
-                specs[guid] = RLHelper.GetUnitSpec(unit, class)
-            end
-        end
         self.killed = { boss = boss, db = Recount.db2, number = Recount.db2.FightNum,
-            starttime = Recount.InCombatT, specs = specs,
+            starttime = Recount.InCombatT,
             oozeDamage = boss == PUTRICIDE and self.oozeSegment == Recount.db2 and
                 self.oozeNumber == Recount.db2.FightNum and self.oozeDamage or nil,
             gasTargets = boss == PUTRICIDE and self.oozeSegment == Recount.db2 and
@@ -256,8 +333,12 @@ function DPSMeters:SkadaSetComplete(_, set)
             (self.oozeSegment == set and self.gasTargets or nil)
     end
     for _, player in ipairs(set.players or {}) do
-        fight.players[#fight.players + 1] = { name = player.name, class = player.class, spec = player.spec,
-            dps = type(player.GetDPS) == "function" and player:GetDPS() or nil }
+        if player.class ~= "PET" then
+            fight.players[#fight.players + 1] = { name = player.name, class = player.class,
+                spec = specFromSpells(player.class, set.starttime and set.endtime - set.starttime,
+                    player.damagespells, player.healspells),
+                dps = type(player.GetDPS) == "function" and player:GetDPS() or nil }
+        end
     end
     self.killed = nil
     self.complete(fight)
@@ -278,8 +359,9 @@ function DPSMeters:RecountFightComplete(recount, finish)
         if (player.type == "Self" or player.type == "Grouped") and player.LastFightIn == killed.number and
             player.Fights and player.Fights.LastFightData then
             local _, dps = recount:MergedPetDamageDPS(player, "LastFightData")
+            local data = player.Fights.LastFightData
             fight.players[#fight.players + 1] = { name = player.Name or name, class = player.enClass,
-                spec = killed.specs[player.GUID], dps = dps }
+                spec = specFromSpells(player.enClass, finish and finish - killed.starttime, data.Attacks, data.Heals), dps = dps }
         end
     end
     self.complete(fight)
@@ -300,8 +382,12 @@ function DPSMeters:DetailsFightComplete(combat)
     for _, player in ipairs(combat:GetActorList(1)) do
         -- Group actors already include their pets' damage in total.
         if player.grupo and not player.owner then
+            local healer = type(combat.GetActor) == "function" and combat:GetActor(2, player.nome)
+            local spec = specFromSpells(player.classe, duration,
+                type(player.GetSpellList) == "function" and player:GetSpellList() or nil,
+                healer and healer:GetSpellList())
             fight.players[#fight.players + 1] = { name = player.nome, class = player.classe,
-                spec = killed.specs[player.serial] or player.spec, dps = player.total / duration }
+                spec = spec, dps = player.total / duration }
         end
     end
     self.complete(fight)

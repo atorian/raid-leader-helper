@@ -7,14 +7,14 @@ local awards = require('modules.EPAwards')
 addon.modules.EPAwards = nil
 
 describe('DPS meter sources', function()
-    local original, completed, hooks, specs
+    local original, completed, hooks
     before_each(function()
         meters:Stop()
         original = { recount = Recount, skada = Skada, details = Details, metadata = GetAddOnMetadata, debug = addon.Debug, hook = hooksecurefunc, raid = GetNumRaidMembers,
-            guid = UnitGUID, class = UnitClass, spec = addon.GetUnitSpec, db = addon.db,
+            guid = UnitGUID, class = UnitClass, spec = addon.GetUnitSpec, spellInfo = GetSpellInfo, db = addon.db,
             active = awards.active, instance = addon.currentInstanceId }
         completed, hooks = {}, 0
-        specs = { raid1 = 72, raid2 = 71 }
+        _G.GetSpellInfo = function(id) return "Spell " .. tostring(id) end
         _G.Skada, _G.Details = nil, nil
         _G.GetAddOnMetadata = function(name, key)
             local meter = _G[name]
@@ -23,10 +23,7 @@ describe('DPS meter sources', function()
         _G.GetNumRaidMembers = function() return 3 end
         _G.UnitGUID = function(unit) return 'guid-' .. unit end
         _G.UnitClass = function() return 'Воин', 'WARRIOR' end
-        addon.GetUnitSpec = function(unit, class)
-            assert.equals('WARRIOR', class)
-            return specs[unit]
-        end
+        addon.GetUnitSpec = function() error('DPS spec must come only from meter spells') end
         _G.hooksecurefunc = function(target, method, after)
             hooks = hooks + 1
             local before = target[method]
@@ -36,8 +33,10 @@ describe('DPS meter sources', function()
             end
         end
         local function player(name, unit, kind, number)
+            local spell = unit == 'raid1' and 23881 or unit == 'raid2' and 12294
             return { Name = name, GUID = 'guid-' .. unit, type = kind or 'Grouped', enClass = 'WARRIOR',
-                LastFightIn = number or 7, Fights = { CurrentFightData = { Damage = 2000000, ActiveTime = 100 } } }
+                LastFightIn = number or 7, Fights = { CurrentFightData = { Damage = 2000000, ActiveTime = 100,
+                    Attacks = spell and { [GetSpellInfo(spell)] = {} } or {} } } }
         end
         _G.Recount = { version = "r1127",
             InCombat = true, InCombatT = 1000,
@@ -75,6 +74,7 @@ describe('DPS meter sources', function()
         _G.Details, _G.GetAddOnMetadata, addon.Debug = original.details, original.metadata, original.debug
         _G.Recount, _G.Skada, _G.hooksecurefunc = original.recount, original.skada, original.hook
         _G.GetNumRaidMembers, _G.UnitGUID, _G.UnitClass = original.raid, original.guid, original.class
+        _G.GetSpellInfo = original.spellInfo
         addon.GetUnitSpec, addon.db, addon.currentInstanceId = original.spec, original.db, original.instance
         awards.active = original.active
     end)
@@ -249,12 +249,115 @@ describe('DPS meter sources', function()
         for _, p in ipairs(completed[1].players) do assert.equals(25000, p.dps) end
     end)
 
-    it('freezes talent specializations at the kill', function()
+    it('recognizes Recount specs from own attacks and heals in the winning fight, rejecting conflicts', function()
+        local players = Recount.db2.combatants
+        players.Fury.Fights.CurrentFightData.Attacks = { [GetSpellInfo(23881)] = {} }
+        players.Fury.Fights.OverallData = { Attacks = { [GetSpellInfo(12294)] = {} } }
+        players.Arms.Fights.CurrentFightData.Attacks = {
+            [GetSpellInfo(12294)] = {}, [GetSpellInfo(23881)] = {} }
+        players.Unknown.enClass = 'PRIEST'
+        players.Unknown.Fights.CurrentFightData.Heals = { [GetSpellInfo(47540)] = {} }
         meters:BossKilled(37813)
-        specs.raid1 = 71
         Recount:LeaveCombat(1180)
-        for _, p in ipairs(completed[1].players) do
-            if p.name == 'Fury' then assert.equals(72, p.spec) end
+        local names = {}
+        for _, player in ipairs(completed[1].players) do names[player.name] = player end
+        assert.equals(72, names.Fury.spec)
+        assert.is_nil(names.Arms.spec)
+        assert.equals(256, names.Unknown.spec)
+        assert.is_nil(names.Pet)
+    end)
+
+    it('recognizes Skada spell IDs and healing spells without inferring specs from shared spell names', function()
+        local set = { gotboss = 37813, success = true, starttime = 1000, endtime = 1180,
+            players = {
+                { name = 'Hunter', class = 'HUNTER', damagespells = { decorated = { id = 53209 } } },
+                { name = 'Healer', class = 'SHAMAN', healspells = { [61295] = {} } },
+                { name = 'Demo', class = 'WARLOCK', damagespells = { dot = { id = 50590 } } },
+                { name = 'Shared', class = 'WARLOCK', damagespells = { [GetSpellInfo(50590)] = {} } },
+                { name = 'Known', class = 'WARRIOR', spec = 72, damagespells = { [GetSpellInfo(12294)] = {} } },
+                { name = 'Pet', class = 'PET', damagespells = { [GetSpellInfo(23881)] = {} } }
+            } }
+        for _, player in ipairs(set.players) do player.GetDPS = function() return 20000 end end
+        _G.Skada = { version = '1.8.78',
+            actorPrototype = { GetDPS = function() end }, RegisterCallback = function() end, UnregisterCallback = function() end }
+        Skada.current = set
+        meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
+        meters:SkadaSetComplete('Skada_SetComplete', set)
+        local names = {}
+        for _, player in ipairs(completed[1].players) do names[player.name] = player end
+        assert.equals(254, names.Hunter.spec)
+        assert.equals(264, names.Healer.spec)
+        assert.equals(266, names.Demo.spec)
+        assert.is_nil(names.Shared.spec) -- Incinerate/infernal damage shares Immolation's localized name.
+        assert.equals(71, names.Known.spec) -- Ignore the meter's cached spec field.
+        assert.is_nil(names.Pet)
+    end)
+
+    local rotations = {
+        {name = 'Cat', class = 'DRUID', spec = 103, spells = {[5221] = 25, [1822] = 20, [1079] = 30, [6807] = 1}},
+        {name = 'Bear', class = 'DRUID', spec = 104, spells = {[6807] = 40, [33745] = 30, [33878] = 15, [5221] = 1}},
+        {name = 'MixedForms', class = 'DRUID', spells = {[5221] = 20, [1822] = 20, [6807] = 20, [33745] = 20}},
+        {name = 'SingleCatAttack', class = 'DRUID', spells = {[5221] = 40}},
+        {name = 'BM', class = 'HUNTER', spec = 253, minDuration = 30, spells = {[3044] = 8, [56641] = 24, [1978] = 40}},
+        {name = 'MM', class = 'HUNTER', spec = 254, spells = {[3044] = 8, [56641] = 24, [1978] = 40, [53209] = 6}},
+        {name = 'Survival', class = 'HUNTER', spec = 255, spells = {[3044] = 8, [56641] = 24, [1978] = 40, [53301] = 6}},
+        {name = 'NoRotation', class = 'HUNTER', spells = {[3044] = 12}},
+        {name = 'LittleData', class = 'HUNTER', spells = {[3044] = 1, [56641] = 1, [1978] = 12}},
+        {name = 'DemoRotation', class = 'WARLOCK', spec = 266, minDuration = 30, spells = {[686] = 30, [29722] = 10, [6353] = 20}},
+        {name = 'Affliction', class = 'WARLOCK', spec = 265, spells = {[686] = 30, [29722] = 10, [6353] = 20, [48181] = 6}},
+        {name = 'Destruction', class = 'WARLOCK', spec = 267, spells = {[686] = 30, [29722] = 10, [6353] = 20, [17962] = 6}},
+        {name = 'SharedWarlockSpells', class = 'WARLOCK', spells = {[686] = 30, [6353] = 20}},
+        {name = 'ArcaneRotation', class = 'MAGE', spec = 62, minDuration = 30, spells = {[30451] = 30, [5143] = 50}},
+        {name = 'ArcaneWithOneSlow', class = 'MAGE', spec = 62, minDuration = 30, spells = {[30451] = 30, [5143] = 50, [116] = 1}},
+        {name = 'FrostRotation', class = 'MAGE', spec = 64, minDuration = 30, spells = {[116] = 30, [30455] = 8}},
+        {name = 'FireRotation', class = 'MAGE', spec = 63, minDuration = 30, spells = {[133] = 30, [11366] = 8}},
+        {name = 'FrostfireRotation', class = 'MAGE', spec = 63, minDuration = 30, spells = {[44614] = 30, [11366] = 8}},
+        {name = 'OnePyro', class = 'MAGE', spells = {[11366] = 1}},
+        {name = 'ConflictingRotations', class = 'MAGE', spells = {[30451] = 30, [5143] = 50, [116] = 30, [30455] = 8}}
+    }
+    local function checkRotations(fight, duration)
+        local players = {}
+        for _, player in ipairs(fight.players) do players[player.name] = player end
+        assert.equals(#rotations, #fight.players)
+        for _, rotation in ipairs(rotations) do
+            local expected = rotation.spec
+            if duration < (rotation.minDuration or 0) then expected = nil end
+            assert.equals(expected, players[rotation.name].spec, rotation.name)
+        end
+    end
+
+    it('recognizes repeated Recount rotations by several spell names and checks rival and absent skills', function()
+        for index, duration in ipairs({180, 90, 89, 30, 29}) do
+            Recount.InCombat, Recount.InCombatT, Recount.db2.FightNum = true, 1000, 7
+            Recount.db2.combatants = {}
+            for _, rotation in ipairs(rotations) do
+                local attacks = {}
+                for id, count in pairs(rotation.spells) do attacks[GetSpellInfo(id)] = {count = count} end
+                Recount.db2.combatants[rotation.name] = {Name = rotation.name, enClass = rotation.class,
+                    type = 'Grouped', LastFightIn = 7,
+                    Fights = {CurrentFightData = {Attacks = attacks, Damage = 100000, ActiveTime = duration}}}
+            end
+            meters:BossKilled(37813)
+            Recount:LeaveCombat(1000 + duration)
+            checkRotations(completed[index], duration)
+        end
+    end)
+
+    it('recognizes Skada rotations using spell IDs and event counts rather than optional cast counts', function()
+        _G.Skada = {version = '1.8.78', actorPrototype = {GetDPS = function() end},
+            RegisterCallback = function() end, UnregisterCallback = function() end}
+        meters:Start('Skada', function(fight) completed[#completed + 1] = fight end)
+        for index, duration in ipairs({180, 90, 89, 30, 29}) do
+            local set = {gotboss = 37813, success = true, starttime = 1000, endtime = 1000 + duration, players = {}}
+            for _, rotation in ipairs(rotations) do
+                local attacks = {}
+                for id, count in pairs(rotation.spells) do attacks['decorated-' .. id] = {id = id, count = count, casts = 1} end
+                set.players[#set.players + 1] = {name = rotation.name, class = rotation.class,
+                    damagespells = attacks, GetDPS = function() return 1000 end}
+            end
+            Skada.current = set
+            meters:SkadaSetComplete('Skada_SetComplete', set)
+            checkRotations(completed[index], duration)
         end
     end)
 
@@ -347,13 +450,16 @@ describe('DPS meter sources', function()
         Recount:LeaveCombat(1180)
         local saved = awards:GetDPSResults()[37813]
         assert.equals('Recount', saved.source)
-        assert.equals(2, #saved.players)
+        assert.equals(3, #saved.players)
         assert.equals(1, saved.unknown)
         assert.equals(20000, saved.players[1].dps)
+        assert.equals('Unknown', saved.players[3].name)
+        assert.equals(20000, saved.players[3].dps)
+        assert.is_nil(saved.players[3].spec)
         awards:SetDPSSource('Skada')
         Recount.db2.combatants = {}
         assert.equals(saved, awards:GetDPSResults()[37813])
-        assert.equals(2, #saved.players)
+        assert.equals(3, #saved.players)
     end)
 
     it('preserves saved results when the feature is disabled during a Recount fight', function()
@@ -442,7 +548,8 @@ describe('DPS meter sources', function()
         local events, removals = {}, {}
         local combat = {
             GetActorList = function() return {
-                { nome = "Fury", classe = "WARRIOR", serial = "guid-raid1", grupo = true, total = 3600000 },
+                { nome = "Fury", classe = "WARRIOR", serial = "guid-raid1", grupo = true, total = 3600000,
+                    spec = 71, GetSpellList = function() return { [23881] = { id = 23881 } } end },
                 { nome = "Pet", grupo = true, owner = {}, total = 1000000 },
                 { nome = "Stranger", total = 9000000 }
             } end,
@@ -544,7 +651,6 @@ describe('DPS meter sources', function()
         meters:Start("Details", function(fight) completed[#completed + 1] = fight end)
         local expected = oozeEvents()
         meters:BossKilled(36678)
-        specs.raid1 = 71
         events.COMBAT_PLAYER_LEAVE("COMBAT_PLAYER_LEAVE", combat)
         assert.equals(1, #completed)
         local fight = completed[1]
@@ -557,6 +663,50 @@ describe('DPS meter sources', function()
         meters:Start("Recount", function() end)
         assert.equals(3, #removals)
         assert.same({}, events)
+    end)
+
+    it('determines Details specs from the same players own damage and healing spell lists', function()
+        local combat, events
+        _G.Details, combat, events = details()
+        combat.GetActorList = function() return {
+            { nome = 'Hunter', classe = 'HUNTER', serial = 'guid-raid1', grupo = true, total = 3600000, spec = 255,
+                GetSpellList = function() return { [53209] = { id = 53209 } } end },
+            { nome = 'Healer', classe = 'SHAMAN', serial = 'guid-raid2', grupo = true, total = 1800000,
+                GetSpellList = function() return {} end }
+        } end
+        combat.GetActor = function(_, container, name)
+            assert.equals(2, container)
+            if name == 'Healer' then
+                return { GetSpellList = function() return { [61295] = { id = 61295 } } end }
+            end
+        end
+        meters:Start('Details', function(fight) completed[#completed + 1] = fight end)
+        meters:BossKilled(37813)
+        events.COMBAT_PLAYER_LEAVE('COMBAT_PLAYER_LEAVE', combat)
+        assert.equals(254, completed[1].players[1].spec)
+        assert.equals(264, completed[1].players[2].spec)
+    end)
+
+    it('recognizes the same rotations from Details numeric spell tables and hit counters', function()
+        local combat, events
+        _G.Details, combat, events = details()
+        for index, duration in ipairs({180, 90, 89, 30, 29}) do
+            combat.GetCombatTime = function() return duration end
+            combat.GetActorList = function()
+                local actors = {}
+                for _, rotation in ipairs(rotations) do
+                    local attacks = {}
+                    for id, count in pairs(rotation.spells) do attacks[id] = {id = id, counter = count} end
+                    actors[#actors + 1] = {nome = rotation.name, classe = rotation.class, grupo = true,
+                        total = 100000, GetSpellList = function() return attacks end}
+                end
+                return actors
+            end
+            meters:Start('Details', function(fight) completed[#completed + 1] = fight end)
+            meters:BossKilled(37813)
+            events.COMBAT_PLAYER_LEAVE('COMBAT_PLAYER_LEAVE', combat)
+            checkRotations(completed[index], duration)
+        end
     end)
 
     it('ignores Details wipes, replaced segments and resets', function()

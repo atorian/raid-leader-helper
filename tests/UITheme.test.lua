@@ -23,7 +23,7 @@ describe('UI themes', function()
         newFrame, namedFrames, createdFrames = frames.newFrame, frames.namedFrames, frames.frames
         dropdownItems, originalGlobals, originalAddon = {}, {}, {}
         for _, key in ipairs({ 'CreateFrame', 'UIParent', 'InterfaceOptions_AddCategory',
-            'UIDropDownMenu_AddButton', 'UnitAffectingCombat', 'UnitIsPlayer', 'TargetUnit', 'RegisterStateDriver', 'IsMouseButtonDown' }) do
+            'UIDropDownMenu_AddButton', 'UnitAffectingCombat', 'UnitIsPlayer', 'TargetUnit', 'RegisterStateDriver', 'IsMouseButtonDown', 'MouseIsOver' }) do
             originalGlobals[key] = _G[key] or false
         end
         for _, key in ipairs({ 'db', 'mainFrame', 'themeButtons', 'journalView',
@@ -413,6 +413,9 @@ describe('UI themes', function()
         gp:attachToMainFrame()
         assert.are.same({ 'BOTTOMLEFT', frame, 'BOTTOMLEFT', 2, 2 }, gp.footerFrame.points[1])
         assert.are.same({ 'BOTTOMRIGHT', frame, 'BOTTOMRIGHT', -2, 2 }, gp.footerFrame.points[2])
+        assert.are.equal(-2, frame.logText.points[2][4])
+        frame.gpButtonsHovered = true
+        addon:LayoutMainFrame()
         assert.are.equal(0, frame.logText.points[2][4])
     end)
 
@@ -528,6 +531,8 @@ describe('UI themes', function()
         addon.db.profile.gpAwardButtonsEnabled = true
         addon:CreateMainFrame()
         assert.is_not_nil(addon.mainFrame.journalFilters)
+        _G.MouseIsOver = function() return true end
+        addon.mainFrame.v2Scroll.scripts.OnUpdate()
         assert.are.equal('GameFontHighlight', addon.mainFrame.raidCheckBtn.fonts.Normal)
         local gp = dofile('modules/ui/GPAwardButtons.lua')
         gp:attachToMainFrame()
@@ -545,6 +550,61 @@ describe('UI themes', function()
         assert.is_true(gp.footerFrame.visible)
         assert.are.equal('GameFontHighlight', gp.buttons[1].fonts.Normal)
         assert.is_false(gp.undoButton.enabled)
+    end)
+
+    it('reclaims only GP space outside the window while preserving filters, the view and drag watchdog', function()
+        addon.db.profile.gpAwardButtonsEnabled = true
+        addon.journalView = 'ERRORS'
+        addon:CreateMainFrame()
+        local frame = addon.mainFrame
+        local gp = dofile('modules/ui/GPAwardButtons.lua')
+        gp:attachToMainFrame()
+        local hovered = false
+        _G.MouseIsOver = function(region)
+            assert.are.equal(frame, region)
+            return hovered
+        end
+        local function checkLayout()
+            assert.is_true(frame.journalFilters.visible)
+            assert.are.equal(hovered and addon.db.profile.gpAwardButtonsEnabled, gp.footerFrame.visible)
+            assert.are.equal(frame.journalFilters, frame.logText.points[1][2])
+            assert.are.equal(hovered and addon.db.profile.gpAwardButtonsEnabled and gp.footerFrame or frame,
+                frame.logText.points[2][2])
+            assert.are.equal('ERRORS', addon.journalView)
+        end
+        checkLayout()
+        -- Only the GP footer changes the journal's visible height.
+        function frame.v2Scroll:GetHeight() return hovered and 100 or 120 end
+        local Journal = require('lib.Journal')
+        for i = 1, 30 do
+            addon:OnCombatLogEvent(Journal.Create('SHADOW_TRAP', { timestamp = 1000 + i },
+                'TACTIC_VIOLATION', { text = 'Violation ' .. i }))
+        end
+        frame.v2Scroll:SetVerticalScroll(60)
+        frame:BeginWindowDrag()
+        local dragUpdate = frame.scripts.OnUpdate
+        for _, theme in ipairs({ 'current', 'minimal' }) do
+            addon:SetTheme(theme)
+            hovered = true
+            frame.v2Scroll.scripts.OnUpdate()
+            checkLayout()
+            assert.are.equal(60, frame.v2Scroll:GetVerticalScroll())
+            gp:refreshVisibility()
+            hovered = false
+            frame.v2Scroll.scripts.OnUpdate()
+            checkLayout()
+            assert.are.equal(60, frame.v2Scroll:GetVerticalScroll())
+            gp:refreshVisibility()
+            frame.scripts.OnSizeChanged()
+            checkLayout()
+            assert.are.equal(dragUpdate, frame.scripts.OnUpdate)
+        end
+        frame:EndWindowDrag()
+        addon.db.profile.gpAwardButtonsEnabled = false
+        gp:refreshVisibility()
+        hovered = true
+        frame.v2Scroll.scripts.OnUpdate()
+        checkLayout()
     end)
 
     it('fills GP reasons on creation and refresh, preserving custom values', function()

@@ -85,10 +85,7 @@ describe('Structured journal', function()
         professor:reset()
         lich:reset()
         halion:reset()
-        addon.SendMessage = function(_, message)
-            if message == 'RLHelper_CombatEnding' then pulls:finishJournalPulls() end
-            if message == 'RLHelper_CombatEnded' then pulls:reset() end
-        end
+        addon.SendMessage = function() end
     end)
 
     after_each(function()
@@ -690,12 +687,13 @@ describe('Structured journal', function()
         pulls:handleEvent(second)
         pulls:handleEvent(event('SPELL_DAMAGE', 53209, 'hunter1', 'enemy', 1001, 11))
         pulls:handleEvent(event('SPELL_DAMAGE', 53209, 'hunter2', 'enemy', 1001, 22))
-        pulls:finishJournalPulls()
+        pulls:handleEvent(event('SPELL_AURA_REMOVED', 35079, 'hunter1', 'hunter1', 1002))
+        pulls:handleEvent(event('SPELL_AURA_REMOVED', 35079, 'hunter2', 'hunter2', 1002))
         assert.are.equal(11, addon.currentCombat.events[5].amount)
         assert.are.equal(22, addon.currentCombat.events[6].amount)
     end)
 
-    it('retains a precombat cast, finalizes before saving and resets for the next combat', function()
+    it('preserves an active transfer across saved combats until its aura ends', function()
         cast('hunter', 'tank')
         assert.are.equal(0, #addon.currentCombat.events)
         addon.currentCombat.startTime = 1001
@@ -703,10 +701,16 @@ describe('Structured journal', function()
         pulls:handleEvent(event('SPELL_DAMAGE', 53209, 'hunter', 'enemy', 1001, 99))
         addon:FinishCombat('test')
         local saved = addon.db.char.combatHistoryV2.combats[1]
-        assert.are.equal(3, #saved.events)
+        assert.are.equal(2, #saved.events)
         assert.are.equal(1000.125, saved.events[1].timestamp)
-        assert.are.equal('MISDIRECTION_SUMMARY', saved.events[3].kind)
-        assert.are.equal(99, saved.events[3].amount)
+        assert.are.equal('MISDIRECTION_DAMAGE', saved.events[2].kind)
+        assert.are.equal(99, pulls.journalPulls.hunter.totalDamage)
+        addon:StartCombat('next')
+        pulls:handleEvent(event('SPELL_DAMAGE', 53209, 'hunter', 'enemy', 1002, 1))
+        pulls:handleEvent(event('SPELL_AURA_REMOVED', 35079, 'hunter', 'hunter', 1004))
+        assert.are.equal(3, #addon.currentCombat.events)
+        assert.are.equal('MISDIRECTION_SUMMARY', addon.currentCombat.events[3].kind)
+        assert.are.equal(100, addon.currentCombat.events[3].amount)
         assert.are.same({}, pulls.journalPulls)
         addon:InitializeJournal()
         local targets = Journal.PullTargets(addon.combatHistory[1], 1)
@@ -745,6 +749,7 @@ describe('Structured journal', function()
         end
         cast('hunter', 'tank')
         pulls:handleEvent(event('SPELL_DAMAGE', 53209, 'hunter', 'enemy', 1001, 99))
+        pulls:handleEvent(event('SPELL_AURA_REMOVED', 35079, 'hunter', 'hunter', 1002))
         addon:FinishCombat('test')
         assert.are.same(expected, lines)
         local saved = addon.db.char.combatHistoryV2.combats[1]
@@ -1108,6 +1113,7 @@ describe('Structured journal', function()
                 'hunter', 'Hunter', 0x514, target, target, 0xa48, 53209, 'Chimera Shot', 1,
                 100, 0, 1, 0, 0, 0, false, false, false)
         end
+        pulls:handleEvent(event('SPELL_AURA_REMOVED', 35079, 'hunter', 'hunter', 1002))
         addon:FinishCombat('test')
         local entries = addon.db.char.combatHistoryV2.combats[1].events
         assert.are.equal(4, #entries)
@@ -1123,6 +1129,7 @@ describe('Structured journal', function()
         addon.currentCombat.startTime = 1000
         cast('hunter', 'tank')
         pulls:handleEvent(event('SPELL_DAMAGE', 53209, 'hunter', 'enemy', 1001, 77))
+        pulls:handleEvent(event('SPELL_AURA_REMOVED', 35079, 'hunter', 'hunter', 1002))
         addon:FinishCombat('test')
         assert.are.equal(77, Journal.PullTargets(addon.displayedCombat, 1)[1].amount)
         addon:SetJournalView('MISDIRECTION')

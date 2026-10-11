@@ -152,6 +152,7 @@ function Journal.Create(kind, event, severity, fields)
         timestamp = event.timestamp or time(),
         type = severity or "INFO",
         kind = kind,
+        subevent = event.event,
         source = Journal.Entity(event.sourceGUID or (source and source.guid), event.sourceName or (source and source.name),
             event.sourceClass or (source and source.class)),
         target = Journal.Entity(event.destGUID or (target and target.guid), event.destName or (target and target.name),

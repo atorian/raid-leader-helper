@@ -1512,8 +1512,9 @@ describe("RLHelper main frame raid check button", function()
 
     it("insets the log text from the bottom panel when present", function()
         local logText = newFrame("ScrollingMessageFrame", nil, nil)
-        local bottomPanel = {}
+        local bottomPanel = newFrame("Frame")
         local frame = {
+            gpButtonsHovered = true,
             bottomPanel = bottomPanel,
             buttonContainer = {},
             logText = logText
@@ -1527,6 +1528,7 @@ describe("RLHelper main frame raid check button", function()
 
     it("shows filters only when five icon rows fit and reclaims their space when hidden", function()
         local frame = newFrame("Frame")
+        frame.gpButtonsHovered = true
         frame.buttonContainer = newFrame("Frame", nil, frame)
         frame.journalFilters = newFrame("Frame", nil, frame)
         frame.logText = newFrame("ScrollingMessageFrame", nil, frame)
@@ -1573,7 +1575,13 @@ describe("RLHelper main frame raid check button", function()
         frame.bottomPanel = newFrame("Frame", nil, frame)
         originalLayoutMainFrame(RLHelper)
         assert.is_false(frame.journalFilters.visible)
+        frame.gpButtonsHovered = false
+        originalLayoutMainFrame(RLHelper)
+        assert.is_false(frame.journalFilters.visible)
         frame:SetHeight(209)
+        originalLayoutMainFrame(RLHelper)
+        assert.is_true(frame.journalFilters.visible)
+        frame.gpButtonsHovered = true
         originalLayoutMainFrame(RLHelper)
         assert.is_true(frame.journalFilters.visible)
 

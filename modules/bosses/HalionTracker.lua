@@ -485,6 +485,7 @@ function HalionTracker:handleEvent(event)
                 source = event.sourceName,
                 sourceGUID = event.sourceGUID,
                 amount = event.amount,
+                timestamp = event.timestamp,
                 spellId = event.spellId,
                 spellName = event.spellName
             })
@@ -514,7 +515,7 @@ function HalionTracker:ProcessPlayerDeath(log, playerName, timestamp, playerGUID
                     timestamp = timestamp, destGUID = playerGUID, destName = playerName,
                     sourceGUID = lastDamage.sourceGUID, sourceName = lastDamage.source,
                     spellId = lastDamage.spellId
-                }, "TACTIC_VIOLATION")
+                }, "TACTIC_VIOLATION", { identityTime = lastDamage.timestamp })
                 break
             end
         end

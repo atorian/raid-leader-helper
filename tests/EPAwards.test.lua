@@ -15,7 +15,8 @@ describe('EP awards', function()
         original = { db = addon.db, instance = addon.currentInstanceId, show = awards.ShowReminder,
             getAddon = mocks.GetAddon, time = time, date = date, leader = IsRaidLeader,
             raid = GetNumRaidMembers, createFrame = CreateFrame, categories = InterfaceOptions_AddCategory,
-            skada = _G.Skada, main = addon.mainFrame, themeButtons = addon.themeButtons, print = addon.Print, metadata = GetAddOnMetadata }
+            skada = _G.Skada, main = addon.mainFrame, themeButtons = addon.themeButtons, print = addon.Print, metadata = GetAddOnMetadata, spellInfo = GetSpellInfo }
+        _G.GetSpellInfo = function(id) return "Spell " .. tostring(id) end
         now = at(27, 19, 0)
         _G.time = function(value) return value and os.time(value) or now end
         _G.date = function(format, value) return os.date(format, value or now) end
@@ -60,6 +61,7 @@ describe('EP awards', function()
         _G.time, _G.date, _G.IsRaidLeader, _G.GetNumRaidMembers = original.time, original.date, original.leader, original.raid
         awards.window, awards.popups, awards.pending, awards.callbackSource = nil, nil, nil, nil
         addon.modules.EPAwards = nil
+        _G.GetSpellInfo = original.spellInfo
         _G.Skada, _G.GetAddOnMetadata = original.skada, original.metadata
         awards.active = nil
         awards.dpsWindow = nil
@@ -484,7 +486,9 @@ describe('EP awards', function()
 
     local function winningSet()
         local function player(name, spec, dps, class)
-            return { name = name, spec = spec, class = class or 'WARRIOR', GetDPS = function() return dps end }
+            local spell = ({ [71] = 12294, [72] = 23881, [73] = 46968, [252] = 55090 })[spec]
+            return { name = name, class = class or 'WARRIOR', GetDPS = function() return dps end,
+                damagespells = spell and { [GetSpellInfo(spell)] = { id = spell } } or {} }
         end
         local set = { gotboss = 37813, success = true, starttime = now - 180, endtime = now,
             players = { player('Fury', 72, 10000), player('Arms', 71, 9900),
@@ -512,8 +516,11 @@ describe('EP awards', function()
         local set = winningSet()
         meters:SkadaSetComplete('Skada_SetComplete', set)
         local snapshot = awards:GetDPSResults()[37813]
-        assert.equals(4, #snapshot.players)
+        assert.equals(5, #snapshot.players)
         assert.equals(1, snapshot.unknown)
+        assert.equals('Unknown', snapshot.players[5].name)
+        assert.equals(20000, snapshot.players[5].dps)
+        assert.is_nil(snapshot.players[5].spec)
         assert.equals('Unholy', snapshot.players[1].name)
         assert.equals(252, snapshot.players[1].spec)
         awards:GetSettings().dpsBosses[37813][252] = 5000
@@ -582,7 +589,7 @@ describe('EP awards', function()
         assert.is_false(awards.window:IsShown())
         local frame = awards.dpsWindow
         assert.is_true(frame:IsShown())
-        assert.equals(2, #frame.rows)
+        assert.equals(3, #frame.rows)
         assert.same({ Fury = true, Arms = true }, frame.selected)
         assert.equals('Fury', frame.rows[1].cells[1].text)
         assert.equals('Воин: Фури', frame.rows[1].cells[2].text)
@@ -607,6 +614,37 @@ describe('EP awards', function()
         assert.is_false(awards.window:IsShown())
     end)
 
+    it('awards every selected player while EPGP flushes pending guild notes', function()
+        installFrames()
+        individualEPGP()
+        meters:SkadaSetComplete('Skada_SetComplete', winningSet())
+        local current, messages = true, {}
+        addon.Print = function(_, message) messages[#messages + 1] = message end
+        epgp.CanIncEPBy = function() return current end
+        local inc = epgp.IncEPBy
+        epgp.IncEPBy = function(self, name, reason, amount, mass)
+            assert(self:CanIncEPBy(reason, amount) or mass)
+            current = false -- LibGuildStorage:SetNote immediately enters FLUSHING.
+            return inc(self, name, reason, amount)
+        end
+        awards:ShowDPSWindow()
+        local frame = awards.dpsWindow
+        frame.awardButton.scripts.OnClick()
+        assert.same({ { 'Fury', 'RLHelper: ДПС Саурфанг', 500 },
+            { 'Arms', 'RLHelper: ДПС Саурфанг', 500 } }, calls)
+        assert.same({ Fury = false, Arms = false }, frame.selected)
+        for _, row in ipairs(frame.rows) do
+            if row.player.name ~= 'Unknown' then assert.equals(500, row.player.lastAward.amount) end
+        end
+        assert.equals('Начислено по 500 ЕП. Игроков: 2.', frame.result.text)
+        assert.equals(0, #messages)
+        frame.selected.Fury = true
+        frame.awardButton.scripts.OnClick()
+        assert.equals(2, #calls) -- A new click must still check EPGP readiness.
+        assert.is_truthy(frame.result.text:find('EPGP не готов', 1, true))
+        assert.same({ frame.result.text }, messages)
+    end)
+
     it('shows empty results safely with no Skada, and never awards below the saved threshold', function()
         installFrames()
         individualEPGP()
@@ -618,15 +656,48 @@ describe('EP awards', function()
         assert.equals(0, #calls)
     end)
 
-    it('validates every recipient before writing and retains confirmed partial awards', function()
+    it('skips selected players missing from EPGP and reports their names in chat and the window', function()
+        installFrames()
+        individualEPGP()
+        meters:SkadaSetComplete('Skada_SetComplete', winningSet())
+        local snapshot = awards:GetDPSResults()[37813]
+        table.insert(snapshot.players, 1, { name = 'Guest', class = 'WARRIOR', spec = 72,
+            dps = 11000, threshold = 10000 })
+        snapshot.players[#snapshot.players + 1] = { name = 'Unchecked', class = 'WARRIOR', spec = 72,
+            dps = 11000, threshold = 10000 }
+        for _, hasMember in ipairs({ false, true }) do
+            epgp.GetEPGP = function(_, name)
+                if hasMember and name == 'Fury' then return 0, 100 end
+            end
+            local messages = {}
+            addon.Print = function(_, message) messages[#messages + 1] = message end
+            awards:ShowDPSWindow()
+            local frame = awards.dpsWindow
+            frame.selected.Below = true -- Below threshold: no award and no missing-member warning.
+            frame.selected.Unchecked = false
+            frame.awardButton.scripts.OnClick()
+            assert.same({ 'Не начислено ЕП (игроки не найдены в EPGP): ' ..
+                (hasMember and 'Guest, Arms' or 'Guest, Fury, Arms') .. '.' }, messages)
+            assert.is_true(frame.selected.Guest)
+            assert.is_true(frame.selected.Arms)
+            assert.is_nil(snapshot.players[1].lastAward)
+            if hasMember then
+                assert.same({ { 'Fury', 'RLHelper: ДПС Саурфанг', 500 } }, calls)
+                assert.is_false(frame.selected.Fury)
+                assert.equals('Начислено по 500 ЕП. Игроков: 1.\n' .. messages[1], frame.result.text)
+            else
+                assert.equals(0, #calls)
+                assert.is_true(frame.selected.Fury)
+                assert.equals(messages[1], frame.result.text)
+            end
+        end
+    end)
+
+    it('retains confirmed partial awards when EPGP writing fails', function()
         individualEPGP()
         meters:SkadaSetComplete('Skada_SetComplete', winningSet())
         local snapshot = awards:GetDPSResults()[37813]
         local selected = { Fury = true, Arms = true }
-        epgp.GetEPGP = function(_, name) if name == 'Fury' then return 1000, 100 end end
-        assert.is_false(awards:AwardDPS(snapshot, selected))
-        assert.equals(0, #calls)
-        epgp.GetEPGP = function() return 1000, 100 end
         local inc = epgp.IncEPBy
         epgp.IncEPBy = function(self, name, reason, amount)
             if name == 'Arms' then error('write failed') end
@@ -882,6 +953,39 @@ describe('EP awards', function()
         fight.oozeDamage['0xF1300092BA000004'].Skipped = nil
         return fight
     end
+
+    it('keeps players with unresolved specs or DPS visible without guessing their thresholds', function()
+        installFrames()
+        individualEPGP()
+        local set = winningSet()
+        set.players[#set.players + 1] = { name = 'NoDPS', class = 'WARRIOR',
+            damagespells = { [GetSpellInfo(23881)] = { id = 23881 } }, GetDPS = function() return nil end }
+        set.players[#set.players + 1] = { name = 'SecondFury', class = 'WARRIOR',
+            damagespells = { [GetSpellInfo(23881)] = { id = 23881 } }, GetDPS = function() return 11000 end }
+        meters:SkadaSetComplete('Skada_SetComplete', set)
+        local snapshot = awards:GetDPSResults()[37813]
+        awards:GetSettings().dpsBosses[37813][72] = 999999
+        awards:ShowDPSWindow()
+        local frame, rows = awards.dpsWindow, {}
+        for _, row in ipairs(frame.rows) do rows[row.player.name] = row end
+        assert.equals('20000.0', rows.Unknown.cells[3].text)
+        assert.equals('Спек неизвестен', rows.Unknown.cells[2].text)
+        assert.equals('Нет спека', rows.Unknown.cells[4].text)
+        assert.is_false(rows.Unknown.check.enabled)
+        assert.is_nil(frame.selected.Unknown)
+        assert.equals('Нет данных', rows.NoDPS.cells[3].text)
+        assert.is_false(rows.NoDPS.check.enabled)
+        assert.equals(2, snapshot.unknown)
+        assert.equals(72, rows.SecondFury.player.spec)
+        assert.equals(10000, rows.SecondFury.player.threshold)
+        assert.is_true(frame.selected.SecondFury)
+        assert.is_true(frame.selected.Fury)
+        frame.selected.Arms = false
+        frame.awardButton.scripts.OnClick()
+        assert.same({ { 'SecondFury', 'RLHelper: ДПС Саурфанг', 500 },
+            { 'Fury', 'RLHelper: ДПС Саурфанг', 500 } }, calls)
+        assert.is_false(awards:AwardDPS(snapshot, { Unknown = true, NoDPS = true }, -999999))
+    end)
 
     it('requires total ooze damage, regardless of its distribution, class, spec or boss DPS', function()
         installFrames()

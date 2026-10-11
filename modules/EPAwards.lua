@@ -36,7 +36,7 @@ local DEFAULT_THRESHOLDS = {
 }
 
 local function adjustedThreshold(player, offset)
-    return math.max(0, player.threshold + (offset or 0))
+    return player.threshold and math.max(0, player.threshold + (offset or 0))
 end
 
 local function oozeResult(snapshot, player)
@@ -54,7 +54,8 @@ local function qualifies(snapshot, player, offset)
         local total, threshold = oozeResult(snapshot, player)
         return snapshot.oozeCount > 0 and snapshot.oozeThreshold > 0 and total >= threshold
     end
-    return player.dps >= adjustedThreshold(player, offset) - 100
+    return type(player.dps) == "number" and type(player.threshold) == "number" and
+        player.threshold > 0 and player.dps >= adjustedThreshold(player, offset) - 100
 end
 
 local SPEC_BY_ID = {}
@@ -303,6 +304,10 @@ function EPAwards:DPSFightComplete(set)
                 gasTargets = (set.gasTargets or {})[player.name] or 0 }
         elseif not spec or spec[2] ~= player.class or type(player.dps) ~= "number" then
             snapshot.unknown = snapshot.unknown + 1
+            snapshot.players[#snapshot.players + 1] = { name = player.name, class = player.class,
+                spec = spec and spec[2] == player.class and player.spec or nil,
+                dps = type(player.dps) == "number" and player.dps or nil,
+                threshold = spec and spec[2] == player.class and threshold or nil }
         elseif threshold and threshold > 0 then
             snapshot.players[#snapshot.players + 1] = {
                 name = player.name, class = player.class, spec = player.spec,
@@ -311,7 +316,13 @@ function EPAwards:DPSFightComplete(set)
         end
     end
     table.sort(snapshot.players, function(a, b)
-        return (snapshot.mode == "ooze" and a.oozeTotal or a.dps) > (snapshot.mode == "ooze" and b.oozeTotal or b.dps)
+        if snapshot.mode ~= "ooze" then
+            local aKnown = a.spec ~= nil and type(a.dps) == "number"
+            local bKnown = b.spec ~= nil and type(b.dps) == "number"
+            if aKnown ~= bKnown then return aKnown end
+        end
+        return (snapshot.mode == "ooze" and a.oozeTotal or a.dps or 0) >
+            (snapshot.mode == "ooze" and b.oozeTotal or b.dps or 0)
     end)
     self:GetDPSResults()[boss] = snapshot
     if self.dpsWindow and self.dpsWindow:IsShown() and self.dpsWindow.boss == boss then self:ShowDPSWindow(boss) end
@@ -339,18 +350,23 @@ function EPAwards:AwardDPS(snapshot, selected, offset)
     if not epgp:CanIncEPBy(reason, amount) then
         return false, "EPGP не готов к начислению: проверьте права и загрузку списка гильдии."
     end
-    local recipients, mains = {}, {}
+    local recipients, mains, skipped = {}, {}, {}
     for _, player in ipairs(snapshot.players) do
         if selected[player.name] and qualifies(snapshot, player, offset) then
             local ep, _, main = epgp:GetEPGP(player.name)
-            if not ep then return false, "Игрок не найден в EPGP: " .. player.name end
-            main = main or player.name
-            if mains[main] then return false, "Выбраны персонажи одного основного игрока: " .. main end
-            mains[main] = true
-            recipients[#recipients + 1] = player
+            if not ep then
+                skipped[#skipped + 1] = player.name
+            else
+                main = main or player.name
+                if mains[main] then return false, "Выбраны персонажи одного основного игрока: " .. main end
+                mains[main] = true
+                recipients[#recipients + 1] = player
+            end
         end
     end
-    if #recipients == 0 then return false, "Выберите игроков для начисления." end
+    local skippedMessage = #skipped > 0 and
+        ("Не начислено ЕП (игроки не найдены в EPGP): " .. table.concat(skipped, ", ") .. ".") or nil
+    if #recipients == 0 then return false, skippedMessage or "Выберите игроков для начисления." end
     if self.individualCallbackSource ~= epgp then
         epgp.RegisterCallback(self, "EPAward", "IndividualEPAward")
         self.individualCallbackSource = epgp
@@ -359,7 +375,8 @@ function EPAwards:AwardDPS(snapshot, selected, offset)
     for _, player in ipairs(recipients) do
         local pending = { name = player.name, reason = reason, amount = amount }
         self.pendingIndividual = pending
-        local ok = pcall(epgp.IncEPBy, epgp, player.name, reason, amount)
+        -- CanIncEPBy was checked before the batch; the first note starts EPGP flushing.
+        local ok = pcall(epgp.IncEPBy, epgp, player.name, reason, amount, true)
         self.pendingIndividual = nil
         if pending.confirmed then
             player.lastAward = { amount = amount, at = time() }
@@ -367,10 +384,10 @@ function EPAwards:AwardDPS(snapshot, selected, offset)
             awarded = awarded + 1
         end
         if not ok or not pending.confirmed then
-            return false, "Начислено: " .. awarded .. ". Проверьте журнал EPGP для " .. player.name .. " перед повтором."
+            return false, "Начислено: " .. awarded .. ". Проверьте журнал EPGP для " .. player.name .. " перед повтором.", skippedMessage
         end
     end
-    return true, "Начислено по " .. amount .. " ЕП. Игроков: " .. awarded .. "."
+    return true, "Начислено по " .. amount .. " ЕП. Игроков: " .. awarded .. ".", skippedMessage
 end
 
 function EPAwards:MassEPAward(_, names, reason, amount)
@@ -581,8 +598,10 @@ function EPAwards:ShowDPSWindow(boss)
         frame.result:SetWidth(670)
         frame.result:SetJustifyH("LEFT")
         frame.awardButton = makeButton(frame, "Начислить", 140, function()
-            local _, message = self:AwardDPS(frame.snapshot, frame.selected, frame.offset)
-            frame.result:SetText(message)
+            local ok, message, skippedMessage = self:AwardDPS(frame.snapshot, frame.selected, frame.offset)
+            frame.result:SetText(message .. (skippedMessage and ("\n" .. skippedMessage) or ""))
+            if skippedMessage then RLHelper:Print(skippedMessage) end
+            if not ok then RLHelper:Print(message) end
             for _, row in ipairs(frame.rows) do
                 if row.player then row.check:SetChecked(frame.selected[row.player.name] == true) end
             end
@@ -632,14 +651,16 @@ function EPAwards:RefreshDPSWindow()
     end
     frame.result:SetText("")
     for _, row in ipairs(frame.rows) do row:Hide(); row.player = nil end
-    local count, previouslyAwarded = 0, 0
+    local count, eligibleCount, previouslyAwarded = 0, 0, 0
     if snapshot then
         for _, player in ipairs(snapshot.players) do
             local total, threshold
             if oozeMode then total, threshold = oozeResult(snapshot, player)
             else threshold = adjustedThreshold(player, frame.offset) end
-            if qualifies(snapshot, player, frame.offset) then
+            local eligible = qualifies(snapshot, player, frame.offset)
+            if eligible or (not oozeMode and (not player.spec or type(player.dps) ~= "number")) then
                 count = count + 1
+                if eligible then eligibleCount = eligibleCount + 1 end
                 if player.lastAward then previouslyAwarded = previouslyAwarded + 1 end
                 local row = frame.rows[count]
                 if not row then
@@ -665,16 +686,24 @@ function EPAwards:RefreshDPSWindow()
                 row.player = player
                 row.cells[1]:SetText(player.name)
                 row.cells[2]:SetText(SPEC_BY_ID[player.spec] and SPEC_BY_ID[player.spec][3] or "Спек неизвестен")
-                row.cells[3]:SetText(oozeMode and tostring(total) or string.format("%.1f", player.dps))
-                row.cells[4]:SetText(tostring(threshold))
-                if frame.selected[player.name] == nil then frame.selected[player.name] = true end
-                row.check:SetChecked(frame.selected[player.name])
+                row.cells[3]:SetText(oozeMode and tostring(total) or
+                    (type(player.dps) == "number" and string.format("%.1f", player.dps) or "Нет данных"))
+                row.cells[4]:SetText(threshold == nil and "Нет спека" or
+                    (player.threshold == 0 and not oozeMode and "Отключено" or tostring(threshold)))
+                if eligible then
+                    if frame.selected[player.name] == nil then frame.selected[player.name] = true end
+                    row.check:Enable()
+                else
+                    frame.selected[player.name] = nil
+                    row.check:Disable()
+                end
+                row.check:SetChecked(frame.selected[player.name] == true)
                 row:Show()
             end
         end
         frame.info:SetText("Источник: " .. (snapshot.source or "Skada") .. ". Убийство: " .. date("%d.%m %H:%M", snapshot.endtime) .. ". По " .. self:GetAmount("saurfang") ..
             (oozeMode and (" ЕП. Слизней: " .. snapshot.oozeCount .. ". Общий урон по слизням, без допуска.") or
-                " ЕП. Допуск: 100 DPS ниже планки.") .. "\nПодходят: " .. count ..
+                " ЕП. Допуск: 100 DPS ниже планки.") .. "\nПодходят: " .. eligibleCount ..
             (oozeMode and (snapshot.oozeCount == 0 and ". Нет данных по слизням." or ".") or
                 (". Без данных о спеке/DPS: " .. snapshot.unknown .. ".")))
     else
@@ -686,7 +715,7 @@ function EPAwards:RefreshDPSWindow()
     end
     frame.content:SetHeight(math.max(1, count * 26))
     frame.scroll:SetVerticalScroll(0)
-    if count > 0 then frame.awardButton:Enable() else frame.awardButton:Disable() end
+    if eligibleCount > 0 then frame.awardButton:Enable() else frame.awardButton:Disable() end
 end
 
 function EPAwards:AttachButton()

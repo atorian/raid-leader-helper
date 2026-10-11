@@ -16,7 +16,16 @@ return function()
                     or (state == 'Disabled' and not self.enabled)
             end
         end
-        function frame:SetPoint(...) self.points[#self.points + 1] = { ... } end
+        function frame:SetPoint(...)
+            local point = { ... }
+            for i, existing in ipairs(self.points) do
+                if existing[1] == point[1] then
+                    self.points[i] = point
+                    return
+                end
+            end
+            self.points[#self.points + 1] = point
+        end
         function frame:ClearAllPoints() self.points = {} end
         function frame:SetSize(w, h) self.width, self.height = w, h end
         function frame:SetHeight(h) self.height = h end

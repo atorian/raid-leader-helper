@@ -204,6 +204,7 @@ describe('EP awards', function()
             function f:SetChecked(value) self.checked = value end
             function f:GetChecked() return self.checked end
             function f:CreateFontString() return frame('FontString', nil, self) end
+            function f:CreateTexture() return frame('Texture', nil, self) end
             function f:SetAlpha(value) assert.equals('number', type(value)); self.alpha = value end
             function f:Show() self.visible = true end
             function f:Hide() self.visible = false end
@@ -215,7 +216,7 @@ describe('EP awards', function()
             function f:ClearFocus() if self.scripts.OnEditFocusLost then self.scripts.OnEditFocusLost(self) end end
             for _, method in ipairs({ 'SetPoint', 'SetSize', 'SetWidth', 'SetFrameStrata', 'SetBackdrop',
                 'SetHeight', 'ClearAllPoints', 'SetMovable', 'SetClampedToScreen', 'EnableMouse', 'RegisterForDrag', 'SetJustifyH',
-                'SetScrollChild', 'SetVerticalScroll', 'SetNormalTexture', 'SetHighlightTexture', 'SetAutoFocus', 'SetTextInsets', 'SetCursorPosition' }) do
+                'SetScrollChild', 'SetVerticalScroll', 'SetNormalTexture', 'SetHighlightTexture', 'SetTexture', 'SetAllPoints', 'SetAutoFocus', 'SetTextInsets', 'SetCursorPosition' }) do
                 f[method] = function() end
             end
             function f:SetPoint(...) self.point = { ... } end

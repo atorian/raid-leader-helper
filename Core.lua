@@ -1813,7 +1813,9 @@ end
 function RLHelper:StyleToolbarIcon(button)
     local border = button:CreateTexture(nil, "OVERLAY")
     border:SetTexture("Interface\\Buttons\\UI-Quickslot2")
-    border:SetAllPoints(button)
+    -- Match the stock 66px frame around a 36px icon, scaled to our 18px buttons.
+    border:SetSize(33, 33)
+    border:SetPoint("CENTER", button, "CENTER", 0, -0.5)
     button.toolbarBorder = border
 end
 

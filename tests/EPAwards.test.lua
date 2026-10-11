@@ -220,6 +220,7 @@ describe('EP awards', function()
                 f[method] = function() end
             end
             function f:SetPoint(...) self.point = { ... } end
+            function f:SetSize(width, height) self.width, self.height = width, height end
             function f:SetWidth(value) self.width = value end
             function f:SetHeight(value) self.height = value end
             function f:SetBackdrop(value) self.backdrop = value end
@@ -306,6 +307,9 @@ describe('EP awards', function()
         awards.ShowReminder = original.show
         addon.mainFrame = { buttonContainer = {}, discordButton = {} }
         awards:AttachButton()
+        assert.equals(33, awards.button.toolbarBorder.width)
+        assert.equals(33, awards.button.toolbarBorder.height)
+        assert.same({ "CENTER", awards.button, "CENTER", 0, -0.5 }, awards.button.toolbarBorder.point)
         assert.is_not_nil(awards.button.scripts.OnClick)
         awards:CheckTime()
         local popup = awards.popups.attendance

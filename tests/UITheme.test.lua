@@ -85,6 +85,14 @@ describe('UI themes', function()
             assert.are.equal(-2, frame.buttonContainer.points[1][5])
             assert.are.equal('OUTLINE', log.font[3])
             assert.are.equal(backdrop, frame.backdrop)
+            for _, icon in ipairs({ frame.combatListButton, frame.breakButton, frame.discordButton }) do
+                local border = icon.toolbarBorder
+                assert.are.equal(33, border.width)
+                assert.are.equal(33, border.height)
+                assert.are.same({ 'CENTER', icon, 'CENTER', 0, -0.5 }, border.points[1])
+                assert.is_nil(border.allPoints)
+                assert.is_true(icon:GetNormalTexture().visible)
+            end
         end
     end)
 

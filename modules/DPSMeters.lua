@@ -204,7 +204,7 @@ function DPSMeters:IsAvailable(source)
         -- Historical release names and 30300 ports must still expose the collection API.
         major, minor, patch = tonumber(major), tonumber(minor), tonumber(patch)
         versionOK = (revision and revision >= 1127) or (major == 3 and minor == 3) or
-            (major == 4 and minor == 0 and patch == 1 and tostring(metadata(source, "Interface")) == "30300")
+            (major == 4 and minor == 0 and patch == 1 and select(4, GetBuildInfo()) == 30300)
         api = type(meter.LeaveCombat) == "function" and type(meter.MergedPetDamageDPS) == "function" and
             type(meter.db2) == "table" and type(meter.db2.combatants) == "table" and
             type(meter.db2.FightNum) == "number"

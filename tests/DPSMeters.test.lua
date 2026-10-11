@@ -11,7 +11,7 @@ describe('DPS meter sources', function()
     before_each(function()
         meters:Stop()
         original = { recount = Recount, skada = Skada, details = Details, metadata = GetAddOnMetadata, debug = addon.Debug, hook = hooksecurefunc, raid = GetNumRaidMembers,
-            guid = UnitGUID, class = UnitClass, spec = addon.GetUnitSpec, spellInfo = GetSpellInfo, db = addon.db,
+            guid = UnitGUID, class = UnitClass, spec = addon.GetUnitSpec, spellInfo = GetSpellInfo, db = addon.db, buildInfo = GetBuildInfo,
             active = awards.active, instance = addon.currentInstanceId }
         completed, hooks = {}, 0
         _G.GetSpellInfo = function(id) return "Spell " .. tostring(id) end
@@ -74,7 +74,7 @@ describe('DPS meter sources', function()
         _G.Details, _G.GetAddOnMetadata, addon.Debug = original.details, original.metadata, original.debug
         _G.Recount, _G.Skada, _G.hooksecurefunc = original.recount, original.skada, original.hook
         _G.GetNumRaidMembers, _G.UnitGUID, _G.UnitClass = original.raid, original.guid, original.class
-        _G.GetSpellInfo = original.spellInfo
+        _G.GetSpellInfo, _G.GetBuildInfo = original.spellInfo, original.buildInfo
         addon.GetUnitSpec, addon.db, addon.currentInstanceId = original.spec, original.db, original.instance
         awards.active = original.active
     end)
@@ -601,14 +601,24 @@ describe('DPS meter sources', function()
         assert.is_false(meters:IsAvailable("Recount"))
     end)
 
-    it('supports the historical Recount v4.0.1 port only for interface 30300', function()
+    it('supports the historical Recount v4.0.1 port on 3.3.5a without Interface metadata', function()
         Recount.version = "v4.0.1 release"
-        assert.is_false(meters:IsAvailable("Recount"))
-        local previous = GetAddOnMetadata
-        _G.GetAddOnMetadata = function(name, key)
-            return key == "Interface" and "30300" or previous(name, key)
-        end
+        _G.GetBuildInfo = function() return "3.3.5", "12340", "Jun 24 2010", 30300 end
+        assert.is_nil(GetAddOnMetadata("Recount", "Interface"))
         assert.is_true(meters:IsAvailable("Recount"))
+        meters:Start('Recount', function(fight) completed[#completed + 1] = fight end)
+        meters:BossKilled(37813)
+        Recount:LeaveCombat(1180)
+        assert.equals('Recount', completed[1].source)
+        assert.equals(3, #completed[1].players)
+
+        _G.GetBuildInfo = function() return "4.0.1", "13164", "Oct 12 2010", 40000 end
+        assert.is_false(meters:IsAvailable("Recount"))
+        _G.GetBuildInfo = function() return "3.3.5", "12340", "Jun 24 2010", 30300 end
+        Recount.MergedPetDamageDPS = nil
+        local available, reason = meters:IsAvailable("Recount")
+        assert.is_false(available)
+        assert.equals("нет нужного API", reason)
     end)
 
     it('preserves a supported choice and falls back in Details Skada Recount order', function()

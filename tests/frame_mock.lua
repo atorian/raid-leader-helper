@@ -63,6 +63,7 @@ return function()
         function frame:SetTextColor(...) self.color = { ... } end
         function frame:GetTextColor() return unpack(self.color) end
         function frame:SetTexture(...) self.texture = { ... } end
+        function frame:SetTexCoord(...) self.texCoord = { ... } end
         function frame:GetTexture() return self.texture and self.texture[1] end
         function frame:SetBlendMode(mode) self.blendMode = mode end
         function frame:GetBlendMode() return self.blendMode or 'BLEND' end

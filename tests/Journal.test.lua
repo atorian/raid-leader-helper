@@ -1143,7 +1143,7 @@ describe('Structured journal', function()
         local function frame()
             return setmetatable({ scripts = {} }, { __index = function(_, key)
                 if key == 'SetScript' then return function(self, name, fn) self.scripts[name] = fn end end
-                if key == 'GetFontString' or key == 'CreateFontString' or key == 'CreateTexture' then return frame end
+                if key == 'GetFontString' or key == 'CreateFontString' or key == 'CreateTexture' or key == 'GetNormalTexture' or key == 'GetPushedTexture' then return frame end
                 if key == 'IsShown' then return function() return false end end
                 if key == 'GetFont' then return function() return 'Fonts\\FRIZQT__.TTF', 12 end end
                 if key == 'GetSpacing' then return function() return 0 end end

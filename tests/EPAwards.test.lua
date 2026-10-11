@@ -223,6 +223,12 @@ describe('EP awards', function()
             function f:SetWidth(value) self.width = value end
             function f:SetHeight(value) self.height = value end
             function f:SetBackdrop(value) self.backdrop = value end
+            function f:SetNormalTexture(path)
+                self.normalTexture = { path = path, SetTexCoord = function(texture, ...)
+                    texture.texCoord = { ... }
+                end }
+            end
+            function f:GetNormalTexture() return self.normalTexture end
             return f
         end
         _G.CreateFrame = frame

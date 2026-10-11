@@ -185,7 +185,31 @@ describe('EP awards', function()
         awards:handleEvent({ event = 'UNIT_DIED', destGUID = '0xF130008EF5000001' })
         awards:handleEvent({ event = 'SPELL_DAMAGE', destGUID = '0xF130009BB7000001' })
         awards:handleEvent({ event = 'UNIT_DIED', destGUID = '0x0000000000000001' })
+        awards:handleEvent({ event = 'PARTY_KILL', destGUID = '0x0000000000000001' })
+        awards:handleEvent({ event = 'PARTY_KILL', destGUID = '0xF130008EF5000001' })
+        addon.currentInstanceId = 631
+        awards:handleEvent({ event = 'PARTY_KILL', destGUID = '0xF130009BB7000001' })
         assert.equals(0, #shown)
+    end)
+    it('offers RS on PARTY_KILL without UNIT_DIED in either realm through Core', function()
+        local parse = require('lib.blizzardEvent')
+        addon.modules.EPAwards = awards
+        addon.currentInstanceId = 724
+        -- Real 6-10.txt kill: neither form has a UNIT_DIED record.
+        local guids = { '0xF130009CCE5C9974', '0xF130009BB75AF023' }
+        for index, guid in ipairs(guids) do
+            addon.db.char.epAwards = nil
+            shown = {}
+            addon:DispatchCombatEvent(parse(now, 'PARTY_KILL', '0x00000000003DB006',
+                'Alfagen', 0x514, guid, 'Халион', 0x10a48))
+            assert.same({ 'rs' }, shown)
+            -- Other form and a later death must not show another reminder.
+            addon:DispatchCombatEvent(parse(now, 'PARTY_KILL', '0x00000000003E31AC',
+                'Атмаджа', 0x514, guids[3 - index], 'Халион', 0xa28))
+            addon:DispatchCombatEvent(parse(now, 'UNIT_DIED', '0x0000000000000000',
+                nil, 0x80000000, '0xF130009BB75AF023', 'Халион', 0xa28))
+            assert.same({ 'rs' }, shown)
+        end
     end)
     it('deduplicates both Halion death events', function()
         addon.currentInstanceId = 724

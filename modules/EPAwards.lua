@@ -237,7 +237,7 @@ end
 
 function EPAwards:handleEvent(event)
     if not self:IsFeatureEnabled() then return end
-    if event.event ~= "UNIT_DIED" or not event.destGUID then return end
+    if (event.event ~= "UNIT_DIED" and event.event ~= "PARTY_KILL") or not event.destGUID then return end
     local npc = tonumber(event.destGUID:sub(9, 12), 16)
     local encounter = BossIds.DPS_ENCOUNTER_BY_NPC[npc]
     if encounter and encounter.instance == RLHelper.currentInstanceId and
